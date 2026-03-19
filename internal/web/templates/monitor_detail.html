@@ -1,0 +1,44 @@
+{{define "title"}}{{.Monitor.Name}} — PingCast{{end}}
+{{define "content"}}
+<div class="card-header">
+    <div>
+        <h1>{{.Monitor.Name}}
+            <span class="{{if eq .Monitor.CurrentStatus "up"}}status-up{{else if eq .Monitor.CurrentStatus "down"}}status-down{{end}}">
+                {{.Monitor.CurrentStatus}}
+            </span>
+        </h1>
+        <p style="color: var(--gray-600);">{{.Monitor.Url}}</p>
+    </div>
+</div>
+
+<div class="card">
+    <h3>Uptime</h3>
+    <p>24h: {{printf "%.2f" .Uptime24h}}% | 7d: {{printf "%.2f" .Uptime7d}}% | 30d: {{printf "%.2f" .Uptime30d}}%</p>
+</div>
+
+<div class="card">
+    <h3>Response Time</h3>
+    <canvas id="responseChart" height="200"></canvas>
+</div>
+
+<div class="card">
+    <h3>Recent Incidents</h3>
+    {{if .Incidents}}
+    {{range .Incidents}}
+    <div style="padding: 0.5rem 0; border-bottom: 1px solid var(--gray-200);">
+        <strong>{{.Cause}}</strong><br>
+        <small>Started: {{.StartedAt.Format "2006-01-02 15:04"}}
+        {{if .ResolvedAt.Valid}} | Resolved: {{.ResolvedAt.Time.Format "2006-01-02 15:04"}}{{else}} | Ongoing{{end}}</small>
+    </div>
+    {{end}}
+    {{else}}
+    <p style="color: var(--gray-600);">No incidents recorded.</p>
+    {{end}}
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="/static/js/chart-init.js"></script>
+<script>
+    initResponseChart("responseChart", {{.ChartData}});
+</script>
+{{end}}

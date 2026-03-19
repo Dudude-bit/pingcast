@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Status — {{.Slug}}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1 style="text-align: center; margin-bottom: 2rem;">System Status</h1>
+
+        {{if .AllUp}}
+        <div class="card" style="text-align: center; border-color: var(--success);">
+            <h2 class="status-up">All Systems Operational</h2>
+        </div>
+        {{else}}
+        <div class="card" style="text-align: center; border-color: var(--danger);">
+            <h2 class="status-down">Some Systems Are Down</h2>
+        </div>
+        {{end}}
+
+        {{range .Monitors}}
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <strong>{{.Name}}</strong>
+                <span class="{{if eq .CurrentStatus "up"}}status-up{{else}}status-down{{end}}">
+                    {{if eq .CurrentStatus "up"}}Operational{{else}}Down{{end}}
+                </span>
+            </div>
+            <div style="margin-top: 0.5rem; font-size: 0.875rem; color: var(--gray-600);">
+                Uptime: {{printf "%.2f" .Uptime90d}}%
+            </div>
+        </div>
+        {{end}}
+
+        {{if .ShowBranding}}
+        <footer class="footer">
+            <p>Powered by <a href="/">PingCast</a></p>
+        </footer>
+        {{end}}
+    </div>
+</body>
+</html>

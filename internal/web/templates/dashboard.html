@@ -1,0 +1,55 @@
+{{define "title"}}Dashboard — PingCast{{end}}
+{{define "content"}}
+<div class="card-header">
+    <h1>Monitors</h1>
+    <a href="/monitors/new" class="btn btn-primary">+ New Monitor</a>
+</div>
+
+{{if .Monitors}}
+<table class="monitor-table">
+    <thead>
+        <tr>
+            <th>Status</th>
+            <th>Name</th>
+            <th>URL</th>
+            <th>Interval</th>
+            <th>Uptime (24h)</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{range .Monitors}}
+        <tr>
+            <td>
+                <span class="{{if eq .Monitor.CurrentStatus "up"}}status-up{{else if eq .Monitor.CurrentStatus "down"}}status-down{{end}}">●</span>
+            </td>
+            <td><a href="/monitors/{{.Monitor.ID}}">{{.Monitor.Name}}</a></td>
+            <td style="color: var(--gray-600); font-size: 0.875rem;">{{.Monitor.Url}}</td>
+            <td>{{.Monitor.IntervalSeconds}}s</td>
+            <td>{{printf "%.1f" .Uptime}}%</td>
+            <td>
+                <form method="POST" action="/api/monitors/{{.Monitor.ID}}/pause" style="display:inline">
+                    <button type="submit" class="btn-link">{{if .Monitor.IsPaused}}Resume{{else}}Pause{{end}}</button>
+                </form>
+            </td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+{{else}}
+<div class="card" style="text-align: center;">
+    <p>No monitors yet.</p>
+    <a href="/monitors/new" class="btn btn-primary" style="margin-top: 1rem;">Create your first monitor</a>
+</div>
+{{end}}
+
+<div class="card" style="margin-top: 2rem;">
+    <p>Your status page: <a href="/status/{{.User.Slug}}">/status/{{.User.Slug}}</a></p>
+    <p style="font-size: 0.875rem; color: var(--gray-600);">Plan: {{.User.Plan}}</p>
+    {{if .User.TgChatID.Valid}}
+    <p style="font-size: 0.875rem; color: var(--gray-600);">Telegram: Linked</p>
+    {{else}}
+    <p style="font-size: 0.875rem;"><a href="https://t.me/PingCastBot?start={{.User.ID}}" target="_blank" class="btn btn-primary">Link Telegram</a></p>
+    {{end}}
+</div>
+{{end}}

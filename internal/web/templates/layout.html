@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{block "title" .}}PingCast{{end}}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/" class="logo">PingCast</a>
+        <div class="nav-links">
+            {{if .User}}
+                <a href="/dashboard">Dashboard</a>
+                <form method="POST" action="/logout" style="display:inline">
+                    <button type="submit" class="btn-link">Logout</button>
+                </form>
+            {{else}}
+                <a href="/login">Login</a>
+                <a href="/register" class="btn btn-primary">Sign Up</a>
+            {{end}}
+        </div>
+    </nav>
+    <main class="container">
+        {{block "content" .}}{{end}}
+    </main>
+    <footer class="footer">
+        <p>&copy; 2026 PingCast. Simple uptime monitoring.</p>
+    </footer>
+</body>
+</html>
