@@ -37,7 +37,8 @@ func (q *Queries) CreateIncident(ctx context.Context, arg CreateIncidentParams) 
 }
 
 const getOpenIncidentByMonitorID = `-- name: GetOpenIncidentByMonitorID :one
-SELECT id, monitor_id, started_at, resolved_at, cause FROM incidents
+SELECT id, monitor_id, started_at, resolved_at, cause
+FROM incidents
 WHERE monitor_id = $1 AND resolved_at IS NULL
 ORDER BY started_at DESC
 LIMIT 1
@@ -72,7 +73,8 @@ func (q *Queries) IsInCooldown(ctx context.Context, monitorID uuid.UUID) (bool, 
 }
 
 const listIncidentsByMonitorID = `-- name: ListIncidentsByMonitorID :many
-SELECT id, monitor_id, started_at, resolved_at, cause FROM incidents
+SELECT id, monitor_id, started_at, resolved_at, cause
+FROM incidents
 WHERE monitor_id = $1
 ORDER BY started_at DESC
 LIMIT $2

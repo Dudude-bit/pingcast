@@ -89,7 +89,8 @@ func (q *Queries) GetAggregatedCheckResults(ctx context.Context, arg GetAggregat
 }
 
 const getLatestCheckResults = `-- name: GetLatestCheckResults :many
-SELECT id, monitor_id, status, status_code, response_time_ms, error_message, checked_at FROM check_results
+SELECT id, monitor_id, status, status_code, response_time_ms, error_message, checked_at
+FROM check_results
 WHERE monitor_id = $1
 ORDER BY checked_at DESC
 LIMIT $2

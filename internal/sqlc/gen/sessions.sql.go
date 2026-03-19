@@ -58,7 +58,8 @@ func (q *Queries) DeleteSession(ctx context.Context, id string) error {
 }
 
 const getSessionByID = `-- name: GetSessionByID :one
-SELECT id, user_id, expires_at, created_at FROM sessions
+SELECT id, user_id, expires_at, created_at
+FROM sessions
 WHERE id = $1 AND expires_at > NOW()
 `
 

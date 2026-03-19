@@ -1,10 +1,11 @@
 -- name: CreateSession :one
 INSERT INTO sessions (id, user_id, expires_at)
 VALUES ($1, $2, $3)
-RETURNING *;
+RETURNING id, user_id, expires_at, created_at;
 
 -- name: GetSessionByID :one
-SELECT * FROM sessions
+SELECT id, user_id, expires_at, created_at
+FROM sessions
 WHERE id = $1 AND expires_at > NOW();
 
 -- name: TouchSession :exec

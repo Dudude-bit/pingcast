@@ -7,6 +7,7 @@ package gen
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -42,12 +43,23 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, slug, password_hash, tg_chat_id, plan, lemon_squeezy_customer_id, lemon_squeezy_subscription_id, created_at FROM users WHERE email = $1
+SELECT id, email, slug, password_hash, tg_chat_id, plan, created_at
+FROM users WHERE email = $1
 `
 
-func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
+type GetUserByEmailRow struct {
+	ID           uuid.UUID   `json:"id"`
+	Email        string      `json:"email"`
+	Slug         string      `json:"slug"`
+	PasswordHash string      `json:"password_hash"`
+	TgChatID     pgtype.Int8 `json:"tg_chat_id"`
+	Plan         string      `json:"plan"`
+	CreatedAt    time.Time   `json:"created_at"`
+}
+
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error) {
 	row := q.db.QueryRow(ctx, getUserByEmail, email)
-	var i User
+	var i GetUserByEmailRow
 	err := row.Scan(
 		&i.ID,
 		&i.Email,
@@ -55,25 +67,34 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.PasswordHash,
 		&i.TgChatID,
 		&i.Plan,
-		&i.LemonSqueezyCustomerID,
-		&i.LemonSqueezySubscriptionID,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, slug, password_hash, tg_chat_id, plan, lemon_squeezy_customer_id, lemon_squeezy_subscription_id, created_at FROM users WHERE id = $1
+SELECT id, email, slug, tg_chat_id, plan, lemon_squeezy_customer_id, lemon_squeezy_subscription_id, created_at
+FROM users WHERE id = $1
 `
 
-func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
+type GetUserByIDRow struct {
+	ID                         uuid.UUID   `json:"id"`
+	Email                      string      `json:"email"`
+	Slug                       string      `json:"slug"`
+	TgChatID                   pgtype.Int8 `json:"tg_chat_id"`
+	Plan                       string      `json:"plan"`
+	LemonSqueezyCustomerID     *string     `json:"lemon_squeezy_customer_id"`
+	LemonSqueezySubscriptionID *string     `json:"lemon_squeezy_subscription_id"`
+	CreatedAt                  time.Time   `json:"created_at"`
+}
+
+func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error) {
 	row := q.db.QueryRow(ctx, getUserByID, id)
-	var i User
+	var i GetUserByIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.Email,
 		&i.Slug,
-		&i.PasswordHash,
 		&i.TgChatID,
 		&i.Plan,
 		&i.LemonSqueezyCustomerID,
@@ -84,21 +105,28 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 }
 
 const getUserBySlug = `-- name: GetUserBySlug :one
-SELECT id, email, slug, password_hash, tg_chat_id, plan, lemon_squeezy_customer_id, lemon_squeezy_subscription_id, created_at FROM users WHERE slug = $1
+SELECT id, email, slug, tg_chat_id, plan, created_at
+FROM users WHERE slug = $1
 `
 
-func (q *Queries) GetUserBySlug(ctx context.Context, slug string) (User, error) {
+type GetUserBySlugRow struct {
+	ID        uuid.UUID   `json:"id"`
+	Email     string      `json:"email"`
+	Slug      string      `json:"slug"`
+	TgChatID  pgtype.Int8 `json:"tg_chat_id"`
+	Plan      string      `json:"plan"`
+	CreatedAt time.Time   `json:"created_at"`
+}
+
+func (q *Queries) GetUserBySlug(ctx context.Context, slug string) (GetUserBySlugRow, error) {
 	row := q.db.QueryRow(ctx, getUserBySlug, slug)
-	var i User
+	var i GetUserBySlugRow
 	err := row.Scan(
 		&i.ID,
 		&i.Email,
 		&i.Slug,
-		&i.PasswordHash,
 		&i.TgChatID,
 		&i.Plan,
-		&i.LemonSqueezyCustomerID,
-		&i.LemonSqueezySubscriptionID,
 		&i.CreatedAt,
 	)
 	return i, err

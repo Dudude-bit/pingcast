@@ -88,7 +88,8 @@ func (q *Queries) DeleteMonitor(ctx context.Context, arg DeleteMonitorParams) er
 }
 
 const getMonitorByID = `-- name: GetMonitorByID :one
-SELECT id, user_id, name, url, method, interval_seconds, expected_status, keyword, alert_after_failures, is_paused, is_public, current_status, created_at FROM monitors WHERE id = $1
+SELECT id, user_id, name, url, method, interval_seconds, expected_status, keyword, alert_after_failures, is_paused, is_public, current_status, created_at
+FROM monitors WHERE id = $1
 `
 
 func (q *Queries) GetMonitorByID(ctx context.Context, id uuid.UUID) (Monitor, error) {
@@ -113,7 +114,8 @@ func (q *Queries) GetMonitorByID(ctx context.Context, id uuid.UUID) (Monitor, er
 }
 
 const listActiveMonitors = `-- name: ListActiveMonitors :many
-SELECT id, user_id, name, url, method, interval_seconds, expected_status, keyword, alert_after_failures, is_paused, is_public, current_status, created_at FROM monitors WHERE is_paused = FALSE
+SELECT id, user_id, name, url, method, interval_seconds, expected_status, keyword, alert_after_failures, is_paused, is_public, current_status, created_at
+FROM monitors WHERE is_paused = FALSE
 `
 
 func (q *Queries) ListActiveMonitors(ctx context.Context) ([]Monitor, error) {
@@ -151,7 +153,8 @@ func (q *Queries) ListActiveMonitors(ctx context.Context) ([]Monitor, error) {
 }
 
 const listMonitorsByUserID = `-- name: ListMonitorsByUserID :many
-SELECT id, user_id, name, url, method, interval_seconds, expected_status, keyword, alert_after_failures, is_paused, is_public, current_status, created_at FROM monitors WHERE user_id = $1 ORDER BY created_at
+SELECT id, user_id, name, url, method, interval_seconds, expected_status, keyword, alert_after_failures, is_paused, is_public, current_status, created_at
+FROM monitors WHERE user_id = $1 ORDER BY created_at
 `
 
 func (q *Queries) ListMonitorsByUserID(ctx context.Context, userID uuid.UUID) ([]Monitor, error) {
@@ -189,7 +192,8 @@ func (q *Queries) ListMonitorsByUserID(ctx context.Context, userID uuid.UUID) ([
 }
 
 const listPublicMonitorsByUserSlug = `-- name: ListPublicMonitorsByUserSlug :many
-SELECT m.id, m.user_id, m.name, m.url, m.method, m.interval_seconds, m.expected_status, m.keyword, m.alert_after_failures, m.is_paused, m.is_public, m.current_status, m.created_at FROM monitors m
+SELECT m.id, m.user_id, m.name, m.url, m.method, m.interval_seconds, m.expected_status, m.keyword, m.alert_after_failures, m.is_paused, m.is_public, m.current_status, m.created_at
+FROM monitors m
 JOIN users u ON m.user_id = u.id
 WHERE u.slug = $1 AND m.is_public = TRUE
 ORDER BY m.name

@@ -1,10 +1,11 @@
 -- name: InsertCheckResult :one
 INSERT INTO check_results (monitor_id, status, status_code, response_time_ms, error_message, checked_at)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING *;
+RETURNING id, monitor_id, status, status_code, response_time_ms, error_message, checked_at;
 
 -- name: GetLatestCheckResults :many
-SELECT * FROM check_results
+SELECT id, monitor_id, status, status_code, response_time_ms, error_message, checked_at
+FROM check_results
 WHERE monitor_id = $1
 ORDER BY checked_at DESC
 LIMIT $2;
