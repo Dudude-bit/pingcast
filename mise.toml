@@ -1,0 +1,8 @@
+[tools]
+go = "1.26"
+"go:github.com/sqlc-dev/sqlc/cmd/sqlc" = "latest"
+"go:github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen" = "latest"
+
+[env]
+PORT = "8080"
+BASE_URL = "http://localhost:8080"

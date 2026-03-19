@@ -5,7 +5,9 @@ import (
 	"github.com/kirillinakin/pingcast/internal/sqlc/gen"
 )
 
-const UserContextKey = "user"
+// userContextKey is unexported to prevent external packages from setting it directly.
+// Access only through UserFromCtx.
+const userContextKey = "auth.user"
 
 func (s *Service) Middleware() fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -20,7 +22,7 @@ func (s *Service) Middleware() fiber.Handler {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid session"})
 		}
 
-		c.Locals(UserContextKey, user)
+		c.Locals(userContextKey, user)
 		return c.Next()
 	}
 }
@@ -38,12 +40,12 @@ func (s *Service) PageMiddleware() fiber.Handler {
 			return c.Redirect("/login")
 		}
 
-		c.Locals(UserContextKey, user)
+		c.Locals(userContextKey, user)
 		return c.Next()
 	}
 }
 
 func UserFromCtx(c *fiber.Ctx) *gen.GetUserByIDRow {
-	user, _ := c.Locals(UserContextKey).(*gen.GetUserByIDRow)
+	user, _ := c.Locals(userContextKey).(*gen.GetUserByIDRow)
 	return user
 }
