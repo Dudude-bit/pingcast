@@ -1,0 +1,465 @@
+openapi: "3.0.3"
+info:
+  title: PingCast API
+  version: "1.0.0"
+  description: Uptime monitoring API
+
+paths:
+  /api/auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "200":
+          description: Registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      security:
+        - sessionAuth: []
+      responses:
+        "200":
+          description: Logged out
+
+  /api/monitors:
+    get:
+      operationId: listMonitors
+      tags: [monitors]
+      security:
+        - sessionAuth: []
+      responses:
+        "200":
+          description: List of monitors
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MonitorWithUptime"
+    post:
+      operationId: createMonitor
+      tags: [monitors]
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMonitorRequest"
+      responses:
+        "201":
+          description: Monitor created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Monitor"
+        "400":
+          description: Validation error or limit reached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/monitors/{id}:
+    get:
+      operationId: getMonitor
+      tags: [monitors]
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Monitor details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonitorDetail"
+        "404":
+          description: Not found
+    put:
+      operationId: updateMonitor
+      tags: [monitors]
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMonitorRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Monitor"
+    delete:
+      operationId: deleteMonitor
+      tags: [monitors]
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /api/monitors/{id}/pause:
+    post:
+      operationId: toggleMonitorPause
+      tags: [monitors]
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Toggled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Monitor"
+
+  /api/status/{slug}:
+    get:
+      operationId: getStatusPage
+      tags: [status]
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Public status page data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusPageResponse"
+        "404":
+          description: User not found
+
+  /health:
+    get:
+      operationId: healthCheck
+      tags: [system]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+components:
+  securitySchemes:
+    sessionAuth:
+      type: apiKey
+      in: cookie
+      name: session_id
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [email, slug, password]
+      properties:
+        email:
+          type: string
+          format: email
+        slug:
+          type: string
+          pattern: "^[a-z0-9-]{3,30}$"
+        password:
+          type: string
+          minLength: 8
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    AuthResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        session_id:
+          type: string
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        slug:
+          type: string
+        plan:
+          type: string
+          enum: [free, pro]
+        tg_linked:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    Monitor:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        url:
+          type: string
+        method:
+          type: string
+          enum: [GET, POST]
+        interval_seconds:
+          type: integer
+        expected_status:
+          type: integer
+        keyword:
+          type: string
+          nullable: true
+        alert_after_failures:
+          type: integer
+        is_paused:
+          type: boolean
+        is_public:
+          type: boolean
+        current_status:
+          type: string
+          enum: [up, down, unknown]
+        created_at:
+          type: string
+          format: date-time
+
+    MonitorWithUptime:
+      allOf:
+        - $ref: "#/components/schemas/Monitor"
+        - type: object
+          properties:
+            uptime_24h:
+              type: number
+              format: float
+
+    MonitorDetail:
+      allOf:
+        - $ref: "#/components/schemas/Monitor"
+        - type: object
+          properties:
+            uptime_24h:
+              type: number
+            uptime_7d:
+              type: number
+            uptime_30d:
+              type: number
+            chart_data:
+              type: array
+              items:
+                $ref: "#/components/schemas/ChartPoint"
+            incidents:
+              type: array
+              items:
+                $ref: "#/components/schemas/Incident"
+
+    CreateMonitorRequest:
+      type: object
+      required: [name, url]
+      properties:
+        name:
+          type: string
+        url:
+          type: string
+        method:
+          type: string
+          enum: [GET, POST]
+          default: GET
+        interval_seconds:
+          type: integer
+          enum: [30, 60, 300]
+          default: 300
+        expected_status:
+          type: integer
+          default: 200
+        keyword:
+          type: string
+          nullable: true
+        alert_after_failures:
+          type: integer
+          default: 3
+        is_public:
+          type: boolean
+          default: false
+
+    UpdateMonitorRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        url:
+          type: string
+        method:
+          type: string
+          enum: [GET, POST]
+        interval_seconds:
+          type: integer
+          enum: [30, 60, 300]
+        expected_status:
+          type: integer
+        keyword:
+          type: string
+          nullable: true
+        alert_after_failures:
+          type: integer
+        is_paused:
+          type: boolean
+        is_public:
+          type: boolean
+
+    ChartPoint:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        avg_response_ms:
+          type: number
+        check_count:
+          type: integer
+
+    Incident:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        monitor_id:
+          type: string
+          format: uuid
+        started_at:
+          type: string
+          format: date-time
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+        cause:
+          type: string
+
+    StatusPageResponse:
+      type: object
+      properties:
+        slug:
+          type: string
+        all_up:
+          type: boolean
+        show_branding:
+          type: boolean
+        monitors:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatusMonitor"
+        incidents:
+          type: array
+          items:
+            $ref: "#/components/schemas/Incident"
+
+    StatusMonitor:
+      type: object
+      properties:
+        name:
+          type: string
+        current_status:
+          type: string
+        uptime_90d:
+          type: number
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
