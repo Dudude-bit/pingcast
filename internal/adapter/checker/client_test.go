@@ -6,7 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/kirillinakin/pingcast/internal/checker"
+	"github.com/kirillinakin/pingcast/internal/adapter/checker"
+	"github.com/kirillinakin/pingcast/internal/domain"
 )
 
 func TestChecker_CheckUp(t *testing.T) {
@@ -20,14 +21,14 @@ func TestChecker_CheckUp(t *testing.T) {
 	defer server.Close()
 
 	c := checker.NewClient()
-	result := c.Check(context.Background(), &checker.MonitorInfo{
+	result := c.Check(context.Background(), &domain.Monitor{
 		URL:            server.URL,
-		Method:         "GET",
+		Method:         domain.MethodGET,
 		ExpectedStatus: 200,
 	})
 
-	if result.Status != "up" {
-		t.Errorf("status = %q, want %q", result.Status, "up")
+	if result.Status != domain.StatusUp {
+		t.Errorf("status = %q, want %q", result.Status, domain.StatusUp)
 	}
 	if *result.StatusCode != 200 {
 		t.Errorf("status_code = %d, want 200", *result.StatusCode)
@@ -44,14 +45,14 @@ func TestChecker_CheckDown_WrongStatus(t *testing.T) {
 	defer server.Close()
 
 	c := checker.NewClient()
-	result := c.Check(context.Background(), &checker.MonitorInfo{
+	result := c.Check(context.Background(), &domain.Monitor{
 		URL:            server.URL,
-		Method:         "GET",
+		Method:         domain.MethodGET,
 		ExpectedStatus: 200,
 	})
 
-	if result.Status != "down" {
-		t.Errorf("status = %q, want %q", result.Status, "down")
+	if result.Status != domain.StatusDown {
+		t.Errorf("status = %q, want %q", result.Status, domain.StatusDown)
 	}
 }
 
@@ -62,14 +63,14 @@ func TestChecker_CheckDown_Timeout(t *testing.T) {
 	defer server.Close()
 
 	c := checker.NewClientWithTimeout(1)
-	result := c.Check(context.Background(), &checker.MonitorInfo{
+	result := c.Check(context.Background(), &domain.Monitor{
 		URL:            server.URL,
-		Method:         "GET",
+		Method:         domain.MethodGET,
 		ExpectedStatus: 200,
 	})
 
-	if result.Status != "down" {
-		t.Errorf("status = %q, want %q", result.Status, "down")
+	if result.Status != domain.StatusDown {
+		t.Errorf("status = %q, want %q", result.Status, domain.StatusDown)
 	}
 	if result.ErrorMessage == nil || *result.ErrorMessage == "" {
 		t.Error("expected error message for timeout")
@@ -85,13 +86,13 @@ func TestChecker_KeywordFound(t *testing.T) {
 
 	keyword := "operational"
 	c := checker.NewClient()
-	result := c.Check(context.Background(), &checker.MonitorInfo{
+	result := c.Check(context.Background(), &domain.Monitor{
 		URL:            server.URL,
-		Method:         "GET",
+		Method:         domain.MethodGET,
 		ExpectedStatus: 200,
 		Keyword:        &keyword,
 	})
-	if result.Status != "up" {
+	if result.Status != domain.StatusUp {
 		t.Errorf("status = %q, want up (keyword found)", result.Status)
 	}
 }
@@ -105,13 +106,13 @@ func TestChecker_KeywordMissing(t *testing.T) {
 
 	missing := "notfound"
 	c := checker.NewClient()
-	result := c.Check(context.Background(), &checker.MonitorInfo{
+	result := c.Check(context.Background(), &domain.Monitor{
 		URL:            server.URL,
-		Method:         "GET",
+		Method:         domain.MethodGET,
 		ExpectedStatus: 200,
 		Keyword:        &missing,
 	})
-	if result.Status != "down" {
+	if result.Status != domain.StatusDown {
 		t.Errorf("status = %q, want down (keyword missing)", result.Status)
 	}
 }

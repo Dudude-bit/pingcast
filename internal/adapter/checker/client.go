@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/kirillinakin/pingcast/internal/domain"
 )
 
 const (
@@ -18,27 +18,6 @@ const (
 	maxRedirects   = 5
 	userAgent      = "PingCast/1.0 (uptime monitor; https://pingcast.io)"
 )
-
-type MonitorInfo struct {
-	ID                 uuid.UUID
-	UserID             uuid.UUID
-	Name               string
-	URL                string
-	Method             string
-	IntervalSeconds    int
-	ExpectedStatus     int
-	Keyword            *string
-	AlertAfterFailures int
-}
-
-type CheckResult struct {
-	MonitorID      uuid.UUID
-	Status         string // "up" or "down"
-	StatusCode     *int32
-	ResponseTimeMs int
-	ErrorMessage   *string
-	CheckedAt      time.Time
-}
 
 type Client struct {
 	httpClient *http.Client
@@ -65,17 +44,17 @@ func NewClientWithTimeout(timeoutSeconds int) *Client {
 	}
 }
 
-func (c *Client) Check(ctx context.Context, monitor *MonitorInfo) *CheckResult {
+func (c *Client) Check(ctx context.Context, monitor *domain.Monitor) *domain.CheckResult {
 	start := time.Now()
-	result := &CheckResult{
+	result := &domain.CheckResult{
 		MonitorID: monitor.ID,
 		CheckedAt: start,
 	}
 
-	req, err := http.NewRequestWithContext(ctx, monitor.Method, monitor.URL, nil)
+	req, err := http.NewRequestWithContext(ctx, string(monitor.Method), monitor.URL, nil)
 	if err != nil {
 		errMsg := fmt.Sprintf("invalid request: %s", err)
-		result.Status = "down"
+		result.Status = domain.StatusDown
 		result.ErrorMessage = &errMsg
 		result.ResponseTimeMs = int(time.Since(start).Milliseconds())
 		return result
@@ -87,18 +66,18 @@ func (c *Client) Check(ctx context.Context, monitor *MonitorInfo) *CheckResult {
 
 	if err != nil {
 		errMsg := classifyError(err)
-		result.Status = "down"
+		result.Status = domain.StatusDown
 		result.ErrorMessage = &errMsg
 		return result
 	}
 	defer resp.Body.Close()
 
-	statusCode := int32(resp.StatusCode)
+	statusCode := resp.StatusCode
 	result.StatusCode = &statusCode
 
 	if resp.StatusCode != monitor.ExpectedStatus {
 		errMsg := fmt.Sprintf("expected status %d, got %d", monitor.ExpectedStatus, resp.StatusCode)
-		result.Status = "down"
+		result.Status = domain.StatusDown
 		result.ErrorMessage = &errMsg
 		return result
 	}
@@ -107,19 +86,19 @@ func (c *Client) Check(ctx context.Context, monitor *MonitorInfo) *CheckResult {
 		body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyRead))
 		if err != nil {
 			errMsg := fmt.Sprintf("failed to read body: %s", err)
-			result.Status = "down"
+			result.Status = domain.StatusDown
 			result.ErrorMessage = &errMsg
 			return result
 		}
 		if !strings.Contains(string(body), *monitor.Keyword) {
 			errMsg := fmt.Sprintf("keyword %q not found in response body", *monitor.Keyword)
-			result.Status = "down"
+			result.Status = domain.StatusDown
 			result.ErrorMessage = &errMsg
 			return result
 		}
 	}
 
-	result.Status = "up"
+	result.Status = domain.StatusUp
 	return result
 }
 

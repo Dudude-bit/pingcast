@@ -14,7 +14,7 @@ import (
 	natsadapter "github.com/kirillinakin/pingcast/internal/adapter/nats"
 	"github.com/kirillinakin/pingcast/internal/adapter/postgres"
 	"github.com/kirillinakin/pingcast/internal/app"
-	"github.com/kirillinakin/pingcast/internal/checker"
+	"github.com/kirillinakin/pingcast/internal/adapter/checker"
 	"github.com/kirillinakin/pingcast/internal/config"
 	"github.com/kirillinakin/pingcast/internal/database"
 	"github.com/kirillinakin/pingcast/internal/domain"
@@ -75,36 +75,9 @@ func main() {
 	// App service
 	monitoringSvc := app.NewMonitoringService(monitorRepo, checkResultRepo, incidentRepo, userRepo, alertPub)
 
-	// Check handler: converts checker types → domain types, delegates to MonitoringService
-	checkHandler := func(ctx context.Context, monitor *checker.MonitorInfo, result *checker.CheckResult) {
-		domainMonitor := &domain.Monitor{
-			ID:                 monitor.ID,
-			UserID:             monitor.UserID,
-			Name:               monitor.Name,
-			URL:                monitor.URL,
-			Method:             domain.HTTPMethod(monitor.Method),
-			IntervalSeconds:    monitor.IntervalSeconds,
-			ExpectedStatus:     monitor.ExpectedStatus,
-			Keyword:            monitor.Keyword,
-			AlertAfterFailures: monitor.AlertAfterFailures,
-		}
-
-		var statusCode *int
-		if result.StatusCode != nil {
-			sc := int(*result.StatusCode)
-			statusCode = &sc
-		}
-
-		domainResult := &domain.CheckResult{
-			MonitorID:      result.MonitorID,
-			Status:         domain.MonitorStatus(result.Status),
-			StatusCode:     statusCode,
-			ResponseTimeMs: result.ResponseTimeMs,
-			ErrorMessage:   result.ErrorMessage,
-			CheckedAt:      result.CheckedAt,
-		}
-
-		if err := monitoringSvc.ProcessCheckResult(ctx, domainMonitor, domainResult); err != nil {
+	// Check handler: delegates directly to MonitoringService (checker uses domain types)
+	checkHandler := func(ctx context.Context, monitor *domain.Monitor, result *domain.CheckResult) {
+		if err := monitoringSvc.ProcessCheckResult(ctx, monitor, result); err != nil {
 			slog.Error("failed to process check result", "monitor_id", monitor.ID, "error", err)
 		}
 	}
@@ -113,14 +86,14 @@ func main() {
 	client := checker.NewClient()
 	workerPool := checker.NewWorkerPool(ctx, 100, client, checkHandler)
 
-	scheduler := checker.NewScheduler(func(m *checker.MonitorInfo) {
+	scheduler := checker.NewScheduler(func(m *domain.Monitor) {
 		workerPool.Submit(m)
 	})
 
 	// Load existing monitors from DB
 	activeMonitors, _ := monitorRepo.ListActive(ctx)
-	for _, m := range activeMonitors {
-		scheduler.Add(domainToMonitorInfo(&m))
+	for i := range activeMonitors {
+		scheduler.Add(&activeMonitors[i])
 	}
 	slog.Info("loaded monitors", "count", len(activeMonitors))
 
@@ -130,7 +103,7 @@ func main() {
 		switch action {
 		case domain.ActionCreate, domain.ActionUpdate, domain.ActionResume:
 			if monitor != nil {
-				scheduler.Add(domainToMonitorInfo(monitor))
+				scheduler.Add(monitor)
 			}
 		case domain.ActionDelete, domain.ActionPause:
 			scheduler.Remove(monitorID)
@@ -175,18 +148,4 @@ func main() {
 	monitorSub.Stop()
 	scheduler.Stop()
 	workerPool.Stop()
-}
-
-func domainToMonitorInfo(m *domain.Monitor) *checker.MonitorInfo {
-	return &checker.MonitorInfo{
-		ID:                 m.ID,
-		UserID:             m.UserID,
-		Name:               m.Name,
-		URL:                m.URL,
-		Method:             string(m.Method),
-		IntervalSeconds:    m.IntervalSeconds,
-		ExpectedStatus:     m.ExpectedStatus,
-		Keyword:            m.Keyword,
-		AlertAfterFailures: m.AlertAfterFailures,
-	}
 }

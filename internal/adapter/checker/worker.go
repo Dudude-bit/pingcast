@@ -5,14 +5,16 @@ import (
 	"log/slog"
 	"net/url"
 	"sync"
+
+	"github.com/kirillinakin/pingcast/internal/domain"
 )
 
-type CheckHandler func(ctx context.Context, monitor *MonitorInfo, result *CheckResult)
+type CheckHandler func(ctx context.Context, monitor *domain.Monitor, result *domain.CheckResult)
 
 type WorkerPool struct {
 	client      *Client
 	hostLimiter *HostLimiter
-	jobs        chan *MonitorInfo
+	jobs        chan *domain.Monitor
 	handler     CheckHandler
 	wg          sync.WaitGroup
 	ctx         context.Context
@@ -25,7 +27,7 @@ func NewWorkerPool(ctx context.Context, workers int, client *Client, handler Che
 	wp := &WorkerPool{
 		client:      client,
 		hostLimiter: NewHostLimiter(),
-		jobs:        make(chan *MonitorInfo, workers*2),
+		jobs:        make(chan *domain.Monitor, workers*2),
 		handler:     handler,
 		ctx:         poolCtx,
 		cancel:      cancel,
@@ -40,7 +42,7 @@ func NewWorkerPool(ctx context.Context, workers int, client *Client, handler Che
 	return wp
 }
 
-func (wp *WorkerPool) Submit(m *MonitorInfo) {
+func (wp *WorkerPool) Submit(m *domain.Monitor) {
 	select {
 	case wp.jobs <- m:
 	case <-wp.ctx.Done():

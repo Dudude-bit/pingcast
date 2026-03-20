@@ -5,12 +5,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kirillinakin/pingcast/internal/domain"
 )
 
-type DispatchFunc func(m *MonitorInfo)
+type DispatchFunc func(m *domain.Monitor)
 
 type schedulerEntry struct {
-	monitor *MonitorInfo
+	monitor *domain.Monitor
 	ticker  *time.Ticker
 	stop    chan struct{}
 }
@@ -28,7 +29,7 @@ func NewScheduler(dispatch DispatchFunc) *Scheduler {
 	}
 }
 
-func (s *Scheduler) Add(m *MonitorInfo) {
+func (s *Scheduler) Add(m *domain.Monitor) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -70,10 +71,6 @@ func (s *Scheduler) Remove(id uuid.UUID) {
 		close(entry.stop)
 		delete(s.entries, id)
 	}
-}
-
-func (s *Scheduler) Update(m *MonitorInfo) {
-	s.Add(m)
 }
 
 func (s *Scheduler) Stop() {

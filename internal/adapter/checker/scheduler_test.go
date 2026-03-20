@@ -5,18 +5,19 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/kirillinakin/pingcast/internal/checker"
+	"github.com/kirillinakin/pingcast/internal/adapter/checker"
+	"github.com/kirillinakin/pingcast/internal/domain"
 )
 
 func TestScheduler_AddsAndFires(t *testing.T) {
 	fired := make(chan uuid.UUID, 10)
 
-	s := checker.NewScheduler(func(m *checker.MonitorInfo) {
+	s := checker.NewScheduler(func(m *domain.Monitor) {
 		fired <- m.ID
 	})
 
 	id := uuid.New()
-	s.Add(&checker.MonitorInfo{
+	s.Add(&domain.Monitor{
 		ID:              id,
 		IntervalSeconds: 1,
 	})
@@ -35,12 +36,12 @@ func TestScheduler_AddsAndFires(t *testing.T) {
 func TestScheduler_Remove(t *testing.T) {
 	fired := make(chan uuid.UUID, 10)
 
-	s := checker.NewScheduler(func(m *checker.MonitorInfo) {
+	s := checker.NewScheduler(func(m *domain.Monitor) {
 		fired <- m.ID
 	})
 
 	id := uuid.New()
-	s.Add(&checker.MonitorInfo{
+	s.Add(&domain.Monitor{
 		ID:              id,
 		IntervalSeconds: 1,
 	})
