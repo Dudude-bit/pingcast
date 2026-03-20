@@ -79,7 +79,7 @@ func main() {
 
 	// App services
 	authSvc := app.NewAuthService(userRepo, sessionRepo)
-	monitoringSvc := app.NewMonitoringService(monitorRepo, checkResultRepo, incidentRepo, userRepo, alertPub)
+	monitoringSvc := app.NewMonitoringService(monitorRepo, checkResultRepo, incidentRepo, userRepo, alertPub, nil)
 
 	// HTTP handlers
 	rateLimiter := httpadapter.NewRateLimiter(5, 15*time.Minute)

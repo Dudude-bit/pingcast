@@ -7,12 +7,13 @@ import (
 	"sync"
 
 	"github.com/kirillinakin/pingcast/internal/domain"
+	"github.com/kirillinakin/pingcast/internal/port"
 )
 
 type CheckHandler func(ctx context.Context, monitor *domain.Monitor, result *domain.CheckResult)
 
 type WorkerPool struct {
-	client      *Client
+	checker     port.MonitorChecker
 	hostLimiter *HostLimiter
 	jobs        chan *domain.Monitor
 	handler     CheckHandler
@@ -21,11 +22,11 @@ type WorkerPool struct {
 	cancel      context.CancelFunc
 }
 
-func NewWorkerPool(ctx context.Context, workers int, client *Client, handler CheckHandler) *WorkerPool {
+func NewWorkerPool(ctx context.Context, workers int, checker port.MonitorChecker, handler CheckHandler) *WorkerPool {
 	poolCtx, cancel := context.WithCancel(ctx)
 
 	wp := &WorkerPool{
-		client:      client,
+		checker:     checker,
 		hostLimiter: NewHostLimiter(),
 		jobs:        make(chan *domain.Monitor, workers*2),
 		handler:     handler,
@@ -66,7 +67,7 @@ func (wp *WorkerPool) worker() {
 
 			host := extractHost(m.URL)
 			wp.hostLimiter.Acquire(host)
-			result := wp.client.Check(wp.ctx, m)
+			result := wp.checker.Check(wp.ctx, m)
 			wp.hostLimiter.Release(host)
 
 			slog.Info("check completed",

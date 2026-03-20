@@ -10,7 +10,10 @@ import (
 	"time"
 
 	"github.com/kirillinakin/pingcast/internal/domain"
+	"github.com/kirillinakin/pingcast/internal/port"
 )
+
+var _ port.MonitorChecker = (*Client)(nil)
 
 const (
 	defaultTimeout = 10 * time.Second

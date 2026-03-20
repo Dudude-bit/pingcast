@@ -16,6 +16,7 @@ type MonitoringService struct {
 	incidents    port.IncidentRepo
 	users        port.UserRepo
 	alerts       port.AlertEventPublisher
+	checker      port.MonitorChecker
 }
 
 func NewMonitoringService(
@@ -24,6 +25,7 @@ func NewMonitoringService(
 	incidents port.IncidentRepo,
 	users port.UserRepo,
 	alerts port.AlertEventPublisher,
+	checker port.MonitorChecker,
 ) *MonitoringService {
 	return &MonitoringService{
 		monitors:     monitors,
@@ -31,7 +33,15 @@ func NewMonitoringService(
 		incidents:    incidents,
 		users:        users,
 		alerts:       alerts,
+		checker:      checker,
 	}
+}
+
+// RunCheck executes a health check via the injected MonitorChecker port
+// and processes the result (status transitions, incidents, alerts).
+func (s *MonitoringService) RunCheck(ctx context.Context, monitor *domain.Monitor) error {
+	result := s.checker.Check(ctx, monitor)
+	return s.ProcessCheckResult(ctx, monitor, result)
 }
 
 type CreateMonitorInput struct {

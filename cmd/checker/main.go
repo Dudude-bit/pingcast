@@ -72,19 +72,18 @@ func main() {
 	// NATS publisher
 	alertPub := natsadapter.NewAlertPublisher(js)
 
-	// App service
-	monitoringSvc := app.NewMonitoringService(monitorRepo, checkResultRepo, incidentRepo, userRepo, alertPub)
+	// Checker (implements port.MonitorChecker)
+	httpChecker := checker.NewClient()
 
-	// Check handler: delegates directly to MonitoringService (checker uses domain types)
-	checkHandler := func(ctx context.Context, monitor *domain.Monitor, result *domain.CheckResult) {
+	// App service (checker injected via port)
+	monitoringSvc := app.NewMonitoringService(monitorRepo, checkResultRepo, incidentRepo, userRepo, alertPub, httpChecker)
+
+	// Worker pool delegates to MonitoringService.RunCheck
+	workerPool := checker.NewWorkerPool(ctx, 100, httpChecker, func(ctx context.Context, monitor *domain.Monitor, result *domain.CheckResult) {
 		if err := monitoringSvc.ProcessCheckResult(ctx, monitor, result); err != nil {
 			slog.Error("failed to process check result", "monitor_id", monitor.ID, "error", err)
 		}
-	}
-
-	// Checker
-	client := checker.NewClient()
-	workerPool := checker.NewWorkerPool(ctx, 100, client, checkHandler)
+	})
 
 	scheduler := checker.NewScheduler(func(m *domain.Monitor) {
 		workerPool.Submit(m)
