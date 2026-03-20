@@ -33,16 +33,14 @@ type Monitor struct {
 	ID                 uuid.UUID `json:"id"`
 	UserID             uuid.UUID `json:"user_id"`
 	Name               string    `json:"name"`
-	Url                string    `json:"url"`
-	Method             string    `json:"method"`
 	IntervalSeconds    int32     `json:"interval_seconds"`
-	ExpectedStatus     int32     `json:"expected_status"`
-	Keyword            *string   `json:"keyword"`
 	AlertAfterFailures int32     `json:"alert_after_failures"`
 	IsPaused           bool      `json:"is_paused"`
 	IsPublic           bool      `json:"is_public"`
 	CurrentStatus      string    `json:"current_status"`
 	CreatedAt          time.Time `json:"created_at"`
+	Type               string    `json:"type"`
+	CheckConfig        []byte    `json:"check_config"`
 }
 
 type Session struct {

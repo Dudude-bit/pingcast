@@ -7,6 +7,7 @@ package gen
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -23,47 +24,55 @@ func (q *Queries) CountMonitorsByUserID(ctx context.Context, userID uuid.UUID) (
 }
 
 const createMonitor = `-- name: CreateMonitor :one
-INSERT INTO monitors (user_id, name, url, method, interval_seconds, expected_status, keyword, alert_after_failures, is_paused, is_public)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, user_id, name, url, method, interval_seconds, expected_status, keyword, alert_after_failures, is_paused, is_public, current_status, created_at
+INSERT INTO monitors (user_id, name, type, check_config, interval_seconds, alert_after_failures, is_paused, is_public)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, user_id, name, type, check_config, interval_seconds, alert_after_failures, is_paused, is_public, current_status, created_at
 `
 
 type CreateMonitorParams struct {
 	UserID             uuid.UUID `json:"user_id"`
 	Name               string    `json:"name"`
-	Url                string    `json:"url"`
-	Method             string    `json:"method"`
+	Type               string    `json:"type"`
+	CheckConfig        []byte    `json:"check_config"`
 	IntervalSeconds    int32     `json:"interval_seconds"`
-	ExpectedStatus     int32     `json:"expected_status"`
-	Keyword            *string   `json:"keyword"`
 	AlertAfterFailures int32     `json:"alert_after_failures"`
 	IsPaused           bool      `json:"is_paused"`
 	IsPublic           bool      `json:"is_public"`
 }
 
-func (q *Queries) CreateMonitor(ctx context.Context, arg CreateMonitorParams) (Monitor, error) {
+type CreateMonitorRow struct {
+	ID                 uuid.UUID `json:"id"`
+	UserID             uuid.UUID `json:"user_id"`
+	Name               string    `json:"name"`
+	Type               string    `json:"type"`
+	CheckConfig        []byte    `json:"check_config"`
+	IntervalSeconds    int32     `json:"interval_seconds"`
+	AlertAfterFailures int32     `json:"alert_after_failures"`
+	IsPaused           bool      `json:"is_paused"`
+	IsPublic           bool      `json:"is_public"`
+	CurrentStatus      string    `json:"current_status"`
+	CreatedAt          time.Time `json:"created_at"`
+}
+
+func (q *Queries) CreateMonitor(ctx context.Context, arg CreateMonitorParams) (CreateMonitorRow, error) {
 	row := q.db.QueryRow(ctx, createMonitor,
 		arg.UserID,
 		arg.Name,
-		arg.Url,
-		arg.Method,
+		arg.Type,
+		arg.CheckConfig,
 		arg.IntervalSeconds,
-		arg.ExpectedStatus,
-		arg.Keyword,
 		arg.AlertAfterFailures,
 		arg.IsPaused,
 		arg.IsPublic,
 	)
-	var i Monitor
+	var i CreateMonitorRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
 		&i.Name,
-		&i.Url,
-		&i.Method,
+		&i.Type,
+		&i.CheckConfig,
 		&i.IntervalSeconds,
-		&i.ExpectedStatus,
-		&i.Keyword,
 		&i.AlertAfterFailures,
 		&i.IsPaused,
 		&i.IsPublic,
@@ -88,22 +97,34 @@ func (q *Queries) DeleteMonitor(ctx context.Context, arg DeleteMonitorParams) er
 }
 
 const getMonitorByID = `-- name: GetMonitorByID :one
-SELECT id, user_id, name, url, method, interval_seconds, expected_status, keyword, alert_after_failures, is_paused, is_public, current_status, created_at
+SELECT id, user_id, name, type, check_config, interval_seconds, alert_after_failures, is_paused, is_public, current_status, created_at
 FROM monitors WHERE id = $1
 `
 
-func (q *Queries) GetMonitorByID(ctx context.Context, id uuid.UUID) (Monitor, error) {
+type GetMonitorByIDRow struct {
+	ID                 uuid.UUID `json:"id"`
+	UserID             uuid.UUID `json:"user_id"`
+	Name               string    `json:"name"`
+	Type               string    `json:"type"`
+	CheckConfig        []byte    `json:"check_config"`
+	IntervalSeconds    int32     `json:"interval_seconds"`
+	AlertAfterFailures int32     `json:"alert_after_failures"`
+	IsPaused           bool      `json:"is_paused"`
+	IsPublic           bool      `json:"is_public"`
+	CurrentStatus      string    `json:"current_status"`
+	CreatedAt          time.Time `json:"created_at"`
+}
+
+func (q *Queries) GetMonitorByID(ctx context.Context, id uuid.UUID) (GetMonitorByIDRow, error) {
 	row := q.db.QueryRow(ctx, getMonitorByID, id)
-	var i Monitor
+	var i GetMonitorByIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
 		&i.Name,
-		&i.Url,
-		&i.Method,
+		&i.Type,
+		&i.CheckConfig,
 		&i.IntervalSeconds,
-		&i.ExpectedStatus,
-		&i.Keyword,
 		&i.AlertAfterFailures,
 		&i.IsPaused,
 		&i.IsPublic,
@@ -114,28 +135,40 @@ func (q *Queries) GetMonitorByID(ctx context.Context, id uuid.UUID) (Monitor, er
 }
 
 const listActiveMonitors = `-- name: ListActiveMonitors :many
-SELECT id, user_id, name, url, method, interval_seconds, expected_status, keyword, alert_after_failures, is_paused, is_public, current_status, created_at
+SELECT id, user_id, name, type, check_config, interval_seconds, alert_after_failures, is_paused, is_public, current_status, created_at
 FROM monitors WHERE is_paused = FALSE
 `
 
-func (q *Queries) ListActiveMonitors(ctx context.Context) ([]Monitor, error) {
+type ListActiveMonitorsRow struct {
+	ID                 uuid.UUID `json:"id"`
+	UserID             uuid.UUID `json:"user_id"`
+	Name               string    `json:"name"`
+	Type               string    `json:"type"`
+	CheckConfig        []byte    `json:"check_config"`
+	IntervalSeconds    int32     `json:"interval_seconds"`
+	AlertAfterFailures int32     `json:"alert_after_failures"`
+	IsPaused           bool      `json:"is_paused"`
+	IsPublic           bool      `json:"is_public"`
+	CurrentStatus      string    `json:"current_status"`
+	CreatedAt          time.Time `json:"created_at"`
+}
+
+func (q *Queries) ListActiveMonitors(ctx context.Context) ([]ListActiveMonitorsRow, error) {
 	rows, err := q.db.Query(ctx, listActiveMonitors)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Monitor{}
+	items := []ListActiveMonitorsRow{}
 	for rows.Next() {
-		var i Monitor
+		var i ListActiveMonitorsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
 			&i.Name,
-			&i.Url,
-			&i.Method,
+			&i.Type,
+			&i.CheckConfig,
 			&i.IntervalSeconds,
-			&i.ExpectedStatus,
-			&i.Keyword,
 			&i.AlertAfterFailures,
 			&i.IsPaused,
 			&i.IsPublic,
@@ -153,28 +186,40 @@ func (q *Queries) ListActiveMonitors(ctx context.Context) ([]Monitor, error) {
 }
 
 const listMonitorsByUserID = `-- name: ListMonitorsByUserID :many
-SELECT id, user_id, name, url, method, interval_seconds, expected_status, keyword, alert_after_failures, is_paused, is_public, current_status, created_at
+SELECT id, user_id, name, type, check_config, interval_seconds, alert_after_failures, is_paused, is_public, current_status, created_at
 FROM monitors WHERE user_id = $1 ORDER BY created_at
 `
 
-func (q *Queries) ListMonitorsByUserID(ctx context.Context, userID uuid.UUID) ([]Monitor, error) {
+type ListMonitorsByUserIDRow struct {
+	ID                 uuid.UUID `json:"id"`
+	UserID             uuid.UUID `json:"user_id"`
+	Name               string    `json:"name"`
+	Type               string    `json:"type"`
+	CheckConfig        []byte    `json:"check_config"`
+	IntervalSeconds    int32     `json:"interval_seconds"`
+	AlertAfterFailures int32     `json:"alert_after_failures"`
+	IsPaused           bool      `json:"is_paused"`
+	IsPublic           bool      `json:"is_public"`
+	CurrentStatus      string    `json:"current_status"`
+	CreatedAt          time.Time `json:"created_at"`
+}
+
+func (q *Queries) ListMonitorsByUserID(ctx context.Context, userID uuid.UUID) ([]ListMonitorsByUserIDRow, error) {
 	rows, err := q.db.Query(ctx, listMonitorsByUserID, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Monitor{}
+	items := []ListMonitorsByUserIDRow{}
 	for rows.Next() {
-		var i Monitor
+		var i ListMonitorsByUserIDRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
 			&i.Name,
-			&i.Url,
-			&i.Method,
+			&i.Type,
+			&i.CheckConfig,
 			&i.IntervalSeconds,
-			&i.ExpectedStatus,
-			&i.Keyword,
 			&i.AlertAfterFailures,
 			&i.IsPaused,
 			&i.IsPublic,
@@ -192,31 +237,43 @@ func (q *Queries) ListMonitorsByUserID(ctx context.Context, userID uuid.UUID) ([
 }
 
 const listPublicMonitorsByUserSlug = `-- name: ListPublicMonitorsByUserSlug :many
-SELECT m.id, m.user_id, m.name, m.url, m.method, m.interval_seconds, m.expected_status, m.keyword, m.alert_after_failures, m.is_paused, m.is_public, m.current_status, m.created_at
+SELECT m.id, m.user_id, m.name, m.type, m.check_config, m.interval_seconds, m.alert_after_failures, m.is_paused, m.is_public, m.current_status, m.created_at
 FROM monitors m
 JOIN users u ON m.user_id = u.id
 WHERE u.slug = $1 AND m.is_public = TRUE
 ORDER BY m.name
 `
 
-func (q *Queries) ListPublicMonitorsByUserSlug(ctx context.Context, slug string) ([]Monitor, error) {
+type ListPublicMonitorsByUserSlugRow struct {
+	ID                 uuid.UUID `json:"id"`
+	UserID             uuid.UUID `json:"user_id"`
+	Name               string    `json:"name"`
+	Type               string    `json:"type"`
+	CheckConfig        []byte    `json:"check_config"`
+	IntervalSeconds    int32     `json:"interval_seconds"`
+	AlertAfterFailures int32     `json:"alert_after_failures"`
+	IsPaused           bool      `json:"is_paused"`
+	IsPublic           bool      `json:"is_public"`
+	CurrentStatus      string    `json:"current_status"`
+	CreatedAt          time.Time `json:"created_at"`
+}
+
+func (q *Queries) ListPublicMonitorsByUserSlug(ctx context.Context, slug string) ([]ListPublicMonitorsByUserSlugRow, error) {
 	rows, err := q.db.Query(ctx, listPublicMonitorsByUserSlug, slug)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Monitor{}
+	items := []ListPublicMonitorsByUserSlugRow{}
 	for rows.Next() {
-		var i Monitor
+		var i ListPublicMonitorsByUserSlugRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
 			&i.Name,
-			&i.Url,
-			&i.Method,
+			&i.Type,
+			&i.CheckConfig,
 			&i.IntervalSeconds,
-			&i.ExpectedStatus,
-			&i.Keyword,
 			&i.AlertAfterFailures,
 			&i.IsPaused,
 			&i.IsPublic,
@@ -235,19 +292,15 @@ func (q *Queries) ListPublicMonitorsByUserSlug(ctx context.Context, slug string)
 
 const updateMonitor = `-- name: UpdateMonitor :exec
 UPDATE monitors
-SET name = $2, url = $3, method = $4, interval_seconds = $5, expected_status = $6,
-    keyword = $7, alert_after_failures = $8, is_paused = $9, is_public = $10
-WHERE id = $1 AND user_id = $11
+SET name = $2, check_config = $3, interval_seconds = $4, alert_after_failures = $5, is_paused = $6, is_public = $7
+WHERE id = $1 AND user_id = $8
 `
 
 type UpdateMonitorParams struct {
 	ID                 uuid.UUID `json:"id"`
 	Name               string    `json:"name"`
-	Url                string    `json:"url"`
-	Method             string    `json:"method"`
+	CheckConfig        []byte    `json:"check_config"`
 	IntervalSeconds    int32     `json:"interval_seconds"`
-	ExpectedStatus     int32     `json:"expected_status"`
-	Keyword            *string   `json:"keyword"`
 	AlertAfterFailures int32     `json:"alert_after_failures"`
 	IsPaused           bool      `json:"is_paused"`
 	IsPublic           bool      `json:"is_public"`
@@ -258,11 +311,8 @@ func (q *Queries) UpdateMonitor(ctx context.Context, arg UpdateMonitorParams) er
 	_, err := q.db.Exec(ctx, updateMonitor,
 		arg.ID,
 		arg.Name,
-		arg.Url,
-		arg.Method,
+		arg.CheckConfig,
 		arg.IntervalSeconds,
-		arg.ExpectedStatus,
-		arg.Keyword,
 		arg.AlertAfterFailures,
 		arg.IsPaused,
 		arg.IsPublic,
