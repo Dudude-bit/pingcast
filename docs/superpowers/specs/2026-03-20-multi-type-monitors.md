@@ -90,29 +90,39 @@ func (m Monitor) Target() string {
 
 ## Database Migration
 
-`internal/database/migrations/006_add_monitor_type.sql`:
+Expand-contract pattern — two migrations to avoid destructive single-step change:
+
+`internal/database/migrations/006_add_monitor_type_and_config.sql`:
 
 ```sql
+-- Step 1: Add new columns (non-destructive)
 ALTER TABLE monitors
     ADD COLUMN type VARCHAR(10) NOT NULL DEFAULT 'http',
     ADD COLUMN check_config JSONB NOT NULL DEFAULT '{}';
 
--- Migrate existing HTTP monitors
-UPDATE monitors SET check_config = jsonb_build_object(
+-- Step 2: Backfill existing HTTP monitors
+UPDATE monitors SET check_config = jsonb_strip_nulls(jsonb_build_object(
     'http', jsonb_build_object(
         'url', url,
         'method', method,
         'expected_status', expected_status,
         'keyword', keyword
     )
-);
+));
+```
 
+`internal/database/migrations/007_drop_old_monitor_columns.sql`:
+
+```sql
+-- Step 3: Drop old columns (deployed after verifying backfill)
 ALTER TABLE monitors
     DROP COLUMN url,
     DROP COLUMN method,
     DROP COLUMN expected_status,
     DROP COLUMN keyword;
 ```
+
+Uses `jsonb_strip_nulls` to avoid `"keyword": null` entries for monitors without keywords.
 
 ### sqlc handling
 
@@ -180,14 +190,15 @@ Removed: `URL`, `Method`, `ExpectedStatus`, `Keyword`. Added: `Type`, `CheckConf
 ```go
 type UpdateMonitorInput struct {
     Name               *string
-    Type               *domain.MonitorType
-    CheckConfig        *domain.CheckConfig
+    CheckConfig        *domain.CheckConfig  // must match existing Type
     IntervalSeconds    *int
     AlertAfterFailures *int
     IsPaused           *bool
     IsPublic           *bool
 }
 ```
+
+`Type` is not in UpdateMonitorInput — type is immutable after creation.
 
 ## Adapter — Checker Registry + Three Checkers
 
@@ -244,10 +255,46 @@ func (c *DNSChecker) Check(ctx context.Context, monitor *domain.Monitor) *domain
 }
 ```
 
-### Unchanged adapter files:
-- `scheduler.go` — works with `domain.Monitor`, type-agnostic
-- `worker.go` — works with `domain.Monitor`, type-agnostic
-- `hostlimit.go` — unchanged
+### Modified adapter files:
+
+**`worker.go`** — two changes:
+1. Replace `port.MonitorChecker` field with `port.CheckerRegistry`. Worker does registry lookup per check: `checker, err := wp.registry.Get(m.Type)`.
+2. Replace `extractHost(m.URL)` with `monitor.Host()` — new domain helper (see below).
+
+Alternatively (simpler): WorkerPool no longer calls checker directly. It just calls `CheckHandler` which delegates to `MonitoringService.RunCheck`. WorkerPool becomes a pure scheduler-to-handler dispatcher, no checker dependency at all.
+
+**Recommended approach:** Remove checker from WorkerPool entirely. WorkerPool dispatches monitors to handler. Handler calls `monitoringSvc.RunCheck(ctx, monitor)` which does registry lookup + check + process result. WorkerPool only needs domain types and a handler callback.
+
+**`hostlimit.go`** — unchanged, but `extractHost` needs a type-aware replacement.
+
+### New domain helper `Monitor.Host()`:
+
+```go
+func (m Monitor) Host() string {
+    switch m.Type {
+    case MonitorHTTP:
+        if m.CheckConfig.HTTP != nil {
+            u, err := url.Parse(m.CheckConfig.HTTP.URL)
+            if err == nil {
+                return u.Host
+            }
+        }
+    case MonitorTCP:
+        if m.CheckConfig.TCP != nil {
+            return m.CheckConfig.TCP.Host
+        }
+    case MonitorDNS:
+        if m.CheckConfig.DNS != nil {
+            return m.CheckConfig.DNS.Hostname
+        }
+    }
+    return ""
+}
+```
+
+Note: This adds `net/url` import to domain — only stdlib, still hex-compliant.
+
+**`scheduler.go`** — unchanged (type-agnostic, works with `*domain.Monitor`)
 
 ## Composition Root Changes
 
@@ -398,6 +445,85 @@ Monitor:
 ```
 
 Removed from Monitor: `url`, `method`, `expected_status`, `keyword`. Added: `type`, `check_config`, `target`.
+
+## Alert Chain Changes
+
+`domain.AlertEvent.MonitorURL` → `MonitorTarget`. Set via `monitor.Target()` in `publishAlert`.
+
+`port.AlertSender` signature: `NotifyDown(ctx, monitorName, monitorTarget, cause)` — parameter renamed from `monitorURL` to `monitorTarget`.
+
+Telegram/SMTP message templates: "URL:" → "Target:" to correctly label TCP/DNS targets.
+
+## Validation
+
+### `CheckConfig.Validate(monitorType)` — domain method:
+
+```go
+func (c CheckConfig) Validate(t MonitorType) error {
+    switch t {
+    case MonitorHTTP:
+        if c.HTTP == nil { return errors.New("http config required") }
+        if c.HTTP.URL == "" { return errors.New("url required") }
+    case MonitorTCP:
+        if c.TCP == nil { return errors.New("tcp config required") }
+        if c.TCP.Host == "" { return errors.New("host required") }
+        if c.TCP.Port <= 0 || c.TCP.Port > 65535 { return errors.New("invalid port") }
+    case MonitorDNS:
+        if c.DNS == nil { return errors.New("dns config required") }
+        if c.DNS.Hostname == "" { return errors.New("hostname required") }
+    default:
+        return fmt.Errorf("unknown monitor type: %s", t)
+    }
+    return nil
+}
+```
+
+Called in `MonitoringService.CreateMonitor` and `UpdateMonitor`.
+
+### Type changes on update:
+
+Changing `Type` on an existing monitor is **disallowed**. To change type: delete and re-create. This avoids CheckConfig/Type mismatch bugs.
+
+`UpdateMonitorInput.Type` is removed — type is immutable after creation.
+
+### `MonitorType.Valid()` helper:
+
+```go
+func (t MonitorType) Valid() bool {
+    switch t {
+    case MonitorHTTP, MonitorTCP, MonitorDNS:
+        return true
+    }
+    return false
+}
+```
+
+## `HTTPCheckConfig.Method` type
+
+Uses `domain.HTTPMethod` (existing typed enum) instead of plain string:
+
+```go
+type HTTPCheckConfig struct {
+    URL            string     `json:"url"`
+    Method         HTTPMethod `json:"method"`
+    ExpectedStatus int        `json:"expected_status"`
+    Keyword        *string    `json:"keyword,omitempty"`
+}
+```
+
+## MonitorConfigFields input validation
+
+```go
+func (h *PageHandler) MonitorConfigFields(c *fiber.Ctx) error {
+    monitorType := domain.MonitorType(c.Query("type", "http"))
+    if !monitorType.Valid() {
+        return c.Status(400).SendString("invalid monitor type")
+    }
+    return h.render(c, "monitor_config_"+string(monitorType)+".html", nil)
+}
+```
+
+Validates against known enum before template lookup — prevents path traversal.
 
 ## Frontend Changes
 
