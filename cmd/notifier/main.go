@@ -2,18 +2,19 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
 
+	natsadapter "github.com/kirillinakin/pingcast/internal/adapter/nats"
+	smtpadapter "github.com/kirillinakin/pingcast/internal/adapter/smtp"
+	"github.com/kirillinakin/pingcast/internal/adapter/telegram"
+	"github.com/kirillinakin/pingcast/internal/app"
 	"github.com/kirillinakin/pingcast/internal/config"
-	natsbus "github.com/kirillinakin/pingcast/internal/nats"
-	"github.com/kirillinakin/pingcast/internal/notifier"
+	"github.com/kirillinakin/pingcast/internal/domain"
 )
 
 func main() {
@@ -29,7 +30,7 @@ func main() {
 	}
 
 	// NATS
-	nc, err := natsbus.Connect(cfg.NatsURL)
+	nc, err := natsadapter.Connect(cfg.NatsURL)
 	if err != nil {
 		slog.Error("failed to connect to nats", "error", err)
 		os.Exit(1)
@@ -42,92 +43,39 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := natsbus.SetupStreams(ctx, js); err != nil {
+	if err := natsadapter.SetupStreams(ctx, js); err != nil {
 		slog.Error("failed to setup nats streams", "error", err)
 		os.Exit(1)
 	}
 
-	// Senders
-	var tgSender *notifier.TelegramSender
+	// Telegram sender factory
+	var tgFactory app.TelegramFactory
 	if cfg.TelegramToken != "" {
-		tgSender = notifier.NewTelegramSender(cfg.TelegramToken)
+		tgSender := telegram.New(cfg.TelegramToken)
+		tgFactory = tgSender.ForChat
 	}
 
-	var emailSender *notifier.EmailSender
+	// SMTP sender factory
+	var emailFactory app.EmailFactory
 	if cfg.SMTPHost != "" {
-		emailSender = notifier.NewEmailSender(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPFrom)
+		smtpSender := smtpadapter.New(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPFrom)
+		emailFactory = smtpSender.ForRecipient
 	}
+
+	// Alert service
+	alertSvc := app.NewAlertService(tgFactory, emailFactory)
 
 	// Subscribe to alerts
-	cons, err := js.CreateOrUpdateConsumer(ctx, "ALERTS", jetstream.ConsumerConfig{
-		Durable:    "notifier-alerts",
-		AckPolicy:  jetstream.AckExplicitPolicy,
-		MaxDeliver: 5,
-		AckWait:    60 * time.Second,
-		BackOff:    []time.Duration{1 * time.Second, 5 * time.Second, 30 * time.Second, 2 * time.Minute, 10 * time.Minute},
-	})
-	if err != nil {
-		slog.Error("failed to create consumer", "error", err)
-		os.Exit(1)
-	}
-
-	consCtx, err := cons.Consume(func(msg jetstream.Msg) {
-		var event natsbus.AlertEvent
-		if err := json.Unmarshal(msg.Data(), &event); err != nil {
-			slog.Error("invalid alert event", "error", err)
-			msg.Term()
-			return
-		}
-
-		if err := handleAlert(ctx, &event, tgSender, emailSender); err != nil {
-			slog.Error("alert delivery failed, will retry", "event", event.Event, "monitor_id", event.MonitorID, "error", err)
-			msg.Nak()
-			return
-		}
-
-		msg.Ack()
-		slog.Info("alert delivered", "event", event.Event, "monitor_id", event.MonitorID)
-	})
-	if err != nil {
-		slog.Error("failed to start consumer", "error", err)
+	alertSub := natsadapter.NewAlertSubscriber(js)
+	if err := alertSub.Subscribe(ctx, func(ctx context.Context, event *domain.AlertEvent) error {
+		return alertSvc.Handle(ctx, event)
+	}); err != nil {
+		slog.Error("failed to subscribe to alerts", "error", err)
 		os.Exit(1)
 	}
 
 	slog.Info("notifier started")
 	<-ctx.Done()
 	slog.Info("notifier shutting down")
-	consCtx.Stop()
-}
-
-func handleAlert(ctx context.Context, event *natsbus.AlertEvent, tg *notifier.TelegramSender, email *notifier.EmailSender) error {
-	senders := buildSenders(event, tg, email)
-
-	for _, s := range senders {
-		var err error
-		switch event.Event {
-		case "down":
-			err = s.NotifyDown(ctx, event.MonitorName, event.MonitorURL, event.Cause)
-		case "up":
-			err = s.NotifyUp(ctx, event.MonitorName, event.MonitorURL)
-		}
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func buildSenders(event *natsbus.AlertEvent, tg *notifier.TelegramSender, email *notifier.EmailSender) []notifier.AlertSender {
-	var senders []notifier.AlertSender
-
-	if event.TgChatID != nil && tg != nil {
-		senders = append(senders, notifier.NewTelegramAlert(tg, *event.TgChatID))
-	}
-
-	if event.Plan == "pro" && event.Email != "" && email != nil {
-		senders = append(senders, notifier.NewEmailAlert(email, event.Email))
-	}
-
-	return senders
+	alertSub.Stop()
 }

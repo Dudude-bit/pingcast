@@ -2,20 +2,22 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/google/uuid"
 	"github.com/nats-io/nats.go/jetstream"
 
+	natsadapter "github.com/kirillinakin/pingcast/internal/adapter/nats"
+	"github.com/kirillinakin/pingcast/internal/adapter/postgres"
+	"github.com/kirillinakin/pingcast/internal/app"
 	"github.com/kirillinakin/pingcast/internal/checker"
 	"github.com/kirillinakin/pingcast/internal/config"
 	"github.com/kirillinakin/pingcast/internal/database"
-	natsbus "github.com/kirillinakin/pingcast/internal/nats"
+	"github.com/kirillinakin/pingcast/internal/domain"
 	sqlcgen "github.com/kirillinakin/pingcast/internal/sqlc/gen"
 )
 
@@ -42,7 +44,7 @@ func main() {
 	queries := sqlcgen.New(pool)
 
 	// NATS
-	nc, err := natsbus.Connect(cfg.NatsURL)
+	nc, err := natsadapter.Connect(cfg.NatsURL)
 	if err != nil {
 		slog.Error("failed to connect to nats", "error", err)
 		os.Exit(1)
@@ -55,116 +57,55 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := natsbus.SetupStreams(ctx, js); err != nil {
+	if err := natsadapter.SetupStreams(ctx, js); err != nil {
 		slog.Error("failed to setup nats streams", "error", err)
 		os.Exit(1)
 	}
 
-	// Publish alert helper
-	publishAlert := func(ctx context.Context, event *natsbus.AlertEvent) {
-		subject := "alerts." + event.Event
-		data, err := json.Marshal(event)
-		if err != nil {
-			slog.Error("failed to marshal alert event", "error", err)
-			return
-		}
-		if _, err := js.Publish(ctx, subject, data); err != nil {
-			slog.Error("failed to publish alert", "event", event.Event, "monitor_id", event.MonitorID, "error", err)
-		}
-	}
+	// Postgres repos
+	userRepo := postgres.NewUserRepo(queries)
+	monitorRepo := postgres.NewMonitorRepo(queries)
+	checkResultRepo := postgres.NewCheckResultRepo(queries)
+	incidentRepo := postgres.NewIncidentRepo(queries)
+	sessionRepo := postgres.NewSessionRepo(queries)
 
-	// Check handler: writes results, manages incidents, publishes fat events
+	// NATS publisher
+	alertPub := natsadapter.NewAlertPublisher(js)
+
+	// App service
+	monitoringSvc := app.NewMonitoringService(monitorRepo, checkResultRepo, incidentRepo, userRepo, alertPub)
+
+	// Check handler: converts checker types → domain types, delegates to MonitoringService
 	checkHandler := func(ctx context.Context, monitor *checker.MonitorInfo, result *checker.CheckResult) {
-		if _, err := queries.InsertCheckResult(ctx, sqlcgen.InsertCheckResultParams{
-			MonitorID:      monitor.ID,
-			Status:         result.Status,
-			StatusCode:     pgtype.Int4{Int32: derefInt32(result.StatusCode), Valid: result.StatusCode != nil},
-			ResponseTimeMs: int32(result.ResponseTimeMs),
+		domainMonitor := &domain.Monitor{
+			ID:                 monitor.ID,
+			UserID:             monitor.UserID,
+			Name:               monitor.Name,
+			URL:                monitor.URL,
+			Method:             domain.HTTPMethod(monitor.Method),
+			IntervalSeconds:    monitor.IntervalSeconds,
+			ExpectedStatus:     monitor.ExpectedStatus,
+			Keyword:            monitor.Keyword,
+			AlertAfterFailures: monitor.AlertAfterFailures,
+		}
+
+		var statusCode *int
+		if result.StatusCode != nil {
+			sc := int(*result.StatusCode)
+			statusCode = &sc
+		}
+
+		domainResult := &domain.CheckResult{
+			MonitorID:      result.MonitorID,
+			Status:         domain.MonitorStatus(result.Status),
+			StatusCode:     statusCode,
+			ResponseTimeMs: result.ResponseTimeMs,
 			ErrorMessage:   result.ErrorMessage,
 			CheckedAt:      result.CheckedAt,
-		}); err != nil {
-			slog.Error("failed to insert check result", "monitor_id", monitor.ID, "error", err)
 		}
 
-		// Read current status from DB
-		currentMon, err := queries.GetMonitorByID(ctx, monitor.ID)
-		previousStatus := "unknown"
-		if err == nil {
-			previousStatus = currentMon.CurrentStatus
-		}
-
-		queries.UpdateMonitorStatus(ctx, sqlcgen.UpdateMonitorStatusParams{
-			ID: monitor.ID, CurrentStatus: result.Status,
-		})
-
-		if previousStatus == result.Status {
-			return
-		}
-
-		if result.Status == "down" {
-			failures, _ := queries.ConsecutiveFailures(ctx, monitor.ID)
-			if int(failures) >= monitor.AlertAfterFailures {
-				inCooldown, _ := queries.IsInCooldown(ctx, monitor.ID)
-				if !inCooldown {
-					errMsg := ""
-					if result.ErrorMessage != nil {
-						errMsg = *result.ErrorMessage
-					}
-
-					incident, dbErr := queries.CreateIncident(ctx, sqlcgen.CreateIncidentParams{
-						MonitorID: monitor.ID, Cause: errMsg,
-					})
-
-					alertEvent := &natsbus.AlertEvent{
-						MonitorID:   monitor.ID,
-						MonitorName: monitor.Name,
-						MonitorURL:  monitor.URL,
-						Event:       "down",
-						Cause:       errMsg,
-					}
-					if dbErr == nil {
-						alertEvent.IncidentID = incident.ID
-					}
-
-					userInfo, uErr := queries.GetUserAlertInfo(ctx, monitor.UserID)
-					if uErr == nil {
-						alertEvent.Email = userInfo.Email
-						alertEvent.Plan = userInfo.Plan
-						if userInfo.TgChatID.Valid {
-							alertEvent.TgChatID = &userInfo.TgChatID.Int64
-						}
-					}
-
-					publishAlert(ctx, alertEvent)
-				}
-			}
-		} else if result.Status == "up" && previousStatus == "down" {
-			incident, err := queries.GetOpenIncidentByMonitorID(ctx, monitor.ID)
-			if err == nil {
-				now := pgtype.Timestamptz{Time: time.Now(), Valid: true}
-				queries.ResolveIncident(ctx, sqlcgen.ResolveIncidentParams{
-					ID: incident.ID, ResolvedAt: now,
-				})
-
-				alertEvent := &natsbus.AlertEvent{
-					MonitorID:   monitor.ID,
-					IncidentID:  incident.ID,
-					MonitorName: monitor.Name,
-					MonitorURL:  monitor.URL,
-					Event:       "up",
-				}
-
-				userInfo, uErr := queries.GetUserAlertInfo(ctx, monitor.UserID)
-				if uErr == nil {
-					alertEvent.Email = userInfo.Email
-					alertEvent.Plan = userInfo.Plan
-					if userInfo.TgChatID.Valid {
-						alertEvent.TgChatID = &userInfo.TgChatID.Int64
-					}
-				}
-
-				publishAlert(ctx, alertEvent)
-			}
+		if err := monitoringSvc.ProcessCheckResult(ctx, domainMonitor, domainResult); err != nil {
+			slog.Error("failed to process check result", "monitor_id", monitor.ID, "error", err)
 		}
 	}
 
@@ -176,48 +117,28 @@ func main() {
 		workerPool.Submit(m)
 	})
 
-	// Load existing monitors
-	monitors, _ := queries.ListActiveMonitors(ctx)
-	for _, m := range monitors {
-		scheduler.Add(monitorToInfo(m))
+	// Load existing monitors from DB
+	activeMonitors, _ := monitorRepo.ListActive(ctx)
+	for _, m := range activeMonitors {
+		scheduler.Add(domainToMonitorInfo(&m))
 	}
-	slog.Info("loaded monitors", "count", len(monitors))
+	slog.Info("loaded monitors", "count", len(activeMonitors))
 
-	// Subscribe to monitors.changed
-	cons, err := js.CreateOrUpdateConsumer(ctx, "MONITORS", jetstream.ConsumerConfig{
-		Durable:       "checker-worker",
-		AckPolicy:     jetstream.AckExplicitPolicy,
-		MaxDeliver:    10,
-		AckWait:       30 * time.Second,
-		FilterSubject: "monitors.changed",
-	})
-	if err != nil {
-		slog.Error("failed to create consumer", "error", err)
-		os.Exit(1)
-	}
-
-	consCtx, err := cons.Consume(func(msg jetstream.Msg) {
-		var event natsbus.MonitorChangedEvent
-		if err := json.Unmarshal(msg.Data(), &event); err != nil {
-			slog.Error("invalid monitors.changed event", "error", err)
-			msg.Nak()
-			return
-		}
-
-		switch event.Action {
-		case "create", "update", "resume":
-			if event.Monitor != nil {
-				scheduler.Add(eventToInfo(event.Monitor))
+	// Subscribe to monitor changes via NATS
+	monitorSub := natsadapter.NewMonitorSubscriber(js)
+	if err := monitorSub.Subscribe(ctx, func(ctx context.Context, action domain.MonitorAction, monitorID uuid.UUID, monitor *domain.Monitor) error {
+		switch action {
+		case domain.ActionCreate, domain.ActionUpdate, domain.ActionResume:
+			if monitor != nil {
+				scheduler.Add(domainToMonitorInfo(monitor))
 			}
-		case "delete", "pause":
-			scheduler.Remove(event.MonitorID)
+		case domain.ActionDelete, domain.ActionPause:
+			scheduler.Remove(monitorID)
 		}
-
-		msg.Ack()
-		slog.Info("processed monitor change", "action", event.Action, "monitor_id", event.MonitorID)
-	})
-	if err != nil {
-		slog.Error("failed to start consumer", "error", err)
+		slog.Info("processed monitor change", "action", action, "monitor_id", monitorID)
+		return nil
+	}); err != nil {
+		slog.Error("failed to subscribe to monitor changes", "error", err)
 		os.Exit(1)
 	}
 
@@ -231,13 +152,13 @@ func main() {
 				return
 			case <-ticker.C:
 				cutoff := time.Now().Add(-90 * 24 * time.Hour)
-				deleted, err := queries.DeleteCheckResultsOlderThan(ctx, cutoff)
+				deleted, err := checkResultRepo.DeleteOlderThan(ctx, cutoff)
 				if err != nil {
 					slog.Error("retention cleanup failed", "error", err)
 				} else if deleted > 0 {
 					slog.Info("retention cleanup", "deleted_rows", deleted)
 				}
-				sessDeleted, err := queries.DeleteExpiredSessions(ctx)
+				sessDeleted, err := sessionRepo.DeleteExpired(ctx)
 				if err != nil {
 					slog.Error("session cleanup failed", "error", err)
 				} else if sessDeleted > 0 {
@@ -247,46 +168,25 @@ func main() {
 		}
 	}()
 
-	slog.Info("checker started", "monitors", len(monitors))
+	slog.Info("checker started", "monitors", len(activeMonitors))
 	<-ctx.Done()
 	slog.Info("checker shutting down")
 
-	consCtx.Stop()
+	monitorSub.Stop()
 	scheduler.Stop()
 	workerPool.Stop()
 }
 
-func monitorToInfo(m sqlcgen.Monitor) *checker.MonitorInfo {
-	return &checker.MonitorInfo{
-		ID:                 m.ID,
-		UserID:             m.UserID,
-		Name:               m.Name,
-		URL:                m.Url,
-		Method:             m.Method,
-		IntervalSeconds:    int(m.IntervalSeconds),
-		ExpectedStatus:     int(m.ExpectedStatus),
-		Keyword:            m.Keyword,
-		AlertAfterFailures: int(m.AlertAfterFailures),
-	}
-}
-
-func eventToInfo(m *natsbus.MonitorData) *checker.MonitorInfo {
+func domainToMonitorInfo(m *domain.Monitor) *checker.MonitorInfo {
 	return &checker.MonitorInfo{
 		ID:                 m.ID,
 		UserID:             m.UserID,
 		Name:               m.Name,
 		URL:                m.URL,
-		Method:             m.Method,
+		Method:             string(m.Method),
 		IntervalSeconds:    m.IntervalSeconds,
 		ExpectedStatus:     m.ExpectedStatus,
 		Keyword:            m.Keyword,
 		AlertAfterFailures: m.AlertAfterFailures,
 	}
-}
-
-func derefInt32(p *int32) int32 {
-	if p == nil {
-		return 0
-	}
-	return *p
 }
