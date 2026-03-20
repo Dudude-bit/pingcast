@@ -1,15 +1,56 @@
 services:
-  app:
-    build: .
+  api:
+    build:
+      context: .
+      args:
+        SERVICE: api
     ports:
       - "8080:8080"
     environment:
-      - DATABASE_URL=postgres://pingcast:pingcast@db:5432/pingcast?sslmode=disable
-      - PORT=8080
-      - BASE_URL=http://localhost:8080
+      DATABASE_URL: postgres://pingcast:pingcast@db:5432/pingcast?sslmode=disable
+      NATS_URL: nats://nats:4222
+      PORT: "8080"
+      BASE_URL: http://localhost:8080
     depends_on:
       db:
         condition: service_healthy
+      nats:
+        condition: service_started
+
+  checker:
+    build:
+      context: .
+      args:
+        SERVICE: checker
+    environment:
+      DATABASE_URL: postgres://pingcast:pingcast@db:5432/pingcast?sslmode=disable
+      NATS_URL: nats://nats:4222
+    depends_on:
+      db:
+        condition: service_healthy
+      nats:
+        condition: service_started
+
+  notifier:
+    build:
+      context: .
+      args:
+        SERVICE: notifier
+    environment:
+      NATS_URL: nats://nats:4222
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+    depends_on:
+      nats:
+        condition: service_started
+
+  nats:
+    image: nats:2-alpine
+    command: ["--jetstream", "--store_dir=/data"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - nats-data:/data
 
   db:
     image: postgres:16-alpine
@@ -29,3 +70,4 @@ services:
 
 volumes:
   pgdata:
+  nats-data:
