@@ -43,6 +43,21 @@ type Monitor struct {
 	CheckConfig        []byte    `json:"check_config"`
 }
 
+type MonitorChannel struct {
+	MonitorID uuid.UUID `json:"monitor_id"`
+	ChannelID uuid.UUID `json:"channel_id"`
+}
+
+type NotificationChannel struct {
+	ID        uuid.UUID `json:"id"`
+	UserID    uuid.UUID `json:"user_id"`
+	Name      string    `json:"name"`
+	Type      string    `json:"type"`
+	Config    []byte    `json:"config"`
+	IsEnabled bool      `json:"is_enabled"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type Session struct {
 	ID        string    `json:"id"`
 	UserID    uuid.UUID `json:"user_id"`

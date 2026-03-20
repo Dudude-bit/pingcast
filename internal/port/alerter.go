@@ -1,8 +1,11 @@
 package port
 
-import "context"
+import (
+	"context"
+
+	"github.com/kirillinakin/pingcast/internal/domain"
+)
 
 type AlertSender interface {
-	NotifyDown(ctx context.Context, monitorName, monitorTarget, cause string) error
-	NotifyUp(ctx context.Context, monitorName, monitorTarget string) error
+	Send(ctx context.Context, event *domain.AlertEvent) error
 }

@@ -20,13 +20,11 @@ const (
 )
 
 type AlertEvent struct {
-	MonitorID   uuid.UUID
-	IncidentID  int64
-	MonitorName string
+	MonitorID     uuid.UUID
+	UserID        uuid.UUID
+	IncidentID    int64
+	MonitorName   string
 	MonitorTarget string
-	Event       AlertEventType
-	Cause       string
-	TgChatID    *int64
-	Email       string
-	Plan        Plan
+	Event         AlertEventType
+	Cause         string
 }
