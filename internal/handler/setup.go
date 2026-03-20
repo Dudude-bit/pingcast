@@ -72,7 +72,9 @@ func SetupApp(
 	// Authenticated HTML pages
 	authed := app.Group("", authService.PageMiddleware())
 	authed.Get("/dashboard", pageHandler.Dashboard)
-	authed.Get("/monitors/new", pageHandler.MonitorDetail) // reuse for form
+	authed.Get("/monitors/new", pageHandler.MonitorNewForm)
+	authed.Post("/monitors", pageHandler.MonitorCreate)
+	authed.Get("/monitors/:id/edit", pageHandler.MonitorEditForm)
 	authed.Get("/monitors/:id", pageHandler.MonitorDetail)
 
 	return app

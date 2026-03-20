@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"io/fs"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -157,6 +158,87 @@ func (h *PageHandler) MonitorDetail(c *fiber.Ctx) error {
 		"ChartData": template.JS(chartJSON),
 		"Incidents": incidents,
 	})
+}
+
+func (h *PageHandler) MonitorNewForm(c *fiber.Ctx) error {
+	user := auth.UserFromCtx(c)
+	return h.render(c, "monitor_form.html", fiber.Map{"User": user})
+}
+
+func (h *PageHandler) MonitorEditForm(c *fiber.Ctx) error {
+	user := auth.UserFromCtx(c)
+	monID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Redirect("/dashboard")
+	}
+	mon, err := h.queries.GetMonitorByID(c.UserContext(), monID)
+	if err != nil || mon.UserID != user.ID {
+		return c.Redirect("/dashboard")
+	}
+	return h.render(c, "monitor_form.html", fiber.Map{"User": user, "Monitor": mon})
+}
+
+func (h *PageHandler) MonitorCreate(c *fiber.Ctx) error {
+	user := auth.UserFromCtx(c)
+
+	count, _ := h.queries.CountMonitorsByUserID(c.UserContext(), user.ID)
+	limit := int32(5)
+	if user.Plan == "pro" {
+		limit = 50
+	}
+	if count >= limit {
+		return h.render(c, "monitor_form.html", fiber.Map{
+			"User": user, "Error": "Monitor limit reached. Upgrade to Pro.",
+		})
+	}
+
+	interval := int32(300)
+	if v := c.FormValue("interval_seconds"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			interval = int32(parsed)
+		}
+	}
+	minInterval := int32(300)
+	if user.Plan == "pro" {
+		minInterval = 30
+	}
+	if interval < minInterval {
+		interval = minInterval
+	}
+
+	expectedStatus := int32(200)
+	if v := c.FormValue("expected_status"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			expectedStatus = int32(parsed)
+		}
+	}
+
+	alertAfter := int32(3)
+	if v := c.FormValue("alert_after_failures"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			alertAfter = int32(parsed)
+		}
+	}
+
+	_, err := h.queries.CreateMonitor(c.UserContext(), gen.CreateMonitorParams{
+		UserID:             user.ID,
+		Name:               c.FormValue("name"),
+		Url:                c.FormValue("url"),
+		Method:             c.FormValue("method"),
+		IntervalSeconds:    interval,
+		ExpectedStatus:     expectedStatus,
+		AlertAfterFailures: alertAfter,
+		IsPaused:           false,
+		IsPublic:           c.FormValue("is_public") == "on",
+	})
+	if err != nil {
+		return h.render(c, "monitor_form.html", fiber.Map{
+			"User": user, "Error": "Failed to create monitor.",
+		})
+	}
+
+	// TODO: publish monitors.changed event to NATS (requires onChanged callback)
+	return c.Redirect("/dashboard")
 }
 
 func (h *PageHandler) StatusPage(c *fiber.Ctx) error {
