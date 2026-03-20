@@ -114,6 +114,14 @@ func (s *AuthService) DowngradeToFree(ctx context.Context, userID uuid.UUID) err
 	return s.users.UpdatePlan(ctx, userID, domain.PlanFree)
 }
 
+func (s *AuthService) GetUserByEmail(ctx context.Context, email string) (*domain.User, error) {
+	user, _, err := s.users.GetByEmail(ctx, email)
+	if err != nil {
+		return nil, fmt.Errorf("user not found: %w", err)
+	}
+	return user, nil
+}
+
 func (s *AuthService) createSession(ctx context.Context, userID uuid.UUID) (string, error) {
 	token, err := generateToken()
 	if err != nil {
