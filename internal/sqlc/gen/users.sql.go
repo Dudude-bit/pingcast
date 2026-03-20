@@ -10,13 +10,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, slug, password_hash)
 VALUES ($1, $2, $3)
-RETURNING id, email, slug, password_hash, tg_chat_id, plan, lemon_squeezy_customer_id, lemon_squeezy_subscription_id, created_at
+RETURNING id, email, slug, password_hash, plan, lemon_squeezy_customer_id, lemon_squeezy_subscription_id, created_at
 `
 
 type CreateUserParams struct {
@@ -25,15 +24,25 @@ type CreateUserParams struct {
 	PasswordHash string `json:"password_hash"`
 }
 
-func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
+type CreateUserRow struct {
+	ID                         uuid.UUID `json:"id"`
+	Email                      string    `json:"email"`
+	Slug                       string    `json:"slug"`
+	PasswordHash               string    `json:"password_hash"`
+	Plan                       string    `json:"plan"`
+	LemonSqueezyCustomerID     *string   `json:"lemon_squeezy_customer_id"`
+	LemonSqueezySubscriptionID *string   `json:"lemon_squeezy_subscription_id"`
+	CreatedAt                  time.Time `json:"created_at"`
+}
+
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
 	row := q.db.QueryRow(ctx, createUser, arg.Email, arg.Slug, arg.PasswordHash)
-	var i User
+	var i CreateUserRow
 	err := row.Scan(
 		&i.ID,
 		&i.Email,
 		&i.Slug,
 		&i.PasswordHash,
-		&i.TgChatID,
 		&i.Plan,
 		&i.LemonSqueezyCustomerID,
 		&i.LemonSqueezySubscriptionID,
@@ -42,37 +51,18 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	return i, err
 }
 
-const getUserAlertInfo = `-- name: GetUserAlertInfo :one
-SELECT tg_chat_id, email, plan
-FROM users WHERE id = $1
-`
-
-type GetUserAlertInfoRow struct {
-	TgChatID pgtype.Int8 `json:"tg_chat_id"`
-	Email    string      `json:"email"`
-	Plan     string      `json:"plan"`
-}
-
-func (q *Queries) GetUserAlertInfo(ctx context.Context, id uuid.UUID) (GetUserAlertInfoRow, error) {
-	row := q.db.QueryRow(ctx, getUserAlertInfo, id)
-	var i GetUserAlertInfoRow
-	err := row.Scan(&i.TgChatID, &i.Email, &i.Plan)
-	return i, err
-}
-
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, slug, password_hash, tg_chat_id, plan, created_at
+SELECT id, email, slug, password_hash, plan, created_at
 FROM users WHERE email = $1
 `
 
 type GetUserByEmailRow struct {
-	ID           uuid.UUID   `json:"id"`
-	Email        string      `json:"email"`
-	Slug         string      `json:"slug"`
-	PasswordHash string      `json:"password_hash"`
-	TgChatID     pgtype.Int8 `json:"tg_chat_id"`
-	Plan         string      `json:"plan"`
-	CreatedAt    time.Time   `json:"created_at"`
+	ID           uuid.UUID `json:"id"`
+	Email        string    `json:"email"`
+	Slug         string    `json:"slug"`
+	PasswordHash string    `json:"password_hash"`
+	Plan         string    `json:"plan"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error) {
@@ -83,7 +73,6 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (GetUserByEm
 		&i.Email,
 		&i.Slug,
 		&i.PasswordHash,
-		&i.TgChatID,
 		&i.Plan,
 		&i.CreatedAt,
 	)
@@ -91,19 +80,18 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (GetUserByEm
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, slug, tg_chat_id, plan, lemon_squeezy_customer_id, lemon_squeezy_subscription_id, created_at
+SELECT id, email, slug, plan, lemon_squeezy_customer_id, lemon_squeezy_subscription_id, created_at
 FROM users WHERE id = $1
 `
 
 type GetUserByIDRow struct {
-	ID                         uuid.UUID   `json:"id"`
-	Email                      string      `json:"email"`
-	Slug                       string      `json:"slug"`
-	TgChatID                   pgtype.Int8 `json:"tg_chat_id"`
-	Plan                       string      `json:"plan"`
-	LemonSqueezyCustomerID     *string     `json:"lemon_squeezy_customer_id"`
-	LemonSqueezySubscriptionID *string     `json:"lemon_squeezy_subscription_id"`
-	CreatedAt                  time.Time   `json:"created_at"`
+	ID                         uuid.UUID `json:"id"`
+	Email                      string    `json:"email"`
+	Slug                       string    `json:"slug"`
+	Plan                       string    `json:"plan"`
+	LemonSqueezyCustomerID     *string   `json:"lemon_squeezy_customer_id"`
+	LemonSqueezySubscriptionID *string   `json:"lemon_squeezy_subscription_id"`
+	CreatedAt                  time.Time `json:"created_at"`
 }
 
 func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error) {
@@ -113,7 +101,6 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow
 		&i.ID,
 		&i.Email,
 		&i.Slug,
-		&i.TgChatID,
 		&i.Plan,
 		&i.LemonSqueezyCustomerID,
 		&i.LemonSqueezySubscriptionID,
@@ -123,17 +110,16 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow
 }
 
 const getUserBySlug = `-- name: GetUserBySlug :one
-SELECT id, email, slug, tg_chat_id, plan, created_at
+SELECT id, email, slug, plan, created_at
 FROM users WHERE slug = $1
 `
 
 type GetUserBySlugRow struct {
-	ID        uuid.UUID   `json:"id"`
-	Email     string      `json:"email"`
-	Slug      string      `json:"slug"`
-	TgChatID  pgtype.Int8 `json:"tg_chat_id"`
-	Plan      string      `json:"plan"`
-	CreatedAt time.Time   `json:"created_at"`
+	ID        uuid.UUID `json:"id"`
+	Email     string    `json:"email"`
+	Slug      string    `json:"slug"`
+	Plan      string    `json:"plan"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 func (q *Queries) GetUserBySlug(ctx context.Context, slug string) (GetUserBySlugRow, error) {
@@ -143,7 +129,6 @@ func (q *Queries) GetUserBySlug(ctx context.Context, slug string) (GetUserBySlug
 		&i.ID,
 		&i.Email,
 		&i.Slug,
-		&i.TgChatID,
 		&i.Plan,
 		&i.CreatedAt,
 	)
@@ -178,19 +163,5 @@ type UpdateUserPlanParams struct {
 
 func (q *Queries) UpdateUserPlan(ctx context.Context, arg UpdateUserPlanParams) error {
 	_, err := q.db.Exec(ctx, updateUserPlan, arg.ID, arg.Plan)
-	return err
-}
-
-const updateUserTelegramChatID = `-- name: UpdateUserTelegramChatID :exec
-UPDATE users SET tg_chat_id = $2 WHERE id = $1
-`
-
-type UpdateUserTelegramChatIDParams struct {
-	ID       uuid.UUID   `json:"id"`
-	TgChatID pgtype.Int8 `json:"tg_chat_id"`
-}
-
-func (q *Queries) UpdateUserTelegramChatID(ctx context.Context, arg UpdateUserTelegramChatIDParams) error {
-	_, err := q.db.Exec(ctx, updateUserTelegramChatID, arg.ID, arg.TgChatID)
 	return err
 }

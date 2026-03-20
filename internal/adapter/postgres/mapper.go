@@ -15,17 +15,6 @@ import (
 // pgtype helpers
 // ---------------------------------------------------------------------------
 
-func pgtypeInt8ToPtr(v pgtype.Int8) *int64 {
-	if !v.Valid {
-		return nil
-	}
-	return &v.Int64
-}
-
-func int64ToPgtypeInt8(v int64) pgtype.Int8 {
-	return pgtype.Int8{Int64: v, Valid: true}
-}
-
 func pgtypeTimestamptzToPtr(v pgtype.Timestamptz) *time.Time {
 	if !v.Valid {
 		return nil
@@ -56,13 +45,22 @@ func intToPgtypeInt4(v *int) pgtype.Int4 {
 // User mappers
 // ---------------------------------------------------------------------------
 
+func userFromCreateRow(r gen.CreateUserRow) *domain.User {
+	return &domain.User{
+		ID:        r.ID,
+		Email:     r.Email,
+		Slug:      r.Slug,
+		Plan:      domain.Plan(r.Plan),
+		CreatedAt: r.CreatedAt,
+	}
+}
+
 func userFromRow(r gen.User) *domain.User {
 	return &domain.User{
 		ID:        r.ID,
 		Email:     r.Email,
 		Slug:      r.Slug,
 		Plan:      domain.Plan(r.Plan),
-		TgChatID:  pgtypeInt8ToPtr(r.TgChatID),
 		CreatedAt: r.CreatedAt,
 	}
 }
@@ -73,7 +71,6 @@ func userFromGetByIDRow(r gen.GetUserByIDRow) *domain.User {
 		Email:     r.Email,
 		Slug:      r.Slug,
 		Plan:      domain.Plan(r.Plan),
-		TgChatID:  pgtypeInt8ToPtr(r.TgChatID),
 		CreatedAt: r.CreatedAt,
 	}
 }
@@ -84,7 +81,6 @@ func userFromGetByEmailRow(r gen.GetUserByEmailRow) (*domain.User, string) {
 		Email:     r.Email,
 		Slug:      r.Slug,
 		Plan:      domain.Plan(r.Plan),
-		TgChatID:  pgtypeInt8ToPtr(r.TgChatID),
 		CreatedAt: r.CreatedAt,
 	}
 	return u, r.PasswordHash
@@ -96,7 +92,6 @@ func userFromGetBySlugRow(r gen.GetUserBySlugRow) *domain.User {
 		Email:     r.Email,
 		Slug:      r.Slug,
 		Plan:      domain.Plan(r.Plan),
-		TgChatID:  pgtypeInt8ToPtr(r.TgChatID),
 		CreatedAt: r.CreatedAt,
 	}
 }

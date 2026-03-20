@@ -16,11 +16,12 @@ import (
 
 type WebhookHandler struct {
 	auth               *app.AuthService
+	alerts             *app.AlertService
 	lemonSqueezySecret string
 }
 
-func NewWebhookHandler(auth *app.AuthService, lemonSqueezySecret string) *WebhookHandler {
-	return &WebhookHandler{auth: auth, lemonSqueezySecret: lemonSqueezySecret}
+func NewWebhookHandler(auth *app.AuthService, alerts *app.AlertService, lemonSqueezySecret string) *WebhookHandler {
+	return &WebhookHandler{auth: auth, alerts: alerts, lemonSqueezySecret: lemonSqueezySecret}
 }
 
 type lemonSqueezyWebhook struct {
@@ -115,10 +116,16 @@ func (h *WebhookHandler) HandleTelegramWebhook(c *fiber.Ctx) error {
 			return c.SendStatus(fiber.StatusOK)
 		}
 
-		if err := h.auth.LinkTelegram(c.UserContext(), userID, chatID); err != nil {
-			slog.Error("failed to link telegram", "user_id", userID, "error", err)
+		config, _ := json.Marshal(map[string]any{"chat_id": chatID})
+		_, err = h.alerts.CreateChannel(c.UserContext(), userID, app.CreateChannelInput{
+			Name:   fmt.Sprintf("Telegram %d", chatID),
+			Type:   "telegram",
+			Config: config,
+		})
+		if err != nil {
+			slog.Error("failed to create telegram channel", "user_id", userID, "error", err)
 		} else {
-			slog.Info("telegram linked", "user_id", userID, "chat_id", chatID)
+			slog.Info("telegram channel created", "user_id", userID, "chat_id", chatID)
 		}
 	}
 

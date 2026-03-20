@@ -29,7 +29,7 @@ func (r *UserRepo) Create(ctx context.Context, email, slug, passwordHash string)
 	if err != nil {
 		return nil, err
 	}
-	return userFromRow(row), nil
+	return userFromCreateRow(row), nil
 }
 
 func (r *UserRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
@@ -61,13 +61,6 @@ func (r *UserRepo) UpdatePlan(ctx context.Context, id uuid.UUID, plan domain.Pla
 	return r.q.UpdateUserPlan(ctx, gen.UpdateUserPlanParams{
 		ID:   id,
 		Plan: string(plan),
-	})
-}
-
-func (r *UserRepo) UpdateTelegramChatID(ctx context.Context, id uuid.UUID, chatID int64) error {
-	return r.q.UpdateUserTelegramChatID(ctx, gen.UpdateUserTelegramChatIDParams{
-		ID:       id,
-		TgChatID: int64ToPgtypeInt8(chatID),
 	})
 }
 

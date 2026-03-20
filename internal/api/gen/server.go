@@ -280,7 +280,6 @@ type User struct {
 	Id        *openapi_types.UUID `json:"id,omitempty"`
 	Plan      *UserPlan           `json:"plan,omitempty"`
 	Slug      *string             `json:"slug,omitempty"`
-	TgLinked  *bool               `json:"tg_linked,omitempty"`
 }
 
 // UserPlan defines model for User.Plan.

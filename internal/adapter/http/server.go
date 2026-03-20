@@ -311,14 +311,12 @@ func setSessionCookie(c *fiber.Ctx, sessionID string) {
 }
 
 func domainUserToAPI(u *domain.User) *apigen.User {
-	tgLinked := u.TgChatID != nil
 	plan := apigen.UserPlan(u.Plan)
 	return &apigen.User{
 		Id:        (*openapi_types.UUID)(&u.ID),
 		Email:     &u.Email,
 		Slug:      &u.Slug,
 		Plan:      &plan,
-		TgLinked:  &tgLinked,
 		CreatedAt: &u.CreatedAt,
 	}
 }

@@ -35,10 +35,6 @@
     <span class="divider"></span>
     <span>Plan: <strong>{{.User.Plan}}</strong></span>
     <span class="divider"></span>
-    {{if .User.TgChatID}}
-        <span style="color: var(--status-up);">Telegram linked</span>
-    {{else}}
-        <a href="https://t.me/PingCastBot?start={{.User.ID}}" target="_blank" class="btn btn-sm btn-secondary">Link Telegram</a>
-    {{end}}
+    <a href="/channels" class="btn btn-sm btn-secondary">Notification Channels</a>
 </div>
 {{end}}

@@ -14,7 +14,6 @@ type UserRepo interface {
 	GetByEmail(ctx context.Context, email string) (user *domain.User, passwordHash string, err error)
 	GetBySlug(ctx context.Context, slug string) (*domain.User, error)
 	UpdatePlan(ctx context.Context, id uuid.UUID, plan domain.Plan) error
-	UpdateTelegramChatID(ctx context.Context, id uuid.UUID, chatID int64) error
 	UpdateLemonSqueezy(ctx context.Context, id uuid.UUID, customerID, subscriptionID string) error
 }
 

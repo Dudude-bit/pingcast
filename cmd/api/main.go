@@ -11,10 +11,14 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
+	"github.com/kirillinakin/pingcast/internal/adapter/channel"
 	"github.com/kirillinakin/pingcast/internal/adapter/checker"
 	httpadapter "github.com/kirillinakin/pingcast/internal/adapter/http"
 	natsadapter "github.com/kirillinakin/pingcast/internal/adapter/nats"
 	"github.com/kirillinakin/pingcast/internal/adapter/postgres"
+	smtpadapter "github.com/kirillinakin/pingcast/internal/adapter/smtp"
+	"github.com/kirillinakin/pingcast/internal/adapter/telegram"
+	"github.com/kirillinakin/pingcast/internal/adapter/webhook"
 	"github.com/kirillinakin/pingcast/internal/app"
 	"github.com/kirillinakin/pingcast/internal/config"
 	"github.com/kirillinakin/pingcast/internal/database"
@@ -85,15 +89,23 @@ func main() {
 	registry.Register(domain.MonitorTCP, "TCP", checker.NewTCPChecker(10*time.Second))
 	registry.Register(domain.MonitorDNS, "DNS", checker.NewDNSChecker())
 
+	// Channel registry
+	channelRepo := postgres.NewChannelRepo(queries)
+	channelReg := channel.NewRegistry()
+	channelReg.Register(domain.ChannelTelegram, "Telegram", telegram.NewFactory(""))
+	channelReg.Register(domain.ChannelEmail, "Email", smtpadapter.NewFactory("", 0, "", "", ""))
+	channelReg.Register(domain.ChannelWebhook, "Webhook", webhook.NewFactory())
+
 	// App services
 	authSvc := app.NewAuthService(userRepo, sessionRepo)
 	monitoringSvc := app.NewMonitoringService(monitorRepo, checkResultRepo, incidentRepo, userRepo, alertPub, registry)
+	alertSvc := app.NewAlertService(channelRepo, channelReg)
 
 	// HTTP handlers
 	rateLimiter := httpadapter.NewRateLimiter(5, 15*time.Minute)
 	server := httpadapter.NewServer(authSvc, monitoringSvc, monitorPub, rateLimiter)
 	pageHandler := httpadapter.NewPageHandler(authSvc, monitoringSvc, rateLimiter)
-	webhookHandler := httpadapter.NewWebhookHandler(authSvc, cfg.LemonSqueezyWebhookSecret)
+	webhookHandler := httpadapter.NewWebhookHandler(authSvc, alertSvc, cfg.LemonSqueezyWebhookSecret)
 
 	// Wire
 	fiberApp := httpadapter.SetupApp(authSvc, pageHandler, server, webhookHandler)

@@ -18,7 +18,6 @@ type User struct {
 	Email     string
 	Slug      string
 	Plan      Plan
-	TgChatID  *int64
 	CreatedAt time.Time
 }
 

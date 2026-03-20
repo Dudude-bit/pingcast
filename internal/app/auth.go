@@ -99,10 +99,6 @@ func (s *AuthService) Logout(ctx context.Context, sessionID string) error {
 	return s.sessions.Delete(ctx, sessionID)
 }
 
-func (s *AuthService) LinkTelegram(ctx context.Context, userID uuid.UUID, chatID int64) error {
-	return s.users.UpdateTelegramChatID(ctx, userID, chatID)
-}
-
 func (s *AuthService) UpgradeToPro(ctx context.Context, userID uuid.UUID, customerID, subscriptionID string) error {
 	if err := s.users.UpdatePlan(ctx, userID, domain.PlanPro); err != nil {
 		return err

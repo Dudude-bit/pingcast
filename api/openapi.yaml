@@ -286,8 +286,6 @@ components:
         plan:
           type: string
           enum: [free, pro]
-        tg_linked:
-          type: boolean
         created_at:
           type: string
           format: date-time
