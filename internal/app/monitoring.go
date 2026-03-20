@@ -240,21 +240,14 @@ func (s *MonitoringService) handleRecovery(ctx context.Context, monitor *domain.
 }
 
 func (s *MonitoringService) publishAlert(ctx context.Context, monitor *domain.Monitor, eventType domain.AlertEventType, cause string, incidentID int64) error {
-	user, err := s.users.GetByID(ctx, monitor.UserID)
-	if err != nil {
-		return fmt.Errorf("get user for alert: %w", err)
-	}
-
 	event := &domain.AlertEvent{
 		MonitorID:     monitor.ID,
+		UserID:        monitor.UserID,
 		IncidentID:    incidentID,
 		MonitorName:   monitor.Name,
 		MonitorTarget: s.registry.Target(monitor.Type, monitor.CheckConfig),
 		Event:         eventType,
 		Cause:         cause,
-		TgChatID:      user.TgChatID,
-		Email:         user.Email,
-		Plan:          user.Plan,
 	}
 
 	return s.alerts.PublishAlert(ctx, event)

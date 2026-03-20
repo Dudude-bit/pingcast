@@ -37,9 +37,12 @@ services:
       args:
         SERVICE: notifier
     environment:
+      DATABASE_URL: postgres://pingcast:pingcast@db:5432/pingcast?sslmode=disable
       NATS_URL: nats://nats:4222
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
     depends_on:
+      db:
+        condition: service_healthy
       nats:
         condition: service_started
 

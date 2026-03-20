@@ -6,56 +6,94 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
+	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/port"
 )
 
-// compile-time check
-var _ port.AlertSender = (*chatAlert)(nil)
+var _ port.ChannelSenderFactory = (*Factory)(nil)
+var _ port.AlertSender = (*sender)(nil)
 
-// Sender knows how to talk to the Telegram Bot API.
-type Sender struct {
-	token  string
-	urlFmt string
+type TelegramChannelConfig struct {
+	ChatID int64 `json:"chat_id"`
 }
 
-// New creates a Sender for the given bot token.
-func New(token string) *Sender {
-	return &Sender{
+type Factory struct {
+	token  string
+	urlFmt string
+	client *http.Client
+}
+
+func NewFactory(token string) *Factory {
+	return &Factory{
 		token:  token,
 		urlFmt: "https://api.telegram.org/bot%s/sendMessage",
+		client: &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
-// NewWithURL creates a Sender with a custom API URL format (for testing).
-func NewWithURL(token, urlFmt string) *Sender {
-	return &Sender{token: token, urlFmt: urlFmt}
+func NewFactoryWithURL(token, urlFmt string) *Factory {
+	return &Factory{
+		token:  token,
+		urlFmt: urlFmt,
+		client: &http.Client{Timeout: 10 * time.Second},
+	}
 }
 
-// chatAlert implements port.AlertSender for a specific chat.
-type chatAlert struct {
-	sender *Sender
+func (f *Factory) CreateSender(config json.RawMessage) (port.AlertSender, error) {
+	var cfg TelegramChannelConfig
+	if err := json.Unmarshal(config, &cfg); err != nil {
+		return nil, fmt.Errorf("invalid telegram config: %w", err)
+	}
+	if cfg.ChatID == 0 {
+		return nil, fmt.Errorf("chat_id is required")
+	}
+	return &sender{
+		token:  f.token,
+		urlFmt: f.urlFmt,
+		client: f.client,
+		chatID: cfg.ChatID,
+	}, nil
+}
+
+func (f *Factory) ValidateConfig(raw json.RawMessage) error {
+	var cfg TelegramChannelConfig
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return fmt.Errorf("invalid telegram config: %w", err)
+	}
+	if cfg.ChatID == 0 {
+		return fmt.Errorf("chat_id required")
+	}
+	return nil
+}
+
+func (f *Factory) ConfigSchema() port.ConfigSchema {
+	return port.ConfigSchema{Fields: []port.ConfigField{
+		{Name: "chat_id", Label: "Chat ID", Type: "number", Required: true, Placeholder: "Get from @PingCastBot /start"},
+	}}
+}
+
+type sender struct {
+	token  string
+	urlFmt string
+	client *http.Client
 	chatID int64
 }
 
-// ForChat returns an AlertSender bound to the given chat ID.
-func (s *Sender) ForChat(chatID int64) port.AlertSender {
-	return &chatAlert{sender: s, chatID: chatID}
-}
+func (s *sender) Send(ctx context.Context, event *domain.AlertEvent) error {
+	var text string
+	switch event.Event {
+	case domain.AlertDown:
+		text = fmt.Sprintf("🔴 *%s* is DOWN\n\nTarget: `%s`\nCause: %s", event.MonitorName, event.MonitorTarget, event.Cause)
+	case domain.AlertUp:
+		text = fmt.Sprintf("🟢 *%s* is back UP\n\nTarget: `%s`", event.MonitorName, event.MonitorTarget)
+	default:
+		return nil
+	}
 
-func (a *chatAlert) NotifyDown(ctx context.Context, name, target, cause string) error {
-	text := fmt.Sprintf("🔴 *%s* is DOWN\n\nTarget: `%s`\nCause: %s", name, target, cause)
-	return a.sender.send(ctx, a.chatID, text)
-}
-
-func (a *chatAlert) NotifyUp(ctx context.Context, name, target string) error {
-	text := fmt.Sprintf("🟢 *%s* is back UP\n\nTarget: `%s`", name, target)
-	return a.sender.send(ctx, a.chatID, text)
-}
-
-func (s *Sender) send(ctx context.Context, chatID int64, text string) error {
 	payload := map[string]any{
-		"chat_id":    chatID,
+		"chat_id":    s.chatID,
 		"text":       text,
 		"parse_mode": "Markdown",
 	}
@@ -72,7 +110,7 @@ func (s *Sender) send(ctx context.Context, chatID int64, text string) error {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("send telegram message: %w", err)
 	}
@@ -81,6 +119,5 @@ func (s *Sender) send(ctx context.Context, chatID int64, text string) error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("telegram API returned status %d", resp.StatusCode)
 	}
-
 	return nil
 }

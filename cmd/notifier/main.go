@@ -9,12 +9,17 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
+	"github.com/kirillinakin/pingcast/internal/adapter/channel"
 	natsadapter "github.com/kirillinakin/pingcast/internal/adapter/nats"
+	"github.com/kirillinakin/pingcast/internal/adapter/postgres"
 	smtpadapter "github.com/kirillinakin/pingcast/internal/adapter/smtp"
 	"github.com/kirillinakin/pingcast/internal/adapter/telegram"
+	"github.com/kirillinakin/pingcast/internal/adapter/webhook"
 	"github.com/kirillinakin/pingcast/internal/app"
 	"github.com/kirillinakin/pingcast/internal/config"
+	"github.com/kirillinakin/pingcast/internal/database"
 	"github.com/kirillinakin/pingcast/internal/domain"
+	sqlcgen "github.com/kirillinakin/pingcast/internal/sqlc/gen"
 )
 
 func main() {
@@ -28,6 +33,17 @@ func main() {
 		slog.Error("failed to load config", "error", err)
 		os.Exit(1)
 	}
+
+	// PostgreSQL (for channel lookup)
+	pool, err := database.Connect(ctx, cfg.DatabaseURL)
+	if err != nil {
+		slog.Error("failed to connect to database", "error", err)
+		os.Exit(1)
+	}
+	defer pool.Close()
+
+	queries := sqlcgen.New(pool)
+	channelRepo := postgres.NewChannelRepo(queries)
 
 	// NATS
 	nc, err := natsadapter.Connect(cfg.NatsURL)
@@ -48,22 +64,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Telegram sender factory
-	var tgFactory app.TelegramFactory
+	// Channel registry
+	channelReg := channel.NewRegistry()
 	if cfg.TelegramToken != "" {
-		tgSender := telegram.New(cfg.TelegramToken)
-		tgFactory = tgSender.ForChat
+		channelReg.Register(domain.ChannelTelegram, "Telegram", telegram.NewFactory(cfg.TelegramToken))
 	}
-
-	// SMTP sender factory
-	var emailFactory app.EmailFactory
 	if cfg.SMTPHost != "" {
-		smtpSender := smtpadapter.New(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPFrom)
-		emailFactory = smtpSender.ForRecipient
+		channelReg.Register(domain.ChannelEmail, "Email", smtpadapter.NewFactory(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPFrom))
 	}
+	channelReg.Register(domain.ChannelWebhook, "Webhook", webhook.NewFactory())
 
 	// Alert service
-	alertSvc := app.NewAlertService(tgFactory, emailFactory)
+	alertSvc := app.NewAlertService(channelRepo, channelReg)
 
 	// Subscribe to alerts
 	alertSub := natsadapter.NewAlertSubscriber(js)

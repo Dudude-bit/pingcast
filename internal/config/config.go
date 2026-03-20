@@ -20,6 +20,7 @@ type CheckerConfig struct {
 }
 
 type NotifierConfig struct {
+	DatabaseURL   string
 	NatsURL       string
 	TelegramToken string
 	SMTPHost      string
@@ -61,7 +62,13 @@ func LoadChecker() (*CheckerConfig, error) {
 func LoadNotifier() (*NotifierConfig, error) {
 	smtpPort, _ := strconv.Atoi(getEnv("SMTP_PORT", "587"))
 
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		return nil, fmt.Errorf("DATABASE_URL is required")
+	}
+
 	return &NotifierConfig{
+		DatabaseURL:   dbURL,
 		NatsURL:       getEnv("NATS_URL", "nats://localhost:4222"),
 		TelegramToken: os.Getenv("TELEGRAM_BOT_TOKEN"),
 		SMTPHost:      os.Getenv("SMTP_HOST"),

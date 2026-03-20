@@ -7,9 +7,10 @@ import (
 	"testing"
 
 	"github.com/kirillinakin/pingcast/internal/adapter/telegram"
+	"github.com/kirillinakin/pingcast/internal/domain"
 )
 
-func TestSender_NotifyDown(t *testing.T) {
+func TestFactory_CreateSenderAndSend(t *testing.T) {
 	var receivedBody map[string]any
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -19,12 +20,24 @@ func TestSender_NotifyDown(t *testing.T) {
 	}))
 	defer server.Close()
 
-	sender := telegram.NewWithURL("test-token", server.URL+"/bot%s/sendMessage")
-	alert := sender.ForChat(12345)
+	factory := telegram.NewFactoryWithURL("test-token", server.URL+"/bot%s/sendMessage")
 
-	err := alert.NotifyDown(t.Context(), "My API", "https://api.example.com", "connection timeout")
+	config := json.RawMessage(`{"chat_id": 12345}`)
+	sender, err := factory.CreateSender(config)
 	if err != nil {
-		t.Fatalf("NotifyDown: %v", err)
+		t.Fatalf("CreateSender: %v", err)
+	}
+
+	event := &domain.AlertEvent{
+		MonitorName:   "My API",
+		MonitorTarget: "GET https://api.example.com",
+		Event:         domain.AlertDown,
+		Cause:         "connection timeout",
+	}
+
+	err = sender.Send(t.Context(), event)
+	if err != nil {
+		t.Fatalf("Send: %v", err)
 	}
 
 	text, ok := receivedBody["text"].(string)
@@ -38,26 +51,18 @@ func TestSender_NotifyDown(t *testing.T) {
 	}
 }
 
-func TestSender_NotifyUp(t *testing.T) {
-	var receivedBody map[string]any
+func TestFactory_ValidateConfig(t *testing.T) {
+	factory := telegram.NewFactory("token")
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewDecoder(r.Body).Decode(&receivedBody)
-		w.WriteHeader(200)
-		w.Write([]byte(`{"ok":true}`))
-	}))
-	defer server.Close()
-
-	sender := telegram.NewWithURL("test-token", server.URL+"/bot%s/sendMessage")
-	alert := sender.ForChat(12345)
-
-	err := alert.NotifyUp(t.Context(), "My API", "https://api.example.com")
-	if err != nil {
-		t.Fatalf("NotifyUp: %v", err)
+	if err := factory.ValidateConfig(json.RawMessage(`{"chat_id": 12345}`)); err != nil {
+		t.Errorf("valid config rejected: %v", err)
 	}
 
-	text, ok := receivedBody["text"].(string)
-	if !ok || text == "" {
-		t.Error("expected non-empty text")
+	if err := factory.ValidateConfig(json.RawMessage(`{"chat_id": 0}`)); err == nil {
+		t.Error("expected error for zero chat_id")
+	}
+
+	if err := factory.ValidateConfig(json.RawMessage(`{}`)); err == nil {
+		t.Error("expected error for missing chat_id")
 	}
 }
