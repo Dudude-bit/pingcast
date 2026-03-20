@@ -40,12 +40,12 @@ var _ apigen.ServerInterface = (*Server)(nil)
 func (s *Server) Register(c *fiber.Ctx) error {
 	var req apigen.RegisterRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(apigen.ErrorResponse{Error: ptr("invalid request body")})
+		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid request body")})
 	}
 
 	user, session, err := s.authService.Register(c.UserContext(), string(req.Email), req.Slug, req.Password)
 	if err != nil {
-		return c.Status(400).JSON(apigen.ErrorResponse{Error: ptr(err.Error())})
+		return c.Status(400).JSON(apigen.ErrorResponse{Error: new(err.Error())})
 	}
 
 	setSessionCookie(c, session.ID)
@@ -67,17 +67,17 @@ func (s *Server) Register(c *fiber.Ctx) error {
 func (s *Server) Login(c *fiber.Ctx) error {
 	var req apigen.LoginRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(apigen.ErrorResponse{Error: ptr("invalid request body")})
+		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid request body")})
 	}
 
 	if !s.rateLimiter.Allow(string(req.Email)) {
-		return c.Status(429).JSON(apigen.ErrorResponse{Error: ptr("too many login attempts")})
+		return c.Status(429).JSON(apigen.ErrorResponse{Error: new("too many login attempts")})
 	}
 
 	user, session, err := s.authService.Login(c.UserContext(), string(req.Email), req.Password)
 	if err != nil {
 		s.rateLimiter.Record(string(req.Email))
-		return c.Status(401).JSON(apigen.ErrorResponse{Error: ptr("invalid email or password")})
+		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("invalid email or password")})
 	}
 
 	s.rateLimiter.Reset(string(req.Email))
@@ -109,12 +109,12 @@ func (s *Server) Logout(c *fiber.Ctx) error {
 func (s *Server) ListMonitors(c *fiber.Ctx) error {
 	user := auth.UserFromCtx(c)
 	if user == nil {
-		return c.Status(401).JSON(apigen.ErrorResponse{Error: ptr("unauthorized")})
+		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
 	}
 
 	monitors, err := s.queries.ListMonitorsByUserID(c.UserContext(), user.ID)
 	if err != nil {
-		return c.Status(500).JSON(apigen.ErrorResponse{Error: ptr("failed to list monitors")})
+		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("failed to list monitors")})
 	}
 
 	result := make([]apigen.MonitorWithUptime, 0, len(monitors))
@@ -133,12 +133,12 @@ func (s *Server) ListMonitors(c *fiber.Ctx) error {
 func (s *Server) CreateMonitor(c *fiber.Ctx) error {
 	user := auth.UserFromCtx(c)
 	if user == nil {
-		return c.Status(401).JSON(apigen.ErrorResponse{Error: ptr("unauthorized")})
+		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
 	}
 
 	var req apigen.CreateMonitorRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(apigen.ErrorResponse{Error: ptr("invalid request body")})
+		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid request body")})
 	}
 
 	count, _ := s.queries.CountMonitorsByUserID(c.UserContext(), user.ID)
@@ -147,7 +147,7 @@ func (s *Server) CreateMonitor(c *fiber.Ctx) error {
 		limit = 50
 	}
 	if count >= limit {
-		return c.Status(400).JSON(apigen.ErrorResponse{Error: ptr("monitor limit reached")})
+		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("monitor limit reached")})
 	}
 
 	minInterval := int32(300)
@@ -201,7 +201,7 @@ func (s *Server) CreateMonitor(c *fiber.Ctx) error {
 		IsPublic:           isPublic,
 	})
 	if err != nil {
-		return c.Status(500).JSON(apigen.ErrorResponse{Error: ptr("failed to create monitor")})
+		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("failed to create monitor")})
 	}
 
 	if s.onChanged != nil {
@@ -214,12 +214,12 @@ func (s *Server) CreateMonitor(c *fiber.Ctx) error {
 func (s *Server) GetMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 	user := auth.UserFromCtx(c)
 	if user == nil {
-		return c.Status(401).JSON(apigen.ErrorResponse{Error: ptr("unauthorized")})
+		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
 	}
 
 	mon, err := s.queries.GetMonitorByID(c.UserContext(), uuid.UUID(id))
 	if err != nil || mon.UserID != user.ID {
-		return c.Status(404).JSON(apigen.ErrorResponse{Error: ptr("not found")})
+		return c.Status(404).JSON(apigen.ErrorResponse{Error: new("not found")})
 	}
 
 	now := time.Now()
@@ -241,17 +241,17 @@ func (s *Server) GetMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 func (s *Server) UpdateMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 	user := auth.UserFromCtx(c)
 	if user == nil {
-		return c.Status(401).JSON(apigen.ErrorResponse{Error: ptr("unauthorized")})
+		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
 	}
 
 	mon, err := s.queries.GetMonitorByID(c.UserContext(), uuid.UUID(id))
 	if err != nil || mon.UserID != user.ID {
-		return c.Status(404).JSON(apigen.ErrorResponse{Error: ptr("not found")})
+		return c.Status(404).JSON(apigen.ErrorResponse{Error: new("not found")})
 	}
 
 	var req apigen.UpdateMonitorRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(apigen.ErrorResponse{Error: ptr("invalid request body")})
+		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid request body")})
 	}
 
 	name := mon.Name
@@ -305,7 +305,7 @@ func (s *Server) UpdateMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 		UserID:             user.ID,
 	})
 	if err != nil {
-		return c.Status(500).JSON(apigen.ErrorResponse{Error: ptr("failed to update monitor")})
+		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("failed to update monitor")})
 	}
 
 	updated, _ := s.queries.GetMonitorByID(c.UserContext(), mon.ID)
@@ -320,7 +320,7 @@ func (s *Server) UpdateMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 func (s *Server) DeleteMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 	user := auth.UserFromCtx(c)
 	if user == nil {
-		return c.Status(401).JSON(apigen.ErrorResponse{Error: ptr("unauthorized")})
+		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
 	}
 
 	if s.onChanged != nil {
@@ -332,7 +332,7 @@ func (s *Server) DeleteMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 		UserID: user.ID,
 	})
 	if err != nil {
-		return c.Status(500).JSON(apigen.ErrorResponse{Error: ptr("failed to delete monitor")})
+		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("failed to delete monitor")})
 	}
 
 	return c.SendStatus(204)
@@ -341,12 +341,12 @@ func (s *Server) DeleteMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 func (s *Server) ToggleMonitorPause(c *fiber.Ctx, id openapi_types.UUID) error {
 	user := auth.UserFromCtx(c)
 	if user == nil {
-		return c.Status(401).JSON(apigen.ErrorResponse{Error: ptr("unauthorized")})
+		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
 	}
 
 	mon, err := s.queries.GetMonitorByID(c.UserContext(), uuid.UUID(id))
 	if err != nil || mon.UserID != user.ID {
-		return c.Status(404).JSON(apigen.ErrorResponse{Error: ptr("not found")})
+		return c.Status(404).JSON(apigen.ErrorResponse{Error: new("not found")})
 	}
 
 	newPaused := !mon.IsPaused
@@ -364,7 +364,7 @@ func (s *Server) ToggleMonitorPause(c *fiber.Ctx, id openapi_types.UUID) error {
 		UserID:             user.ID,
 	})
 	if err != nil {
-		return c.Status(500).JSON(apigen.ErrorResponse{Error: ptr("failed to toggle pause")})
+		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("failed to toggle pause")})
 	}
 
 	updated, _ := s.queries.GetMonitorByID(c.UserContext(), mon.ID)
@@ -383,7 +383,7 @@ func (s *Server) ToggleMonitorPause(c *fiber.Ctx, id openapi_types.UUID) error {
 func (s *Server) GetStatusPage(c *fiber.Ctx, slug string) error {
 	user, err := s.queries.GetUserBySlug(c.UserContext(), slug)
 	if err != nil {
-		return c.Status(404).JSON(apigen.ErrorResponse{Error: ptr("not found")})
+		return c.Status(404).JSON(apigen.ErrorResponse{Error: new("not found")})
 	}
 
 	monitors, _ := s.queries.ListPublicMonitorsByUserSlug(c.UserContext(), slug)
@@ -427,12 +427,10 @@ func (s *Server) GetStatusPage(c *fiber.Ctx, slug string) error {
 }
 
 func (s *Server) HealthCheck(c *fiber.Ctx) error {
-	return c.JSON(apigen.HealthResponse{Status: ptr("ok")})
+	return c.JSON(apigen.HealthResponse{Status: new("ok")})
 }
 
 // --- helpers ---
-
-func ptr[T any](v T) *T { return &v }
 
 func setSessionCookie(c *fiber.Ctx, sessionID string) {
 	c.Cookie(&fiber.Cookie{

@@ -4,9 +4,10 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"cmp"
 	"io/fs"
 	"log/slog"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -43,8 +44,8 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 		return fmt.Errorf("read migrations dir: %w", err)
 	}
 
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Name() < entries[j].Name()
+	slices.SortFunc(entries, func(a, b fs.DirEntry) int {
+		return cmp.Compare(a.Name(), b.Name())
 	})
 
 	for _, entry := range entries {

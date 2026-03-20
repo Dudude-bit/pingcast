@@ -100,28 +100,15 @@ func main() {
 }
 
 func handleAlert(event *natsbus.AlertEvent, tg *notifier.TelegramSender, email *notifier.EmailSender) error {
-	// Telegram
-	if event.TgChatID != nil && tg != nil {
-		var err error
-		switch event.Event {
-		case "down":
-			err = tg.SendDown(*event.TgChatID, event.MonitorName, event.MonitorURL, event.Cause)
-		case "up":
-			err = tg.SendUp(*event.TgChatID, event.MonitorName, event.MonitorURL)
-		}
-		if err != nil {
-			return err
-		}
-	}
+	senders := buildSenders(event, tg, email)
 
-	// Email (Pro only)
-	if event.Plan == "pro" && event.Email != "" && email != nil {
+	for _, s := range senders {
 		var err error
 		switch event.Event {
 		case "down":
-			err = email.SendDown(event.Email, event.MonitorName, event.MonitorURL, event.Cause)
+			err = s.NotifyDown(event.MonitorName, event.MonitorURL, event.Cause)
 		case "up":
-			err = email.SendUp(event.Email, event.MonitorName, event.MonitorURL)
+			err = s.NotifyUp(event.MonitorName, event.MonitorURL)
 		}
 		if err != nil {
 			return err
@@ -129,4 +116,18 @@ func handleAlert(event *natsbus.AlertEvent, tg *notifier.TelegramSender, email *
 	}
 
 	return nil
+}
+
+func buildSenders(event *natsbus.AlertEvent, tg *notifier.TelegramSender, email *notifier.EmailSender) []notifier.AlertSender {
+	var senders []notifier.AlertSender
+
+	if event.TgChatID != nil && tg != nil {
+		senders = append(senders, notifier.NewTelegramAlert(tg, *event.TgChatID))
+	}
+
+	if event.Plan == "pro" && event.Email != "" && email != nil {
+		senders = append(senders, notifier.NewEmailAlert(email, event.Email))
+	}
+
+	return senders
 }

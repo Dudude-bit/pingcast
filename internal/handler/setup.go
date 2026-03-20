@@ -82,13 +82,6 @@ func SetupApp(
 
 // authMiddlewareSelector returns a middleware that applies auth only to protected routes.
 func authMiddlewareSelector(authService *auth.Service) apigen.MiddlewareFunc {
-	publicPaths := map[string]bool{
-		"Register":    true,
-		"Login":       true,
-		"HealthCheck": true,
-		"GetStatusPage": true,
-	}
-
 	return func(c *fiber.Ctx) error {
 		// The operation ID is set by oapi-codegen wrapper via context
 		// For simplicity, check if the route needs auth based on path
@@ -101,7 +94,6 @@ func authMiddlewareSelector(authService *auth.Service) apigen.MiddlewareFunc {
 		}
 
 		// All other /api/ routes need auth
-		_ = publicPaths // suppress unused warning
 		return authService.Middleware()(c)
 	}
 }

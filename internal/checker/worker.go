@@ -31,9 +31,10 @@ func NewWorkerPool(ctx context.Context, workers int, client *Client, handler Che
 		cancel:      cancel,
 	}
 
-	for i := 0; i < workers; i++ {
-		wp.wg.Add(1)
-		go wp.worker()
+	for range workers {
+		wp.wg.Go(func() {
+			wp.worker()
+		})
 	}
 
 	return wp
@@ -52,8 +53,6 @@ func (wp *WorkerPool) Stop() {
 }
 
 func (wp *WorkerPool) worker() {
-	defer wp.wg.Done()
-
 	for {
 		select {
 		case <-wp.ctx.Done():
