@@ -3,17 +3,16 @@ package checker
 import (
 	"context"
 	"log/slog"
-	"net/url"
 	"sync"
 
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/port"
 )
 
-type CheckHandler func(ctx context.Context, monitor *domain.Monitor, result *domain.CheckResult)
+type CheckHandler func(ctx context.Context, monitor *domain.Monitor)
 
 type WorkerPool struct {
-	checker     port.MonitorChecker
+	registry    port.CheckerRegistry
 	hostLimiter *HostLimiter
 	jobs        chan *domain.Monitor
 	handler     CheckHandler
@@ -22,11 +21,11 @@ type WorkerPool struct {
 	cancel      context.CancelFunc
 }
 
-func NewWorkerPool(ctx context.Context, workers int, checker port.MonitorChecker, handler CheckHandler) *WorkerPool {
+func NewWorkerPool(ctx context.Context, workers int, registry port.CheckerRegistry, handler CheckHandler) *WorkerPool {
 	poolCtx, cancel := context.WithCancel(ctx)
 
 	wp := &WorkerPool{
-		checker:     checker,
+		registry:    registry,
 		hostLimiter: NewHostLimiter(),
 		jobs:        make(chan *domain.Monitor, workers*2),
 		handler:     handler,
@@ -65,27 +64,15 @@ func (wp *WorkerPool) worker() {
 				return
 			}
 
-			host := extractHost(m.URL)
+			host := wp.registry.Host(m.Type, m.CheckConfig)
 			wp.hostLimiter.Acquire(host)
-			result := wp.checker.Check(wp.ctx, m)
+			wp.handler(wp.ctx, m)
 			wp.hostLimiter.Release(host)
 
-			slog.Info("check completed",
+			slog.Info("check dispatched",
 				"monitor_id", m.ID,
-				"url", m.URL,
-				"status", result.Status,
-				"response_time_ms", result.ResponseTimeMs,
+				"type", m.Type,
 			)
-
-			wp.handler(wp.ctx, m, result)
 		}
 	}
-}
-
-func extractHost(rawURL string) string {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return rawURL
-	}
-	return u.Host
 }
