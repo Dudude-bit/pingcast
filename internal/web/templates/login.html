@@ -1,19 +1,23 @@
-{{define "title"}}Login — PingCast{{end}}
+{{define "title"}}Login &mdash; PingCast{{end}}
 {{define "content"}}
-<div class="auth-form">
-    <h1>Login</h1>
+<div class="auth-container">
+    <h1>Welcome back</h1>
+    <p class="subtitle">Sign in to your PingCast account</p>
+
     {{if .Error}}<div class="alert alert-error">{{.Error}}</div>{{end}}
+
     <form method="POST" action="/login">
         <div class="form-group">
             <label for="email">Email</label>
-            <input type="email" id="email" name="email" required autofocus>
+            <input type="email" id="email" name="email" required autofocus placeholder="you@company.com">
         </div>
         <div class="form-group">
             <label for="password">Password</label>
-            <input type="password" id="password" name="password" required minlength="8">
+            <input type="password" id="password" name="password" required minlength="8" placeholder="Min. 8 characters">
         </div>
-        <button type="submit" class="btn btn-primary btn-full">Login</button>
+        <button type="submit" class="btn btn-primary btn-full btn-lg">Sign In</button>
     </form>
-    <p class="auth-link">Don't have an account? <a href="/register">Sign up</a></p>
+
+    <p class="auth-link">Don&rsquo;t have an account? <a href="/register">Create one</a></p>
 </div>
 {{end}}

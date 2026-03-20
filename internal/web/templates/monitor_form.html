@@ -1,46 +1,64 @@
-{{define "title"}}{{if .Monitor}}Edit{{else}}New{{end}} Monitor — PingCast{{end}}
+{{define "title"}}{{if .Monitor}}Edit{{else}}New{{end}} Monitor &mdash; PingCast{{end}}
 {{define "content"}}
-<div class="card" style="max-width: 600px; margin: 0 auto;">
-    <h2>{{if .Monitor}}Edit Monitor{{else}}New Monitor{{end}}</h2>
+<div class="auth-container" style="max-width: 520px;">
+    <h1>{{if .Monitor}}Edit Monitor{{else}}New Monitor{{end}}</h1>
+    <p class="subtitle">{{if .Monitor}}Update check configuration{{else}}Add an endpoint to monitor{{end}}</p>
+
     {{if .Error}}<div class="alert alert-error">{{.Error}}</div>{{end}}
+
     <form method="POST" action="{{if .Monitor}}/monitors/{{.Monitor.ID}}{{else}}/monitors{{end}}">
         <div class="form-group">
             <label for="name">Name</label>
-            <input type="text" id="name" name="name" required value="{{if .Monitor}}{{.Monitor.Name}}{{end}}" placeholder="My Website">
+            <input type="text" id="name" name="name" required value="{{if .Monitor}}{{.Monitor.Name}}{{end}}" placeholder="My API">
         </div>
         <div class="form-group">
             <label for="url">URL</label>
-            <input type="url" id="url" name="url" required value="{{if .Monitor}}{{.Monitor.Url}}{{end}}" placeholder="https://example.com">
+            <input type="url" id="url" name="url" required value="{{if .Monitor}}{{.Monitor.Url}}{{end}}" placeholder="https://api.example.com/health">
         </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+                <label for="method">Method</label>
+                <select id="method" name="method">
+                    <option value="GET" {{if and .Monitor (eq .Monitor.Method "GET")}}selected{{end}}>GET</option>
+                    <option value="POST" {{if and .Monitor (eq .Monitor.Method "POST")}}selected{{end}}>POST</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="interval_seconds">Check Interval</label>
+                <select id="interval_seconds" name="interval_seconds">
+                    {{if eq .User.Plan "pro"}}
+                    <option value="30" {{if and .Monitor (eq .Monitor.IntervalSeconds 30)}}selected{{end}}>30 seconds</option>
+                    <option value="60" {{if and .Monitor (eq .Monitor.IntervalSeconds 60)}}selected{{end}}>1 minute</option>
+                    {{end}}
+                    <option value="300" {{if and .Monitor (eq .Monitor.IntervalSeconds 300)}}selected{{end}}>5 minutes</option>
+                </select>
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+                <label for="expected_status">Expected Status</label>
+                <input type="number" id="expected_status" name="expected_status" value="{{if .Monitor}}{{.Monitor.ExpectedStatus}}{{else}}200{{end}}">
+            </div>
+            <div class="form-group">
+                <label for="alert_after_failures">Alert After Failures</label>
+                <input type="number" id="alert_after_failures" name="alert_after_failures" min="1" max="10" value="{{if .Monitor}}{{.Monitor.AlertAfterFailures}}{{else}}3{{end}}">
+            </div>
+        </div>
+
         <div class="form-group">
-            <label for="method">Method</label>
-            <select id="method" name="method">
-                <option value="GET" {{if and .Monitor (eq .Monitor.Method "GET")}}selected{{end}}>GET</option>
-                <option value="POST" {{if and .Monitor (eq .Monitor.Method "POST")}}selected{{end}}>POST</option>
-            </select>
+            <label style="display: flex; align-items: center; cursor: pointer;">
+                <input type="checkbox" name="is_public" {{if and .Monitor .Monitor.IsPublic}}checked{{end}}>
+                Show on public status page
+            </label>
         </div>
-        <div class="form-group">
-            <label for="interval_seconds">Check Interval</label>
-            <select id="interval_seconds" name="interval_seconds">
-                {{if eq .User.Plan "pro"}}
-                <option value="30" {{if and .Monitor (eq .Monitor.IntervalSeconds 30)}}selected{{end}}>30 seconds</option>
-                <option value="60" {{if and .Monitor (eq .Monitor.IntervalSeconds 60)}}selected{{end}}>1 minute</option>
-                {{end}}
-                <option value="300" {{if and .Monitor (eq .Monitor.IntervalSeconds 300)}}selected{{end}}>5 minutes</option>
-            </select>
-        </div>
-        <div class="form-group">
-            <label for="expected_status">Expected Status Code</label>
-            <input type="number" id="expected_status" name="expected_status" value="{{if .Monitor}}{{.Monitor.ExpectedStatus}}{{else}}200{{end}}">
-        </div>
-        <div class="form-group">
-            <label for="alert_after_failures">Alert After Failures</label>
-            <input type="number" id="alert_after_failures" name="alert_after_failures" min="1" max="10" value="{{if .Monitor}}{{.Monitor.AlertAfterFailures}}{{else}}3{{end}}">
-        </div>
-        <div class="form-group">
-            <label><input type="checkbox" name="is_public" {{if and .Monitor .Monitor.IsPublic}}checked{{end}}> Show on status page</label>
-        </div>
-        <button type="submit" class="btn btn-primary btn-full">{{if .Monitor}}Save Changes{{else}}Create Monitor{{end}}</button>
+
+        <button type="submit" class="btn btn-primary btn-full btn-lg">{{if .Monitor}}Save Changes{{else}}Create Monitor{{end}}</button>
     </form>
+
+    <p class="auth-link" style="margin-top: 1rem;">
+        <a href="/dashboard">&larr; Back to Dashboard</a>
+    </p>
 </div>
 {{end}}

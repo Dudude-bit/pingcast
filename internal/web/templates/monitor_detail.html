@@ -1,44 +1,65 @@
-{{define "title"}}{{.Monitor.Name}} — PingCast{{end}}
+{{define "title"}}{{.Monitor.Name}} &mdash; PingCast{{end}}
 {{define "content"}}
-<div class="card-header">
-    <div>
-        <h1>{{.Monitor.Name}}
-            <span class="{{if eq .Monitor.CurrentStatus "up"}}status-up{{else if eq .Monitor.CurrentStatus "down"}}status-down{{end}}">
+<div class="detail-header">
+    <div class="title-group">
+        <h1>
+            {{.Monitor.Name}}
+            <span class="status-badge {{if eq .Monitor.CurrentStatus "up"}}status-badge-up{{else if eq .Monitor.CurrentStatus "down"}}status-badge-down{{else}}status-badge-unknown{{end}}">
+                <span class="status-dot {{if eq .Monitor.CurrentStatus "up"}}status-dot-up{{else if eq .Monitor.CurrentStatus "down"}}status-dot-down{{else}}status-dot-unknown{{end}}"></span>
                 {{.Monitor.CurrentStatus}}
             </span>
         </h1>
-        <p style="color: var(--gray-600);">{{.Monitor.Url}}</p>
+        <div class="url">{{.Monitor.Url}}</div>
+    </div>
+    <a href="/dashboard" class="btn btn-secondary btn-sm">&larr; Back</a>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="label">Uptime 24h</div>
+        <div class="value {{if ge .Uptime24h 99.5}}uptime-high{{else if ge .Uptime24h 95.0}}uptime-mid{{else}}uptime-low{{end}}">{{printf "%.2f" .Uptime24h}}%</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">Uptime 7d</div>
+        <div class="value {{if ge .Uptime7d 99.5}}uptime-high{{else if ge .Uptime7d 95.0}}uptime-mid{{else}}uptime-low{{end}}">{{printf "%.2f" .Uptime7d}}%</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">Uptime 30d</div>
+        <div class="value {{if ge .Uptime30d 99.5}}uptime-high{{else if ge .Uptime30d 95.0}}uptime-mid{{else}}uptime-low{{end}}">{{printf "%.2f" .Uptime30d}}%</div>
+    </div>
+</div>
+
+<div class="card" style="margin-bottom: 1.5rem;">
+    <div class="card-header">
+        <h3>Response Time</h3>
+    </div>
+    <div class="chart-container">
+        <canvas id="responseChart"></canvas>
     </div>
 </div>
 
 <div class="card">
-    <h3>Uptime</h3>
-    <p>24h: {{printf "%.2f" .Uptime24h}}% | 7d: {{printf "%.2f" .Uptime7d}}% | 30d: {{printf "%.2f" .Uptime30d}}%</p>
-</div>
-
-<div class="card">
-    <h3>Response Time</h3>
-    <canvas id="responseChart" height="200"></canvas>
-</div>
-
-<div class="card">
-    <h3>Recent Incidents</h3>
+    <div class="card-header">
+        <h3>Incidents</h3>
+    </div>
     {{if .Incidents}}
-    {{range .Incidents}}
-    <div style="padding: 0.5rem 0; border-bottom: 1px solid var(--gray-200);">
-        <strong>{{.Cause}}</strong><br>
-        <small>Started: {{.StartedAt.Format "2006-01-02 15:04"}}
-        {{if .ResolvedAt.Valid}} | Resolved: {{.ResolvedAt.Time.Format "2006-01-02 15:04"}}{{else}} | Ongoing{{end}}</small>
+    <div class="incident-list">
+        {{range .Incidents}}
+        <div class="incident-item {{if .ResolvedAt.Valid}}resolved{{end}}">
+            <div class="cause">{{.Cause}}</div>
+            <div class="time">
+                Started {{.StartedAt.Format "Jan 02, 15:04 UTC"}}
+                {{if .ResolvedAt.Valid}} &middot; Resolved {{.ResolvedAt.Time.Format "Jan 02, 15:04 UTC"}}{{else}} &middot; <span style="color: var(--status-down);">Ongoing</span>{{end}}
+            </div>
+        </div>
+        {{end}}
     </div>
-    {{end}}
     {{else}}
-    <p style="color: var(--gray-600);">No incidents recorded.</p>
+    <p style="color: var(--text-muted); text-align: center; padding: 2rem 0;">No incidents recorded</p>
     {{end}}
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script src="/static/js/chart-init.js"></script>
-<script>
-    initResponseChart("responseChart", {{.ChartData}});
-</script>
+<script>initResponseChart("responseChart", {{.ChartData}});</script>
 {{end}}
