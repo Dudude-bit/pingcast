@@ -55,16 +55,6 @@ func userFromCreateRow(r gen.CreateUserRow) *domain.User {
 	}
 }
 
-func userFromRow(r gen.User) *domain.User {
-	return &domain.User{
-		ID:        r.ID,
-		Email:     r.Email,
-		Slug:      r.Slug,
-		Plan:      domain.Plan(r.Plan),
-		CreatedAt: r.CreatedAt,
-	}
-}
-
 func userFromGetByIDRow(r gen.GetUserByIDRow) *domain.User {
 	return &domain.User{
 		ID:        r.ID,
