@@ -16,45 +16,6 @@ const (
 	SessionAuthScopes = "sessionAuth.Scopes"
 )
 
-// Defines values for CreateMonitorRequestIntervalSeconds.
-const (
-	CreateMonitorRequestIntervalSecondsN30  CreateMonitorRequestIntervalSeconds = 30
-	CreateMonitorRequestIntervalSecondsN300 CreateMonitorRequestIntervalSeconds = 300
-	CreateMonitorRequestIntervalSecondsN60  CreateMonitorRequestIntervalSeconds = 60
-)
-
-// Valid indicates whether the value is a known member of the CreateMonitorRequestIntervalSeconds enum.
-func (e CreateMonitorRequestIntervalSeconds) Valid() bool {
-	switch e {
-	case CreateMonitorRequestIntervalSecondsN30:
-		return true
-	case CreateMonitorRequestIntervalSecondsN300:
-		return true
-	case CreateMonitorRequestIntervalSecondsN60:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for CreateMonitorRequestMethod.
-const (
-	CreateMonitorRequestMethodGET  CreateMonitorRequestMethod = "GET"
-	CreateMonitorRequestMethodPOST CreateMonitorRequestMethod = "POST"
-)
-
-// Valid indicates whether the value is a known member of the CreateMonitorRequestMethod enum.
-func (e CreateMonitorRequestMethod) Valid() bool {
-	switch e {
-	case CreateMonitorRequestMethodGET:
-		return true
-	case CreateMonitorRequestMethodPOST:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for MonitorCurrentStatus.
 const (
 	MonitorCurrentStatusDown    MonitorCurrentStatus = "down"
@@ -70,24 +31,6 @@ func (e MonitorCurrentStatus) Valid() bool {
 	case MonitorCurrentStatusUnknown:
 		return true
 	case MonitorCurrentStatusUp:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for MonitorMethod.
-const (
-	MonitorMethodGET  MonitorMethod = "GET"
-	MonitorMethodPOST MonitorMethod = "POST"
-)
-
-// Valid indicates whether the value is a known member of the MonitorMethod enum.
-func (e MonitorMethod) Valid() bool {
-	switch e {
-	case MonitorMethodGET:
-		return true
-	case MonitorMethodPOST:
 		return true
 	default:
 		return false
@@ -115,24 +58,6 @@ func (e MonitorDetailCurrentStatus) Valid() bool {
 	}
 }
 
-// Defines values for MonitorDetailMethod.
-const (
-	MonitorDetailMethodGET  MonitorDetailMethod = "GET"
-	MonitorDetailMethodPOST MonitorDetailMethod = "POST"
-)
-
-// Valid indicates whether the value is a known member of the MonitorDetailMethod enum.
-func (e MonitorDetailMethod) Valid() bool {
-	switch e {
-	case MonitorDetailMethodGET:
-		return true
-	case MonitorDetailMethodPOST:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for MonitorWithUptimeCurrentStatus.
 const (
 	Down    MonitorWithUptimeCurrentStatus = "down"
@@ -148,63 +73,6 @@ func (e MonitorWithUptimeCurrentStatus) Valid() bool {
 	case Unknown:
 		return true
 	case Up:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for MonitorWithUptimeMethod.
-const (
-	MonitorWithUptimeMethodGET  MonitorWithUptimeMethod = "GET"
-	MonitorWithUptimeMethodPOST MonitorWithUptimeMethod = "POST"
-)
-
-// Valid indicates whether the value is a known member of the MonitorWithUptimeMethod enum.
-func (e MonitorWithUptimeMethod) Valid() bool {
-	switch e {
-	case MonitorWithUptimeMethodGET:
-		return true
-	case MonitorWithUptimeMethodPOST:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for UpdateMonitorRequestIntervalSeconds.
-const (
-	UpdateMonitorRequestIntervalSecondsN30  UpdateMonitorRequestIntervalSeconds = 30
-	UpdateMonitorRequestIntervalSecondsN300 UpdateMonitorRequestIntervalSeconds = 300
-	UpdateMonitorRequestIntervalSecondsN60  UpdateMonitorRequestIntervalSeconds = 60
-)
-
-// Valid indicates whether the value is a known member of the UpdateMonitorRequestIntervalSeconds enum.
-func (e UpdateMonitorRequestIntervalSeconds) Valid() bool {
-	switch e {
-	case UpdateMonitorRequestIntervalSecondsN30:
-		return true
-	case UpdateMonitorRequestIntervalSecondsN300:
-		return true
-	case UpdateMonitorRequestIntervalSecondsN60:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for UpdateMonitorRequestMethod.
-const (
-	GET  UpdateMonitorRequestMethod = "GET"
-	POST UpdateMonitorRequestMethod = "POST"
-)
-
-// Valid indicates whether the value is a known member of the UpdateMonitorRequestMethod enum.
-func (e UpdateMonitorRequestMethod) Valid() bool {
-	switch e {
-	case GET:
-		return true
-	case POST:
 		return true
 	default:
 		return false
@@ -242,23 +110,37 @@ type ChartPoint struct {
 	Timestamp     *time.Time `json:"timestamp,omitempty"`
 }
 
-// CreateMonitorRequest defines model for CreateMonitorRequest.
-type CreateMonitorRequest struct {
-	AlertAfterFailures *int                                 `json:"alert_after_failures,omitempty"`
-	ExpectedStatus     *int                                 `json:"expected_status,omitempty"`
-	IntervalSeconds    *CreateMonitorRequestIntervalSeconds `json:"interval_seconds,omitempty"`
-	IsPublic           *bool                                `json:"is_public,omitempty"`
-	Keyword            *string                              `json:"keyword,omitempty"`
-	Method             *CreateMonitorRequestMethod          `json:"method,omitempty"`
-	Name               string                               `json:"name"`
-	Url                string                               `json:"url"`
+// ConfigField defines model for ConfigField.
+type ConfigField struct {
+	Default     interface{}     `json:"default,omitempty"`
+	Label       *string         `json:"label,omitempty"`
+	Name        *string         `json:"name,omitempty"`
+	Options     *[]ConfigOption `json:"options,omitempty"`
+	Placeholder *string         `json:"placeholder,omitempty"`
+	Required    *bool           `json:"required,omitempty"`
+	Type        *string         `json:"type,omitempty"`
 }
 
-// CreateMonitorRequestIntervalSeconds defines model for CreateMonitorRequest.IntervalSeconds.
-type CreateMonitorRequestIntervalSeconds int
+// ConfigOption defines model for ConfigOption.
+type ConfigOption struct {
+	Label *string `json:"label,omitempty"`
+	Value *string `json:"value,omitempty"`
+}
 
-// CreateMonitorRequestMethod defines model for CreateMonitorRequest.Method.
-type CreateMonitorRequestMethod string
+// ConfigSchema defines model for ConfigSchema.
+type ConfigSchema struct {
+	Fields *[]ConfigField `json:"fields,omitempty"`
+}
+
+// CreateMonitorRequest defines model for CreateMonitorRequest.
+type CreateMonitorRequest struct {
+	AlertAfterFailures *int                   `json:"alert_after_failures,omitempty"`
+	CheckConfig        map[string]interface{} `json:"check_config"`
+	IntervalSeconds    *int                   `json:"interval_seconds,omitempty"`
+	IsPublic           *bool                  `json:"is_public,omitempty"`
+	Name               string                 `json:"name"`
+	Type               string                 `json:"type"`
+}
 
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
@@ -287,75 +169,76 @@ type LoginRequest struct {
 
 // Monitor defines model for Monitor.
 type Monitor struct {
-	AlertAfterFailures *int                  `json:"alert_after_failures,omitempty"`
-	CreatedAt          *time.Time            `json:"created_at,omitempty"`
-	CurrentStatus      *MonitorCurrentStatus `json:"current_status,omitempty"`
-	ExpectedStatus     *int                  `json:"expected_status,omitempty"`
-	Id                 *openapi_types.UUID   `json:"id,omitempty"`
-	IntervalSeconds    *int                  `json:"interval_seconds,omitempty"`
-	IsPaused           *bool                 `json:"is_paused,omitempty"`
-	IsPublic           *bool                 `json:"is_public,omitempty"`
-	Keyword            *string               `json:"keyword,omitempty"`
-	Method             *MonitorMethod        `json:"method,omitempty"`
-	Name               *string               `json:"name,omitempty"`
-	Url                *string               `json:"url,omitempty"`
+	AlertAfterFailures *int                    `json:"alert_after_failures,omitempty"`
+	CheckConfig        *map[string]interface{} `json:"check_config,omitempty"`
+	CreatedAt          *time.Time              `json:"created_at,omitempty"`
+	CurrentStatus      *MonitorCurrentStatus   `json:"current_status,omitempty"`
+	Id                 *openapi_types.UUID     `json:"id,omitempty"`
+	IntervalSeconds    *int                    `json:"interval_seconds,omitempty"`
+	IsPaused           *bool                   `json:"is_paused,omitempty"`
+	IsPublic           *bool                   `json:"is_public,omitempty"`
+	Name               *string                 `json:"name,omitempty"`
+
+	// Target Display string: 'GET https://...', 'tcp://host:port', 'dns://hostname'
+	Target *string `json:"target,omitempty"`
+	Type   *string `json:"type,omitempty"`
 }
 
 // MonitorCurrentStatus defines model for Monitor.CurrentStatus.
 type MonitorCurrentStatus string
 
-// MonitorMethod defines model for Monitor.Method.
-type MonitorMethod string
-
 // MonitorDetail defines model for MonitorDetail.
 type MonitorDetail struct {
 	AlertAfterFailures *int                        `json:"alert_after_failures,omitempty"`
 	ChartData          *[]ChartPoint               `json:"chart_data,omitempty"`
+	CheckConfig        *map[string]interface{}     `json:"check_config,omitempty"`
 	CreatedAt          *time.Time                  `json:"created_at,omitempty"`
 	CurrentStatus      *MonitorDetailCurrentStatus `json:"current_status,omitempty"`
-	ExpectedStatus     *int                        `json:"expected_status,omitempty"`
 	Id                 *openapi_types.UUID         `json:"id,omitempty"`
 	Incidents          *[]Incident                 `json:"incidents,omitempty"`
 	IntervalSeconds    *int                        `json:"interval_seconds,omitempty"`
 	IsPaused           *bool                       `json:"is_paused,omitempty"`
 	IsPublic           *bool                       `json:"is_public,omitempty"`
-	Keyword            *string                     `json:"keyword,omitempty"`
-	Method             *MonitorDetailMethod        `json:"method,omitempty"`
 	Name               *string                     `json:"name,omitempty"`
-	Uptime24h          *float32                    `json:"uptime_24h,omitempty"`
-	Uptime30d          *float32                    `json:"uptime_30d,omitempty"`
-	Uptime7d           *float32                    `json:"uptime_7d,omitempty"`
-	Url                *string                     `json:"url,omitempty"`
+
+	// Target Display string: 'GET https://...', 'tcp://host:port', 'dns://hostname'
+	Target    *string  `json:"target,omitempty"`
+	Type      *string  `json:"type,omitempty"`
+	Uptime24h *float32 `json:"uptime_24h,omitempty"`
+	Uptime30d *float32 `json:"uptime_30d,omitempty"`
+	Uptime7d  *float32 `json:"uptime_7d,omitempty"`
 }
 
 // MonitorDetailCurrentStatus defines model for MonitorDetail.CurrentStatus.
 type MonitorDetailCurrentStatus string
 
-// MonitorDetailMethod defines model for MonitorDetail.Method.
-type MonitorDetailMethod string
+// MonitorTypeInfo defines model for MonitorTypeInfo.
+type MonitorTypeInfo struct {
+	Label  *string       `json:"label,omitempty"`
+	Schema *ConfigSchema `json:"schema,omitempty"`
+	Type   *string       `json:"type,omitempty"`
+}
 
 // MonitorWithUptime defines model for MonitorWithUptime.
 type MonitorWithUptime struct {
 	AlertAfterFailures *int                            `json:"alert_after_failures,omitempty"`
+	CheckConfig        *map[string]interface{}         `json:"check_config,omitempty"`
 	CreatedAt          *time.Time                      `json:"created_at,omitempty"`
 	CurrentStatus      *MonitorWithUptimeCurrentStatus `json:"current_status,omitempty"`
-	ExpectedStatus     *int                            `json:"expected_status,omitempty"`
 	Id                 *openapi_types.UUID             `json:"id,omitempty"`
 	IntervalSeconds    *int                            `json:"interval_seconds,omitempty"`
 	IsPaused           *bool                           `json:"is_paused,omitempty"`
 	IsPublic           *bool                           `json:"is_public,omitempty"`
-	Keyword            *string                         `json:"keyword,omitempty"`
-	Method             *MonitorWithUptimeMethod        `json:"method,omitempty"`
 	Name               *string                         `json:"name,omitempty"`
-	Uptime24h          *float32                        `json:"uptime_24h,omitempty"`
-	Url                *string                         `json:"url,omitempty"`
+
+	// Target Display string: 'GET https://...', 'tcp://host:port', 'dns://hostname'
+	Target    *string  `json:"target,omitempty"`
+	Type      *string  `json:"type,omitempty"`
+	Uptime24h *float32 `json:"uptime_24h,omitempty"`
 }
 
 // MonitorWithUptimeCurrentStatus defines model for MonitorWithUptime.CurrentStatus.
 type MonitorWithUptimeCurrentStatus string
-
-// MonitorWithUptimeMethod defines model for MonitorWithUptime.Method.
-type MonitorWithUptimeMethod string
 
 // RegisterRequest defines model for RegisterRequest.
 type RegisterRequest struct {
@@ -382,22 +265,13 @@ type StatusPageResponse struct {
 
 // UpdateMonitorRequest defines model for UpdateMonitorRequest.
 type UpdateMonitorRequest struct {
-	AlertAfterFailures *int                                 `json:"alert_after_failures,omitempty"`
-	ExpectedStatus     *int                                 `json:"expected_status,omitempty"`
-	IntervalSeconds    *UpdateMonitorRequestIntervalSeconds `json:"interval_seconds,omitempty"`
-	IsPaused           *bool                                `json:"is_paused,omitempty"`
-	IsPublic           *bool                                `json:"is_public,omitempty"`
-	Keyword            *string                              `json:"keyword,omitempty"`
-	Method             *UpdateMonitorRequestMethod          `json:"method,omitempty"`
-	Name               *string                              `json:"name,omitempty"`
-	Url                *string                              `json:"url,omitempty"`
+	AlertAfterFailures *int                    `json:"alert_after_failures,omitempty"`
+	CheckConfig        *map[string]interface{} `json:"check_config,omitempty"`
+	IntervalSeconds    *int                    `json:"interval_seconds,omitempty"`
+	IsPaused           *bool                   `json:"is_paused,omitempty"`
+	IsPublic           *bool                   `json:"is_public,omitempty"`
+	Name               *string                 `json:"name,omitempty"`
 }
-
-// UpdateMonitorRequestIntervalSeconds defines model for UpdateMonitorRequest.IntervalSeconds.
-type UpdateMonitorRequestIntervalSeconds int
-
-// UpdateMonitorRequestMethod defines model for UpdateMonitorRequest.Method.
-type UpdateMonitorRequestMethod string
 
 // User defines model for User.
 type User struct {
@@ -435,6 +309,9 @@ type ServerInterface interface {
 
 	// (POST /api/auth/register)
 	Register(c *fiber.Ctx) error
+
+	// (GET /api/monitor-types)
+	ListMonitorTypes(c *fiber.Ctx) error
 
 	// (GET /api/monitors)
 	ListMonitors(c *fiber.Ctx) error
@@ -486,6 +363,12 @@ func (siw *ServerInterfaceWrapper) Logout(c *fiber.Ctx) error {
 func (siw *ServerInterfaceWrapper) Register(c *fiber.Ctx) error {
 
 	return siw.Handler.Register(c)
+}
+
+// ListMonitorTypes operation middleware
+func (siw *ServerInterfaceWrapper) ListMonitorTypes(c *fiber.Ctx) error {
+
+	return siw.Handler.ListMonitorTypes(c)
 }
 
 // ListMonitors operation middleware
@@ -624,6 +507,8 @@ func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, option
 	router.Post(options.BaseURL+"/api/auth/logout", wrapper.Logout)
 
 	router.Post(options.BaseURL+"/api/auth/register", wrapper.Register)
+
+	router.Get(options.BaseURL+"/api/monitor-types", wrapper.ListMonitorTypes)
 
 	router.Get(options.BaseURL+"/api/monitors", wrapper.ListMonitors)
 

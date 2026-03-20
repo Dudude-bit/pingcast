@@ -1,8 +1,8 @@
 openapi: "3.0.3"
 info:
   title: PingCast API
-  version: "1.0.0"
-  description: Uptime monitoring API
+  version: "2.0.0"
+  description: Uptime monitoring API with multi-type checks
 
 paths:
   /api/auth/register:
@@ -62,6 +62,20 @@ paths:
       responses:
         "200":
           description: Logged out
+
+  /api/monitor-types:
+    get:
+      operationId: listMonitorTypes
+      tags: [monitors]
+      responses:
+        "200":
+          description: Available monitor types with config schemas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MonitorTypeInfo"
 
   /api/monitors:
     get:
@@ -278,6 +292,51 @@ components:
           type: string
           format: date-time
 
+    MonitorTypeInfo:
+      type: object
+      properties:
+        type:
+          type: string
+        label:
+          type: string
+        schema:
+          $ref: "#/components/schemas/ConfigSchema"
+
+    ConfigSchema:
+      type: object
+      properties:
+        fields:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConfigField"
+
+    ConfigField:
+      type: object
+      properties:
+        name:
+          type: string
+        label:
+          type: string
+        type:
+          type: string
+        required:
+          type: boolean
+        default: {}
+        placeholder:
+          type: string
+        options:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConfigOption"
+
+    ConfigOption:
+      type: object
+      properties:
+        value:
+          type: string
+        label:
+          type: string
+
     Monitor:
       type: object
       properties:
@@ -286,18 +345,16 @@ components:
           format: uuid
         name:
           type: string
-        url:
+        type:
           type: string
-        method:
+        check_config:
+          type: object
+          additionalProperties: true
+        target:
           type: string
-          enum: [GET, POST]
+          description: "Display string: 'GET https://...', 'tcp://host:port', 'dns://hostname'"
         interval_seconds:
           type: integer
-        expected_status:
-          type: integer
-        keyword:
-          type: string
-          nullable: true
         alert_after_failures:
           type: integer
         is_paused:
@@ -342,26 +399,18 @@ components:
 
     CreateMonitorRequest:
       type: object
-      required: [name, url]
+      required: [name, type, check_config]
       properties:
         name:
           type: string
-        url:
+        type:
           type: string
-        method:
-          type: string
-          enum: [GET, POST]
-          default: GET
+        check_config:
+          type: object
+          additionalProperties: true
         interval_seconds:
           type: integer
-          enum: [30, 60, 300]
           default: 300
-        expected_status:
-          type: integer
-          default: 200
-        keyword:
-          type: string
-          nullable: true
         alert_after_failures:
           type: integer
           default: 3
@@ -374,19 +423,11 @@ components:
       properties:
         name:
           type: string
-        url:
-          type: string
-        method:
-          type: string
-          enum: [GET, POST]
+        check_config:
+          type: object
+          additionalProperties: true
         interval_seconds:
           type: integer
-          enum: [30, 60, 300]
-        expected_status:
-          type: integer
-        keyword:
-          type: string
-          nullable: true
         alert_after_failures:
           type: integer
         is_paused:

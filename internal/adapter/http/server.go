@@ -122,19 +122,15 @@ func (s *Server) CreateMonitor(c *fiber.Ctx) error {
 		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid request body")})
 	}
 
-	// Build check config from legacy API fields for backward compatibility.
-	monType := domain.MonitorHTTP
-	var methodStr *string
-	if req.Method != nil {
-		ms := string(*req.Method)
-		methodStr = &ms
+	checkConfigJSON, err := json.Marshal(req.CheckConfig)
+	if err != nil {
+		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid check_config")})
 	}
-	checkConfig := buildHTTPCheckConfig(req.Url, methodStr, req.ExpectedStatus, req.Keyword)
 
 	input := app.CreateMonitorInput{
 		Name:        req.Name,
-		Type:        monType,
-		CheckConfig: checkConfig,
+		Type:        domain.MonitorType(req.Type),
+		CheckConfig: checkConfigJSON,
 	}
 	if req.IntervalSeconds != nil {
 		input.IntervalSeconds = int(*req.IntervalSeconds)
@@ -200,22 +196,17 @@ func (s *Server) UpdateMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 
 	input := app.UpdateMonitorInput{
 		Name:               req.Name,
+		IntervalSeconds:    req.IntervalSeconds,
 		AlertAfterFailures: req.AlertAfterFailures,
 		IsPaused:           req.IsPaused,
 		IsPublic:           req.IsPublic,
 	}
-	if req.IntervalSeconds != nil {
-		v := int(*req.IntervalSeconds)
-		input.IntervalSeconds = &v
-	}
-	// Build check config from legacy fields if URL is provided.
-	if req.Url != nil {
-		var mStr *string
-		if req.Method != nil {
-			ms := string(*req.Method)
-			mStr = &ms
+	if req.CheckConfig != nil {
+		configJSON, err := json.Marshal(*req.CheckConfig)
+		if err != nil {
+			return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid check_config")})
 		}
-		input.CheckConfig = buildHTTPCheckConfig(*req.Url, mStr, req.ExpectedStatus, req.Keyword)
+		input.CheckConfig = configJSON
 	}
 
 	updated, err := s.monitoring.UpdateMonitor(c.UserContext(), user, uuid.UUID(id), input)
@@ -337,10 +328,15 @@ func (s *Server) domainMonitorToAPI(m *domain.Monitor) apigen.Monitor {
 	intervalSeconds := m.IntervalSeconds
 	alertAfter := m.AlertAfterFailures
 	target := s.monitoring.Registry().Target(m.Type, m.CheckConfig)
+	monType := string(m.Type)
+	var checkConfig map[string]any
+	json.Unmarshal(m.CheckConfig, &checkConfig)
 	return apigen.Monitor{
 		Id:                 (*openapi_types.UUID)(&m.ID),
 		Name:               &m.Name,
-		Url:                &target,
+		Type:               &monType,
+		CheckConfig:        &checkConfig,
+		Target:             &target,
 		IntervalSeconds:    &intervalSeconds,
 		AlertAfterFailures: &alertAfter,
 		IsPaused:           &m.IsPaused,
@@ -355,10 +351,15 @@ func (s *Server) domainMonitorToAPIWithUptime(m *domain.Monitor, uptime *float32
 	intervalSeconds := m.IntervalSeconds
 	alertAfter := m.AlertAfterFailures
 	target := s.monitoring.Registry().Target(m.Type, m.CheckConfig)
+	monType := string(m.Type)
+	var checkConfig map[string]any
+	json.Unmarshal(m.CheckConfig, &checkConfig)
 	return apigen.MonitorWithUptime{
 		Id:                 (*openapi_types.UUID)(&m.ID),
 		Name:               &m.Name,
-		Url:                &target,
+		Type:               &monType,
+		CheckConfig:        &checkConfig,
+		Target:             &target,
 		IntervalSeconds:    &intervalSeconds,
 		AlertAfterFailures: &alertAfter,
 		IsPaused:           &m.IsPaused,
@@ -374,13 +375,18 @@ func (s *Server) domainMonitorToAPIDetail(m *domain.Monitor, u24h, u7d, u30d flo
 	intervalSeconds := m.IntervalSeconds
 	alertAfter := m.AlertAfterFailures
 	target := s.monitoring.Registry().Target(m.Type, m.CheckConfig)
+	monType := string(m.Type)
+	var checkConfig map[string]any
+	json.Unmarshal(m.CheckConfig, &checkConfig)
 	u24 := float32(u24h)
 	u7 := float32(u7d)
 	u30 := float32(u30d)
 	return apigen.MonitorDetail{
 		Id:                 (*openapi_types.UUID)(&m.ID),
 		Name:               &m.Name,
-		Url:                &target,
+		Type:               &monType,
+		CheckConfig:        &checkConfig,
+		Target:             &target,
 		IntervalSeconds:    &intervalSeconds,
 		AlertAfterFailures: &alertAfter,
 		IsPaused:           &m.IsPaused,
@@ -393,26 +399,6 @@ func (s *Server) domainMonitorToAPIDetail(m *domain.Monitor, u24h, u7d, u30d flo
 		ChartData:          &chartData,
 		Incidents:          &incidents,
 	}
-}
-
-// buildHTTPCheckConfig constructs a JSON check_config for HTTP monitors from legacy API fields.
-func buildHTTPCheckConfig(url string, method *string, expectedStatus *int, keyword *string) json.RawMessage {
-	cfg := map[string]any{"url": url}
-	if method != nil {
-		cfg["method"] = *method
-	} else {
-		cfg["method"] = "GET"
-	}
-	if expectedStatus != nil {
-		cfg["expected_status"] = *expectedStatus
-	} else {
-		cfg["expected_status"] = 200
-	}
-	if keyword != nil {
-		cfg["keyword"] = *keyword
-	}
-	data, _ := json.Marshal(cfg)
-	return data
 }
 
 func domainIncidentToAPI(i *domain.Incident) apigen.Incident {
