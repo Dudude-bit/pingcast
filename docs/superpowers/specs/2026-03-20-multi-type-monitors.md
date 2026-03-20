@@ -18,43 +18,21 @@ const (
 )
 ```
 
-### CheckConfig — type-safe union in `domain/monitor.go`:
+### CheckConfig — raw JSON bytes in `domain/monitor.go`:
+
+Domain stores raw JSON — does NOT know about specific config structures. Each checker adapter owns its config type and deserializes from raw bytes.
 
 ```go
-type CheckConfig struct {
-    HTTP *HTTPCheckConfig `json:"http,omitempty"`
-    TCP  *TCPCheckConfig  `json:"tcp,omitempty"`
-    DNS  *DNSCheckConfig  `json:"dns,omitempty"`
-}
+import "encoding/json"
 
-type HTTPCheckConfig struct {
-    URL            string  `json:"url"`
-    Method         string  `json:"method"`
-    ExpectedStatus int     `json:"expected_status"`
-    Keyword        *string `json:"keyword,omitempty"`
-}
-
-type TCPCheckConfig struct {
-    Host string `json:"host"`
-    Port int    `json:"port"`
-}
-
-type DNSCheckConfig struct {
-    Hostname   string  `json:"hostname"`
-    ExpectedIP *string `json:"expected_ip,omitempty"`
-    DNSServer  *string `json:"dns_server,omitempty"`
-}
-```
-
-### Monitor struct — cleaned up:
-
-```go
+// Monitor stores type-specific config as raw JSON.
+// Deserialization is the checker adapter's responsibility.
 type Monitor struct {
     ID                 uuid.UUID
     UserID             uuid.UUID
     Name               string
     Type               MonitorType
-    CheckConfig        CheckConfig
+    CheckConfig        json.RawMessage  // raw JSON, adapter deserializes
     IntervalSeconds    int
     AlertAfterFailures int
     IsPaused           bool
@@ -64,29 +42,78 @@ type Monitor struct {
 }
 ```
 
-**Removed fields:** `URL`, `Method`, `ExpectedStatus`, `Keyword` — all moved into `CheckConfig.HTTP`.
+**Removed fields:** `URL`, `Method`, `ExpectedStatus`, `Keyword` — moved to adapter-specific config structs.
 
-### Helper method for display:
+`json.RawMessage` is `[]byte` from stdlib `encoding/json` — no external deps, hex-compliant.
+
+### Config structs live in adapters, NOT in domain:
 
 ```go
-func (m Monitor) Target() string {
-    switch m.Type {
-    case MonitorHTTP:
-        if m.CheckConfig.HTTP != nil {
-            return m.CheckConfig.HTTP.Method + " " + m.CheckConfig.HTTP.URL
-        }
-    case MonitorTCP:
-        if m.CheckConfig.TCP != nil {
-            return fmt.Sprintf("tcp://%s:%d", m.CheckConfig.TCP.Host, m.CheckConfig.TCP.Port)
-        }
-    case MonitorDNS:
-        if m.CheckConfig.DNS != nil {
-            return "dns://" + m.CheckConfig.DNS.Hostname
-        }
-    }
-    return ""
+// adapter/checker/http.go
+type HTTPCheckConfig struct {
+    URL            string       `json:"url"`
+    Method         HTTPMethod   `json:"method"`
+    ExpectedStatus int          `json:"expected_status"`
+    Keyword        *string      `json:"keyword,omitempty"`
+}
+
+// adapter/checker/tcp.go
+type TCPCheckConfig struct {
+    Host string `json:"host"`
+    Port int    `json:"port"`
+}
+
+// adapter/checker/dns.go
+type DNSCheckConfig struct {
+    Hostname   string  `json:"hostname"`
+    ExpectedIP *string `json:"expected_ip,omitempty"`
+    DNSServer  *string `json:"dns_server,omitempty"`
 }
 ```
+
+Each checker deserializes `monitor.CheckConfig` into its own struct:
+```go
+func (c *HTTPChecker) Check(ctx context.Context, monitor *domain.Monitor) *domain.CheckResult {
+    var cfg HTTPCheckConfig
+    if err := json.Unmarshal(monitor.CheckConfig, &cfg); err != nil {
+        // return down with error
+    }
+    // use cfg.URL, cfg.Method, etc.
+}
+```
+
+### `Target()` and `Host()` — moved to port:
+
+Since domain doesn't know about config structures, `Target()` and `Host()` can't live on Monitor directly. Instead, the `MonitorChecker` port gets two new optional methods, or we add a new port:
+
+```go
+// port/checker.go
+type MonitorChecker interface {
+    Check(ctx context.Context, monitor *domain.Monitor) *domain.CheckResult
+    ValidateConfig(raw json.RawMessage) error  // validates config at creation time
+    Target(raw json.RawMessage) string         // display string: "GET https://...", "tcp://host:port"
+    Host(raw json.RawMessage) string           // for host rate-limiting
+}
+```
+
+This way each checker knows how to extract target/host from its own config. The registry delegates:
+
+```go
+// Called by app layer or adapter when display string is needed
+func (r *Registry) Target(monitorType domain.MonitorType, config json.RawMessage) string {
+    checker, err := r.Get(monitorType)
+    if err != nil {
+        return ""
+    }
+    return checker.Target(config)
+}
+```
+
+### Adding a new checker type requires:
+1. Create `adapter/checker/newtype.go` with config struct + `Check` + `ValidateConfig` + `Target` + `Host`
+2. Register in `cmd/*/main.go`: `registry.Register(domain.MonitorNewType, checker.NewNewTypeChecker())`
+3. Add template `monitor_config_newtype.html`
+4. No domain changes, no port changes, no migration
 
 ## Database Migration
 
@@ -143,12 +170,20 @@ Uses `jsonb_strip_nulls` to avoid `"keyword": null` entries for monitors without
 ```go
 type CheckerRegistry interface {
     Get(monitorType domain.MonitorType) (MonitorChecker, error)
+    ValidateConfig(monitorType domain.MonitorType, raw json.RawMessage) error
+    Target(monitorType domain.MonitorType, raw json.RawMessage) string
+    Host(monitorType domain.MonitorType, raw json.RawMessage) string
 }
 
 type MonitorChecker interface {
     Check(ctx context.Context, monitor *domain.Monitor) *domain.CheckResult
+    ValidateConfig(raw json.RawMessage) error
+    Target(raw json.RawMessage) string
+    Host(raw json.RawMessage) string
 }
 ```
+
+Registry delegates `ValidateConfig`/`Target`/`Host` to the appropriate checker by type.
 
 ### `MonitoringService` changes:
 
@@ -176,12 +211,14 @@ func (s *MonitoringService) RunCheck(ctx context.Context, monitor *domain.Monito
 type CreateMonitorInput struct {
     Name               string
     Type               domain.MonitorType
-    CheckConfig        domain.CheckConfig
+    CheckConfig        json.RawMessage  // raw JSON, validated via registry
     IntervalSeconds    int
     AlertAfterFailures int
     IsPublic           bool
 }
 ```
+
+`CreateMonitor` validates config: `s.registry.ValidateConfig(input.Type, input.CheckConfig)`
 
 Removed: `URL`, `Method`, `ExpectedStatus`, `Keyword`. Added: `Type`, `CheckConfig`.
 
@@ -190,7 +227,7 @@ Removed: `URL`, `Method`, `ExpectedStatus`, `Keyword`. Added: `Type`, `CheckConf
 ```go
 type UpdateMonitorInput struct {
     Name               *string
-    CheckConfig        *domain.CheckConfig  // must match existing Type
+    CheckConfig        json.RawMessage  // if provided, validated against existing Type
     IntervalSeconds    *int
     AlertAfterFailures *int
     IsPaused           *bool
@@ -198,7 +235,7 @@ type UpdateMonitorInput struct {
 }
 ```
 
-`Type` is not in UpdateMonitorInput — type is immutable after creation.
+`Type` is not in UpdateMonitorInput — type is immutable after creation. If `CheckConfig` is provided, it is validated against the monitor's existing `Type` via `registry.ValidateConfig`.
 
 ## Adapter — Checker Registry + Three Checkers
 
@@ -365,13 +402,8 @@ CreateMonitorRequest:
 
 CheckConfig:
   type: object
-  properties:
-    http:
-      $ref: "#/components/schemas/HTTPCheckConfig"
-    tcp:
-      $ref: "#/components/schemas/TCPCheckConfig"
-    dns:
-      $ref: "#/components/schemas/DNSCheckConfig"
+  description: "Type-specific config. Structure depends on monitor type."
+  additionalProperties: true
 
 HTTPCheckConfig:
   type: object
@@ -456,29 +488,42 @@ Telegram/SMTP message templates: "URL:" → "Target:" to correctly label TCP/DNS
 
 ## Validation
 
-### `CheckConfig.Validate(monitorType)` — domain method:
+### Config validation — each checker adapter validates its own config:
 
 ```go
-func (c CheckConfig) Validate(t MonitorType) error {
-    switch t {
-    case MonitorHTTP:
-        if c.HTTP == nil { return errors.New("http config required") }
-        if c.HTTP.URL == "" { return errors.New("url required") }
-    case MonitorTCP:
-        if c.TCP == nil { return errors.New("tcp config required") }
-        if c.TCP.Host == "" { return errors.New("host required") }
-        if c.TCP.Port <= 0 || c.TCP.Port > 65535 { return errors.New("invalid port") }
-    case MonitorDNS:
-        if c.DNS == nil { return errors.New("dns config required") }
-        if c.DNS.Hostname == "" { return errors.New("hostname required") }
-    default:
-        return fmt.Errorf("unknown monitor type: %s", t)
+// adapter/checker/http.go
+func (c *HTTPChecker) ValidateConfig(raw json.RawMessage) error {
+    var cfg HTTPCheckConfig
+    if err := json.Unmarshal(raw, &cfg); err != nil {
+        return fmt.Errorf("invalid http config: %w", err)
     }
+    if cfg.URL == "" { return errors.New("url required") }
+    return nil
+}
+
+// adapter/checker/tcp.go
+func (c *TCPChecker) ValidateConfig(raw json.RawMessage) error {
+    var cfg TCPCheckConfig
+    if err := json.Unmarshal(raw, &cfg); err != nil {
+        return fmt.Errorf("invalid tcp config: %w", err)
+    }
+    if cfg.Host == "" { return errors.New("host required") }
+    if cfg.Port <= 0 || cfg.Port > 65535 { return errors.New("invalid port") }
+    return nil
+}
+
+// adapter/checker/dns.go
+func (c *DNSChecker) ValidateConfig(raw json.RawMessage) error {
+    var cfg DNSCheckConfig
+    if err := json.Unmarshal(raw, &cfg); err != nil {
+        return fmt.Errorf("invalid dns config: %w", err)
+    }
+    if cfg.Hostname == "" { return errors.New("hostname required") }
     return nil
 }
 ```
 
-Called in `MonitoringService.CreateMonitor` and `UpdateMonitor`.
+App layer calls `registry.ValidateConfig(type, raw)` — registry delegates to the right checker. Domain has no validation logic for configs.
 
 ### Type changes on update:
 
@@ -500,9 +545,16 @@ func (t MonitorType) Valid() bool {
 
 ## `HTTPCheckConfig.Method` type
 
-Uses `domain.HTTPMethod` (existing typed enum) instead of plain string:
+`HTTPMethod` type moves from domain to `adapter/checker/http.go` — it's HTTP-specific, not a domain concern. Domain only knows about `MonitorType`.
 
 ```go
+// adapter/checker/http.go
+type HTTPMethod string
+const (
+    MethodGET  HTTPMethod = "GET"
+    MethodPOST HTTPMethod = "POST"
+)
+
 type HTTPCheckConfig struct {
     URL            string     `json:"url"`
     Method         HTTPMethod `json:"method"`
@@ -510,6 +562,8 @@ type HTTPCheckConfig struct {
     Keyword        *string    `json:"keyword,omitempty"`
 }
 ```
+
+`domain.HTTPMethod` is deleted from domain/monitor.go.
 
 ## MonitorConfigFields input validation
 
