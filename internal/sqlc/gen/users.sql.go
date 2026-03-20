@@ -42,6 +42,24 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	return i, err
 }
 
+const getUserAlertInfo = `-- name: GetUserAlertInfo :one
+SELECT tg_chat_id, email, plan
+FROM users WHERE id = $1
+`
+
+type GetUserAlertInfoRow struct {
+	TgChatID pgtype.Int8 `json:"tg_chat_id"`
+	Email    string      `json:"email"`
+	Plan     string      `json:"plan"`
+}
+
+func (q *Queries) GetUserAlertInfo(ctx context.Context, id uuid.UUID) (GetUserAlertInfoRow, error) {
+	row := q.db.QueryRow(ctx, getUserAlertInfo, id)
+	var i GetUserAlertInfoRow
+	err := row.Scan(&i.TgChatID, &i.Email, &i.Plan)
+	return i, err
+}
+
 const getUserByEmail = `-- name: GetUserByEmail :one
 SELECT id, email, slug, password_hash, tg_chat_id, plan, created_at
 FROM users WHERE email = $1

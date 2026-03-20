@@ -6,39 +6,69 @@ import (
 	"strconv"
 )
 
-type Config struct {
+type APIConfig struct {
 	Port                       int
 	DatabaseURL                string
-	TelegramToken              string
-	SMTPHost                   string
-	SMTPPort                   int
-	SMTPUser                   string
-	SMTPPass                   string
-	SMTPFrom                   string
+	NatsURL                    string
 	LemonSqueezyWebhookSecret string
 	BaseURL                    string
 }
 
-func Load() (*Config, error) {
-	port, _ := strconv.Atoi(getEnv("PORT", "8080"))
-	smtpPort, _ := strconv.Atoi(getEnv("SMTP_PORT", "587"))
+type CheckerConfig struct {
+	DatabaseURL string
+	NatsURL     string
+}
 
+type NotifierConfig struct {
+	NatsURL       string
+	TelegramToken string
+	SMTPHost      string
+	SMTPPort      int
+	SMTPUser      string
+	SMTPPass      string
+	SMTPFrom      string
+}
+
+func LoadAPI() (*APIConfig, error) {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		return nil, fmt.Errorf("DATABASE_URL is required")
 	}
 
-	return &Config{
+	port, _ := strconv.Atoi(getEnv("PORT", "8080"))
+
+	return &APIConfig{
 		Port:                       port,
 		DatabaseURL:                dbURL,
-		TelegramToken:              os.Getenv("TELEGRAM_BOT_TOKEN"),
-		SMTPHost:                   os.Getenv("SMTP_HOST"),
-		SMTPPort:                   smtpPort,
-		SMTPUser:                   os.Getenv("SMTP_USER"),
-		SMTPPass:                   os.Getenv("SMTP_PASS"),
-		SMTPFrom:                   getEnv("SMTP_FROM", "noreply@pingcast.io"),
+		NatsURL:                    getEnv("NATS_URL", "nats://localhost:4222"),
 		LemonSqueezyWebhookSecret: os.Getenv("LEMONSQUEEZY_WEBHOOK_SECRET"),
 		BaseURL:                    getEnv("BASE_URL", "http://localhost:8080"),
+	}, nil
+}
+
+func LoadChecker() (*CheckerConfig, error) {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		return nil, fmt.Errorf("DATABASE_URL is required")
+	}
+
+	return &CheckerConfig{
+		DatabaseURL: dbURL,
+		NatsURL:     getEnv("NATS_URL", "nats://localhost:4222"),
+	}, nil
+}
+
+func LoadNotifier() (*NotifierConfig, error) {
+	smtpPort, _ := strconv.Atoi(getEnv("SMTP_PORT", "587"))
+
+	return &NotifierConfig{
+		NatsURL:       getEnv("NATS_URL", "nats://localhost:4222"),
+		TelegramToken: os.Getenv("TELEGRAM_BOT_TOKEN"),
+		SMTPHost:      os.Getenv("SMTP_HOST"),
+		SMTPPort:      smtpPort,
+		SMTPUser:      os.Getenv("SMTP_USER"),
+		SMTPPass:      os.Getenv("SMTP_PASS"),
+		SMTPFrom:      getEnv("SMTP_FROM", "noreply@pingcast.io"),
 	}, nil
 }
 

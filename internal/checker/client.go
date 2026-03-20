@@ -21,6 +21,8 @@ const (
 
 type MonitorInfo struct {
 	ID                 uuid.UUID
+	UserID             uuid.UUID
+	Name               string
 	URL                string
 	Method             string
 	IntervalSeconds    int

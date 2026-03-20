@@ -25,3 +25,7 @@ UPDATE users SET tg_chat_id = $2 WHERE id = $1;
 UPDATE users
 SET lemon_squeezy_customer_id = $2, lemon_squeezy_subscription_id = $3
 WHERE id = $1;
+
+-- name: GetUserAlertInfo :one
+SELECT tg_chat_id, email, plan
+FROM users WHERE id = $1;

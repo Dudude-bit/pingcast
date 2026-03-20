@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	apigen "github.com/kirillinakin/pingcast/internal/api/gen"
 	"github.com/kirillinakin/pingcast/internal/auth"
+	natsbus "github.com/kirillinakin/pingcast/internal/nats"
 	"github.com/kirillinakin/pingcast/internal/sqlc/gen"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
@@ -16,14 +17,14 @@ type Server struct {
 	queries     *gen.Queries
 	authService *auth.Service
 	rateLimiter *auth.RateLimiter
-	onChanged   func(monitorID uuid.UUID, deleted bool)
+	onChanged func(action string, monitorID uuid.UUID, monitor *natsbus.MonitorData)
 }
 
 func NewServer(
 	queries *gen.Queries,
 	authService *auth.Service,
 	rateLimiter *auth.RateLimiter,
-	onChanged func(monitorID uuid.UUID, deleted bool),
+	onChanged func(action string, monitorID uuid.UUID, monitor *natsbus.MonitorData),
 ) *Server {
 	return &Server{
 		queries:     queries,
@@ -204,7 +205,7 @@ func (s *Server) CreateMonitor(c *fiber.Ctx) error {
 	}
 
 	if s.onChanged != nil {
-		s.onChanged(mon.ID, false)
+		s.onChanged("create", mon.ID, monitorToNats(mon))
 	}
 
 	return c.Status(201).JSON(toMonitor(mon))
@@ -307,11 +308,12 @@ func (s *Server) UpdateMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 		return c.Status(500).JSON(apigen.ErrorResponse{Error: ptr("failed to update monitor")})
 	}
 
+	updated, _ := s.queries.GetMonitorByID(c.UserContext(), mon.ID)
+
 	if s.onChanged != nil {
-		s.onChanged(mon.ID, false)
+		s.onChanged("update", updated.ID, monitorToNats(updated))
 	}
 
-	updated, _ := s.queries.GetMonitorByID(c.UserContext(), mon.ID)
 	return c.JSON(toMonitor(updated))
 }
 
@@ -322,7 +324,7 @@ func (s *Server) DeleteMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 	}
 
 	if s.onChanged != nil {
-		s.onChanged(uuid.UUID(id), true)
+		s.onChanged("delete", uuid.UUID(id), nil)
 	}
 
 	err := s.queries.DeleteMonitor(c.UserContext(), gen.DeleteMonitorParams{
@@ -365,11 +367,16 @@ func (s *Server) ToggleMonitorPause(c *fiber.Ctx, id openapi_types.UUID) error {
 		return c.Status(500).JSON(apigen.ErrorResponse{Error: ptr("failed to toggle pause")})
 	}
 
+	updated, _ := s.queries.GetMonitorByID(c.UserContext(), mon.ID)
+
 	if s.onChanged != nil {
-		s.onChanged(mon.ID, newPaused)
+		if newPaused {
+			s.onChanged("pause", mon.ID, nil)
+		} else {
+			s.onChanged("resume", mon.ID, monitorToNats(updated))
+		}
 	}
 
-	updated, _ := s.queries.GetMonitorByID(c.UserContext(), mon.ID)
 	return c.JSON(toMonitor(updated))
 }
 
@@ -526,6 +533,20 @@ func toIncident(i gen.Incident) apigen.Incident {
 		StartedAt:  &i.StartedAt,
 		ResolvedAt: resolvedAt,
 		Cause:      &i.Cause,
+	}
+}
+
+func monitorToNats(m gen.Monitor) *natsbus.MonitorData {
+	return &natsbus.MonitorData{
+		ID:                 m.ID,
+		Name:               m.Name,
+		URL:                m.Url,
+		Method:             m.Method,
+		IntervalSeconds:    int(m.IntervalSeconds),
+		ExpectedStatus:     int(m.ExpectedStatus),
+		Keyword:            m.Keyword,
+		AlertAfterFailures: int(m.AlertAfterFailures),
+		UserID:             m.UserID,
 	}
 }
 
