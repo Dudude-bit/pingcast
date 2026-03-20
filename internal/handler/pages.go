@@ -19,15 +19,26 @@ type PageHandler struct {
 	queries     *gen.Queries
 	authService *auth.Service
 	rateLimiter *auth.RateLimiter
-	templates   *template.Template
+	templates   map[string]*template.Template
 }
 
 func NewPageHandler(queries *gen.Queries, authService *auth.Service, rateLimiter *auth.RateLimiter) *PageHandler {
 	tmplFS, _ := fs.Sub(web.FS, "templates")
-	templates := template.Must(template.ParseFS(tmplFS,
-		"layout.html", "landing.html", "login.html", "register.html",
-		"dashboard.html", "monitor_detail.html", "monitor_form.html", "statuspage.html",
-	))
+
+	// Parse each page template paired with layout.
+	// This is required because Go's html/template only keeps the last {{define "content"}}
+	// when all pages are parsed together.
+	pages := []string{
+		"landing.html", "login.html", "register.html",
+		"dashboard.html", "monitor_detail.html", "monitor_form.html",
+	}
+
+	templates := make(map[string]*template.Template, len(pages)+1)
+	for _, page := range pages {
+		templates[page] = template.Must(template.ParseFS(tmplFS, "layout.html", page))
+	}
+	// Statuspage is standalone (no layout)
+	templates["statuspage.html"] = template.Must(template.ParseFS(tmplFS, "statuspage.html"))
 
 	return &PageHandler{
 		queries:     queries,
@@ -183,9 +194,21 @@ func (h *PageHandler) StatusPage(c *fiber.Ctx) error {
 }
 
 func (h *PageHandler) render(c *fiber.Ctx, name string, data fiber.Map) error {
+	tmpl, ok := h.templates[name]
+	if !ok {
+		return c.Status(500).SendString("template not found: " + name)
+	}
+
 	c.Set("Content-Type", "text/html; charset=utf-8")
 	var buf bytes.Buffer
-	if err := h.templates.ExecuteTemplate(&buf, name, data); err != nil {
+
+	// Layout-based pages render via "layout.html", standalone pages by their own name
+	execName := "layout.html"
+	if name == "statuspage.html" {
+		execName = name
+	}
+
+	if err := tmpl.ExecuteTemplate(&buf, execName, data); err != nil {
 		return c.Status(500).SendString("template error: " + err.Error())
 	}
 	return c.Send(buf.Bytes())
