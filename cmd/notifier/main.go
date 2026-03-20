@@ -79,7 +79,7 @@ func main() {
 			return
 		}
 
-		if err := handleAlert(&event, tgSender, emailSender); err != nil {
+		if err := handleAlert(ctx, &event, tgSender, emailSender); err != nil {
 			slog.Error("alert delivery failed, will retry", "event", event.Event, "monitor_id", event.MonitorID, "error", err)
 			msg.Nak()
 			return
@@ -99,16 +99,16 @@ func main() {
 	consCtx.Stop()
 }
 
-func handleAlert(event *natsbus.AlertEvent, tg *notifier.TelegramSender, email *notifier.EmailSender) error {
+func handleAlert(ctx context.Context, event *natsbus.AlertEvent, tg *notifier.TelegramSender, email *notifier.EmailSender) error {
 	senders := buildSenders(event, tg, email)
 
 	for _, s := range senders {
 		var err error
 		switch event.Event {
 		case "down":
-			err = s.NotifyDown(event.MonitorName, event.MonitorURL, event.Cause)
+			err = s.NotifyDown(ctx, event.MonitorName, event.MonitorURL, event.Cause)
 		case "up":
-			err = s.NotifyUp(event.MonitorName, event.MonitorURL)
+			err = s.NotifyUp(ctx, event.MonitorName, event.MonitorURL)
 		}
 		if err != nil {
 			return err

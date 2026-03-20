@@ -1,6 +1,7 @@
 package notifier
 
 import (
+	"context"
 	"fmt"
 	"net/smtp"
 )
@@ -17,13 +18,13 @@ func NewEmailSender(host string, port int, user, pass, from string) *EmailSender
 	return &EmailSender{host: host, port: port, user: user, pass: pass, from: from}
 }
 
-func (e *EmailSender) SendDown(to, monitorName, url, cause string) error {
+func (e *EmailSender) SendDown(_ context.Context, to, monitorName, url, cause string) error {
 	subject := fmt.Sprintf("[PingCast] %s is DOWN", monitorName)
 	body := fmt.Sprintf("Monitor: %s\nURL: %s\nStatus: DOWN\nCause: %s", monitorName, url, cause)
 	return e.send(to, subject, body)
 }
 
-func (e *EmailSender) SendUp(to, monitorName, url string) error {
+func (e *EmailSender) SendUp(_ context.Context, to, monitorName, url string) error {
 	subject := fmt.Sprintf("[PingCast] %s is back UP", monitorName)
 	body := fmt.Sprintf("Monitor: %s\nURL: %s\nStatus: UP", monitorName, url)
 	return e.send(to, subject, body)

@@ -21,7 +21,7 @@ func TestTelegramSender_SendDown(t *testing.T) {
 
 	tg := notifier.NewTelegramSender("test-token", server.URL+"/bot%s/sendMessage")
 
-	err := tg.SendDown(12345, "My API", "https://api.example.com", "connection timeout")
+	err := tg.SendDown(t.Context(), 12345, "My API", "https://api.example.com", "connection timeout")
 	if err != nil {
 		t.Fatalf("SendDown: %v", err)
 	}
@@ -49,7 +49,7 @@ func TestTelegramSender_SendUp(t *testing.T) {
 
 	tg := notifier.NewTelegramSender("test-token", server.URL+"/bot%s/sendMessage")
 
-	err := tg.SendUp(12345, "My API", "https://api.example.com")
+	err := tg.SendUp(t.Context(), 12345, "My API", "https://api.example.com")
 	if err != nil {
 		t.Fatalf("SendUp: %v", err)
 	}
