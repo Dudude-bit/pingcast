@@ -27,6 +27,11 @@ func New(token string) *Sender {
 	}
 }
 
+// NewWithURL creates a Sender with a custom API URL format (for testing).
+func NewWithURL(token, urlFmt string) *Sender {
+	return &Sender{token: token, urlFmt: urlFmt}
+}
+
 // chatAlert implements port.AlertSender for a specific chat.
 type chatAlert struct {
 	sender *Sender

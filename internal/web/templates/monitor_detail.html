@@ -9,7 +9,7 @@
                 {{.Monitor.CurrentStatus}}
             </span>
         </h1>
-        <div class="url">{{.Monitor.Url}}</div>
+        <div class="url">{{.Monitor.URL}}</div>
     </div>
     <a href="/dashboard" class="btn btn-secondary btn-sm">&larr; Back</a>
 </div>
@@ -45,11 +45,11 @@
     {{if .Incidents}}
     <div class="incident-list">
         {{range .Incidents}}
-        <div class="incident-item {{if .ResolvedAt.Valid}}resolved{{end}}">
+        <div class="incident-item {{if .ResolvedAt}}resolved{{end}}">
             <div class="cause">{{.Cause}}</div>
             <div class="time">
                 Started {{.StartedAt.Format "Jan 02, 15:04 UTC"}}
-                {{if .ResolvedAt.Valid}} &middot; Resolved {{.ResolvedAt.Time.Format "Jan 02, 15:04 UTC"}}{{else}} &middot; <span style="color: var(--status-down);">Ongoing</span>{{end}}
+                {{if .ResolvedAt}} &middot; Resolved {{.ResolvedAt.Format "Jan 02, 15:04 UTC"}}{{else}} &middot; <span style="color: var(--status-down);">Ongoing</span>{{end}}
             </div>
         </div>
         {{end}}
