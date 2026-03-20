@@ -110,10 +110,10 @@ func (r *Registry) Target(monitorType domain.MonitorType, config json.RawMessage
 ```
 
 ### Adding a new checker type requires:
-1. Create `adapter/checker/newtype.go` with config struct + `Check` + `ValidateConfig` + `Target` + `Host`
-2. Register in `cmd/*/main.go`: `registry.Register(domain.MonitorNewType, checker.NewNewTypeChecker())`
-3. Add template `monitor_config_newtype.html`
-4. No domain changes, no port changes, no migration
+1. Add const `MonitorNewType` to `domain/monitor.go`
+2. Create `adapter/checker/newtype.go` with config struct + `Check` + `ValidateConfig` + `ConfigSchema` + `Target` + `Host`
+3. Register in `cmd/*/main.go`: `registry.Register(domain.MonitorNewType, "New Type", checker.NewNewTypeChecker())`
+4. No port changes, no frontend changes, no migration — frontend renders form dynamically from ConfigSchema
 
 ## Database Migration
 
@@ -170,20 +170,47 @@ Uses `jsonb_strip_nulls` to avoid `"keyword": null` entries for monitors without
 ```go
 type CheckerRegistry interface {
     Get(monitorType domain.MonitorType) (MonitorChecker, error)
+    Types() []MonitorTypeInfo                                       // registered types for UI
     ValidateConfig(monitorType domain.MonitorType, raw json.RawMessage) error
     Target(monitorType domain.MonitorType, raw json.RawMessage) string
     Host(monitorType domain.MonitorType, raw json.RawMessage) string
 }
 
+type MonitorTypeInfo struct {
+    Type   domain.MonitorType
+    Label  string             // "HTTP", "TCP", "DNS" — human-readable
+    Schema ConfigSchema       // field definitions for dynamic form rendering
+}
+
+type ConfigSchema struct {
+    Fields []ConfigField `json:"fields"`
+}
+
+type ConfigField struct {
+    Name        string   `json:"name"`                   // "url", "host", "port"
+    Label       string   `json:"label"`                  // "URL", "Host", "Port"
+    Type        string   `json:"type"`                   // "text", "number", "select"
+    Required    bool     `json:"required"`
+    Default     any      `json:"default,omitempty"`
+    Placeholder string   `json:"placeholder,omitempty"`
+    Options     []Option `json:"options,omitempty"`       // for select fields
+}
+
+type Option struct {
+    Value string `json:"value"`
+    Label string `json:"label"`
+}
+
 type MonitorChecker interface {
     Check(ctx context.Context, monitor *domain.Monitor) *domain.CheckResult
     ValidateConfig(raw json.RawMessage) error
+    ConfigSchema() ConfigSchema
     Target(raw json.RawMessage) string
     Host(raw json.RawMessage) string
 }
 ```
 
-Registry delegates `ValidateConfig`/`Target`/`Host` to the appropriate checker by type.
+Registry delegates all methods to the appropriate checker by type. `Types()` returns info for all registered checkers — used by API to build the monitor-types endpoint and by frontend to render forms dynamically.
 
 ### `MonitoringService` changes:
 
@@ -242,13 +269,22 @@ type UpdateMonitorInput struct {
 ### `adapter/checker/registry.go`:
 
 ```go
+type registryEntry struct {
+    label   string
+    checker port.MonitorChecker
+}
+
 type Registry struct {
-    checkers map[domain.MonitorType]port.MonitorChecker
+    entries map[domain.MonitorType]registryEntry
 }
 
 func NewRegistry() *Registry
-func (r *Registry) Register(t domain.MonitorType, c port.MonitorChecker)
+func (r *Registry) Register(t domain.MonitorType, label string, c port.MonitorChecker)
 func (r *Registry) Get(t domain.MonitorType) (port.MonitorChecker, error)
+func (r *Registry) Types() []port.MonitorTypeInfo  // builds from entries, includes ConfigSchema from each checker
+func (r *Registry) ValidateConfig(t domain.MonitorType, raw json.RawMessage) error  // delegates to checker
+func (r *Registry) Target(t domain.MonitorType, raw json.RawMessage) string
+func (r *Registry) Host(t domain.MonitorType, raw json.RawMessage) string
 ```
 
 `var _ port.CheckerRegistry = (*Registry)(nil)`
@@ -339,22 +375,22 @@ Note: This adds `net/url` import to domain — only stdlib, still hex-compliant.
 
 ```go
 registry := checker.NewRegistry()
-registry.Register(domain.MonitorHTTP, checker.NewHTTPChecker())
-registry.Register(domain.MonitorTCP, checker.NewTCPChecker())
-registry.Register(domain.MonitorDNS, checker.NewDNSChecker())
+registry.Register(domain.MonitorHTTP, "HTTP", checker.NewHTTPChecker())
+registry.Register(domain.MonitorTCP, "TCP", checker.NewTCPChecker())
+registry.Register(domain.MonitorDNS, "DNS", checker.NewDNSChecker())
 
 monitoringSvc := app.NewMonitoringService(..., registry)
 ```
 
 ### `cmd/api/main.go`:
 
-Same registry — needed for `CreateMonitor` validation (reject unknown types).
+Same registry — needed for validation + `/api/monitor-types` endpoint.
 
 ```go
 registry := checker.NewRegistry()
-registry.Register(domain.MonitorHTTP, checker.NewHTTPChecker())
-registry.Register(domain.MonitorTCP, checker.NewTCPChecker())
-registry.Register(domain.MonitorDNS, checker.NewDNSChecker())
+registry.Register(domain.MonitorHTTP, "HTTP", checker.NewHTTPChecker())
+registry.Register(domain.MonitorTCP, "TCP", checker.NewTCPChecker())
+registry.Register(domain.MonitorDNS, "DNS", checker.NewDNSChecker())
 
 monitoringSvc := app.NewMonitoringService(..., registry)
 ```
@@ -567,71 +603,124 @@ type HTTPCheckConfig struct {
 
 ## MonitorConfigFields input validation
 
+Handled in the page handler (see Frontend Changes section). Validates type against registry — no path traversal possible since there's only one universal template. Unknown types get 404.
+
+## Frontend Changes
+
+### API endpoint for monitor types:
+
+`GET /api/monitor-types` — returns registered types with config schemas:
+
+```json
+[
+  {
+    "type": "http",
+    "label": "HTTP",
+    "fields": [
+      {"name": "url", "label": "URL", "type": "text", "required": true, "placeholder": "https://example.com/health"},
+      {"name": "method", "label": "Method", "type": "select", "default": "GET", "options": [{"value": "GET", "label": "GET"}, {"value": "POST", "label": "POST"}]},
+      {"name": "expected_status", "label": "Expected Status", "type": "number", "default": 200},
+      {"name": "keyword", "label": "Keyword", "type": "text", "placeholder": "optional"}
+    ]
+  },
+  {
+    "type": "tcp",
+    "label": "TCP",
+    "fields": [
+      {"name": "host", "label": "Host", "type": "text", "required": true, "placeholder": "db.example.com"},
+      {"name": "port", "label": "Port", "type": "number", "required": true, "placeholder": "5432"}
+    ]
+  }
+]
+```
+
+Served by `Server.ListMonitorTypes` which calls `registry.Types()`.
+
+### Monitor form — fully dynamic, no hardcoded types:
+
+Type selector populated from API:
+
+```html
+<select name="type" hx-get="/monitors/config-fields" hx-target="#config-fields" hx-include="[name='type']">
+    {{range .MonitorTypes}}
+    <option value="{{.Type}}">{{.Label}}</option>
+    {{end}}
+</select>
+
+<div id="config-fields">
+    <!-- HTMX loads fields dynamically -->
+</div>
+```
+
+### Config fields endpoint — renders from schema, no per-type templates:
+
+`GET /monitors/config-fields?type=tcp` returns HTML fragment rendered from a single universal template:
+
+```html
+<!-- templates/monitor_config_fields.html — ONE template for ALL types -->
+{{range .Fields}}
+<div class="form-group">
+    <label for="config.{{.Name}}">{{.Label}}</label>
+    {{if eq .Type "select"}}
+        <select id="config.{{.Name}}" name="config.{{.Name}}">
+            {{range .Options}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
+        </select>
+    {{else}}
+        <input type="{{.Type}}" id="config.{{.Name}}" name="config.{{.Name}}"
+            {{if .Required}}required{{end}}
+            {{if .Placeholder}}placeholder="{{.Placeholder}}"{{end}}
+            {{if .Default}}value="{{.Default}}"{{end}}>
+    {{end}}
+</div>
+{{end}}
+```
+
+### Page handler — schema-driven, validates type against registry:
+
 ```go
 func (h *PageHandler) MonitorConfigFields(c *fiber.Ctx) error {
     monitorType := domain.MonitorType(c.Query("type", "http"))
     if !monitorType.Valid() {
         return c.Status(400).SendString("invalid monitor type")
     }
-    return h.render(c, "monitor_config_"+string(monitorType)+".html", nil)
+    types := h.monitoring.Registry().Types()
+    for _, t := range types {
+        if t.Type == monitorType {
+            return h.render(c, "monitor_config_fields.html", fiber.Map{"Fields": t.Schema.Fields})
+        }
+    }
+    return c.Status(404).SendString("unknown monitor type")
 }
 ```
 
-Validates against known enum before template lookup — prevents path traversal.
+### Dashboard — shows target from registry:
 
-## Frontend Changes
-
-### Monitor form — dynamic fields via HTMX:
+Templates use `.Target` field computed by the HTTP adapter via `registry.Target(monitor.Type, monitor.CheckConfig)`:
 
 ```html
-<select name="type" hx-get="/monitors/config-fields" hx-target="#config-fields" hx-include="[name='type']">
-    <option value="http">HTTP</option>
-    <option value="tcp">TCP</option>
-    <option value="dns">DNS</option>
-</select>
-
-<div id="config-fields">
-    <!-- Loaded via HTMX based on selected type -->
-</div>
+<div class="url">{{.Target}}</div>
 ```
 
-New endpoint `GET /monitors/config-fields?type=tcp` returns HTML fragment with type-specific form fields.
+### Templates:
+- `monitor_form.html` — type selector from data, HTMX dynamic fields
+- `monitor_config_fields.html` — ONE universal template, renders from ConfigSchema
+- `dashboard.html` — `.Target` instead of `.Monitor.URL`
+- `monitor_detail.html` — `.Target` instead of `.Monitor.URL`
 
-### Dashboard — shows `monitor.Target()` instead of URL:
-
-```html
-<div class="url">{{.Monitor.Target}}</div>
-```
-
-### Templates updated:
-- `monitor_form.html` — type selector + dynamic config fields
-- `dashboard.html` — `.Monitor.URL` → `.Monitor.Target`
-- `monitor_detail.html` — `.Monitor.URL` → `.Monitor.Target`
-
-### New page handler:
-
-```go
-func (h *PageHandler) MonitorConfigFields(c *fiber.Ctx) error {
-    monitorType := c.Query("type", "http")
-    return h.render(c, "monitor_config_"+monitorType+".html", nil)
-}
-```
-
-### New template partials:
-- `templates/monitor_config_http.html` — URL, Method, Expected Status, Keyword
-- `templates/monitor_config_tcp.html` — Host, Port
-- `templates/monitor_config_dns.html` — Hostname, Expected IP, DNS Server
+### Deleted templates:
+- `monitor_config_http.html` — not needed, universal template replaces all
+- `monitor_config_tcp.html` — same
+- `monitor_config_dns.html` — same
 
 ## Files Changed
 
 ### New files:
-- `internal/database/migrations/006_add_monitor_type.sql`
+- `internal/database/migrations/006_add_monitor_type_and_config.sql`
+- `internal/database/migrations/007_drop_old_monitor_columns.sql`
 - `internal/adapter/checker/registry.go`
 - `internal/adapter/checker/tcp.go`
 - `internal/adapter/checker/dns.go`
-- `internal/web/templates/monitor_config_http.html`
-- `internal/web/templates/monitor_config_tcp.html`
-- `internal/web/templates/monitor_config_dns.html`
+- `internal/web/templates/monitor_config_fields.html` — ONE universal schema-driven template
 
 ### Modified files:
 - `internal/domain/monitor.go` — MonitorType, CheckConfig, remove URL/Method/ExpectedStatus/Keyword from Monitor
