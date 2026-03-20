@@ -93,6 +93,8 @@ type ChannelTypeInfo struct {
 
 Same pattern as `CheckerRegistry`. Adding a new channel = one adapter file + registration.
 
+`ConfigSchema`, `ConfigField`, `Option` types are **reused** from `port/checker.go` — NOT redefined. Both checkers and channels share the same schema types for form rendering.
+
 ### `port/repository.go` — ChannelRepo:
 
 ```go
@@ -120,6 +122,9 @@ type AlertService struct {
 
 func NewAlertService(channels port.ChannelRepo, registry port.ChannelRegistry) *AlertService
 
+// Handle delivers an alert to all relevant channels.
+// Best-effort delivery: logs errors per channel but does NOT return error
+// to avoid NATS retry causing duplicate notifications on already-delivered channels.
 func (s *AlertService) Handle(ctx context.Context, event *domain.AlertEvent) error {
     // 1. Get channels for this monitor
     channels, _ := s.channels.ListForMonitor(ctx, event.MonitorID)
@@ -129,14 +134,14 @@ func (s *AlertService) Handle(ctx context.Context, event *domain.AlertEvent) err
         channels, _ = s.channels.ListByUserID(ctx, event.UserID)
     }
 
-    // 3. For each enabled channel → create sender → send
+    // 3. Best-effort delivery to all enabled channels
     for _, ch := range channels {
         if !ch.IsEnabled {
             continue
         }
         factory, err := s.registry.Get(ch.Type)
         if err != nil {
-            slog.Error("unknown channel type", "type", ch.Type)
+            slog.Error("unknown channel type", "type", ch.Type, "channel_id", ch.ID)
             continue
         }
         sender, err := factory.CreateSender(ch.Config)
@@ -145,12 +150,90 @@ func (s *AlertService) Handle(ctx context.Context, event *domain.AlertEvent) err
             continue
         }
         if err := sender.Send(ctx, event); err != nil {
-            return err // nack → NATS retry
+            slog.Error("channel delivery failed", "channel_id", ch.ID, "type", ch.Type, "error", err)
+            // continue to next channel — don't abort on single failure
         }
     }
-    return nil
+    return nil // always ack — no retry duplication
+}
+
+// --- Channel CRUD ---
+
+type CreateChannelInput struct {
+    Name   string
+    Type   domain.ChannelType
+    Config json.RawMessage
+}
+
+func (s *AlertService) CreateChannel(ctx context.Context, userID uuid.UUID, input CreateChannelInput) (*domain.NotificationChannel, error) {
+    if err := s.registry.ValidateConfig(input.Type, input.Config); err != nil {
+        return nil, fmt.Errorf("invalid channel config: %w", err)
+    }
+    ch := &domain.NotificationChannel{
+        UserID: userID,
+        Name:   input.Name,
+        Type:   input.Type,
+        Config: input.Config,
+    }
+    return s.channels.Create(ctx, ch)
+}
+
+func (s *AlertService) UpdateChannel(ctx context.Context, userID, channelID uuid.UUID, name string, config json.RawMessage, isEnabled bool) (*domain.NotificationChannel, error) {
+    ch, err := s.channels.GetByID(ctx, channelID)
+    if err != nil || ch.UserID != userID {
+        return nil, fmt.Errorf("channel not found")
+    }
+    if config != nil {
+        if err := s.registry.ValidateConfig(ch.Type, config); err != nil {
+            return nil, fmt.Errorf("invalid channel config: %w", err)
+        }
+        ch.Config = config
+    }
+    ch.Name = name
+    ch.IsEnabled = isEnabled
+    if err := s.channels.Update(ctx, ch); err != nil {
+        return nil, err
+    }
+    return ch, nil
+}
+
+func (s *AlertService) DeleteChannel(ctx context.Context, userID, channelID uuid.UUID) error {
+    return s.channels.Delete(ctx, channelID, userID)
+}
+
+func (s *AlertService) ListChannels(ctx context.Context, userID uuid.UUID) ([]domain.NotificationChannel, error) {
+    return s.channels.ListByUserID(ctx, userID)
+}
+
+// BindChannel binds a channel to a monitor. Both must belong to the same user.
+func (s *AlertService) BindChannel(ctx context.Context, userID, monitorID, channelID uuid.UUID, monitors port.MonitorRepo) error {
+    // Verify ownership of monitor
+    mon, err := monitors.GetByID(ctx, monitorID)
+    if err != nil || mon.UserID != userID {
+        return fmt.Errorf("monitor not found")
+    }
+    // Verify ownership of channel
+    ch, err := s.channels.GetByID(ctx, channelID)
+    if err != nil || ch.UserID != userID {
+        return fmt.Errorf("channel not found")
+    }
+    return s.channels.BindToMonitor(ctx, monitorID, channelID)
+}
+
+func (s *AlertService) UnbindChannel(ctx context.Context, userID, monitorID, channelID uuid.UUID, monitors port.MonitorRepo) error {
+    mon, err := monitors.GetByID(ctx, monitorID)
+    if err != nil || mon.UserID != userID {
+        return fmt.Errorf("monitor not found")
+    }
+    return s.channels.UnbindFromMonitor(ctx, monitorID, channelID)
 }
 ```
+
+**Design decisions:**
+- **Best-effort delivery** — logs per-channel errors, always acks NATS message. No retry duplication.
+- **Channel CRUD with authorization** — `CreateChannel`, `UpdateChannel`, `DeleteChannel` verify `userID` ownership.
+- **`BindChannel`/`UnbindChannel`** — verify ownership of BOTH monitor and channel via `userID`.
+- **Type immutable** — `UpdateChannel` does not allow changing `Type` (would invalidate config). Explicit: not in params.
 
 ### Changes to `MonitoringService.publishAlert`:
 
@@ -246,16 +329,22 @@ type WebhookChannelConfig struct {
     Headers map[string]string `json:"headers,omitempty"`
 }
 
-type Factory struct{}
+type Factory struct {
+    client *http.Client // with 10s timeout
+}
 
-func NewFactory() *Factory
+func NewFactory() *Factory {
+    return &Factory{
+        client: &http.Client{Timeout: 10 * time.Second},
+    }
+}
 
 func (f *Factory) CreateSender(config json.RawMessage) (port.AlertSender, error) {
     var cfg WebhookChannelConfig
     if err := json.Unmarshal(config, &cfg); err != nil {
         return nil, err
     }
-    return &sender{url: cfg.URL, headers: cfg.Headers}, nil
+    return &sender{client: f.client, url: cfg.URL, headers: cfg.Headers}, nil
 }
 
 func (f *Factory) ValidateConfig(raw json.RawMessage) error {
@@ -265,6 +354,18 @@ func (f *Factory) ValidateConfig(raw json.RawMessage) error {
     }
     if cfg.URL == "" {
         return fmt.Errorf("url required")
+    }
+    u, err := url.Parse(cfg.URL)
+    if err != nil {
+        return fmt.Errorf("invalid url: %w", err)
+    }
+    if u.Scheme != "http" && u.Scheme != "https" {
+        return fmt.Errorf("url must use http or https scheme")
+    }
+    // Block private/internal IP ranges (SSRF protection)
+    // Resolved at send time, not validation — but reject obvious localhost
+    if u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1" || u.Hostname() == "::1" {
+        return fmt.Errorf("webhook url cannot point to localhost")
     }
     return nil
 }
@@ -277,6 +378,7 @@ func (f *Factory) ConfigSchema() port.ConfigSchema {
 }
 
 type sender struct {
+    client  *http.Client
     url     string
     headers map[string]string
 }
@@ -288,7 +390,7 @@ func (s *sender) Send(ctx context.Context, event *domain.AlertEvent) error {
     for k, v := range s.headers {
         req.Header.Set(k, v)
     }
-    resp, err := http.DefaultClient.Do(req)
+    resp, err := s.client.Do(req)
     if err != nil {
         return err
     }
@@ -401,7 +503,11 @@ cmd/notifier/main.go:
 ```
 
 `docker-compose.yml` — notifier gets `DATABASE_URL` env var.
-`config.LoadNotifier()` — add `DatabaseURL` (optional — for notification channel lookup).
+`config.LoadNotifier()` — add `DatabaseURL` (required now — for notification channel lookup).
+
+## Deployment Order
+
+**Deploy notifier first**, then checker, then API. Reason: the new notifier reads channels from DB and ignores old `TgChatID`/`Email` fields in events (they're simply absent). Old publisher still sends events — new notifier handles them correctly by falling back to user's global channels. If API is deployed first, it sends events without routing data while old notifier expects it → silent alert loss.
 
 ## Composition Root Changes
 
