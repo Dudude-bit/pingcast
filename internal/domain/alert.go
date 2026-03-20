@@ -23,7 +23,7 @@ type AlertEvent struct {
 	MonitorID   uuid.UUID
 	IncidentID  int64
 	MonitorName string
-	MonitorURL  string
+	MonitorTarget string
 	Event       AlertEventType
 	Cause       string
 	TgChatID    *int64

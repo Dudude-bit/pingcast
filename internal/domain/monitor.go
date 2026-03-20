@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,22 +15,29 @@ const (
 	StatusUnknown MonitorStatus = "unknown"
 )
 
-type HTTPMethod string
+type MonitorType string
 
 const (
-	MethodGET  HTTPMethod = "GET"
-	MethodPOST HTTPMethod = "POST"
+	MonitorHTTP MonitorType = "http"
+	MonitorTCP  MonitorType = "tcp"
+	MonitorDNS  MonitorType = "dns"
 )
+
+func (t MonitorType) Valid() bool {
+	switch t {
+	case MonitorHTTP, MonitorTCP, MonitorDNS:
+		return true
+	}
+	return false
+}
 
 type Monitor struct {
 	ID                 uuid.UUID
 	UserID             uuid.UUID
 	Name               string
-	URL                string
-	Method             HTTPMethod
+	Type               MonitorType
+	CheckConfig        json.RawMessage
 	IntervalSeconds    int
-	ExpectedStatus     int
-	Keyword            *string
 	AlertAfterFailures int
 	IsPaused           bool
 	IsPublic           bool
