@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kirillinakin/pingcast/internal/app"
 	"github.com/kirillinakin/pingcast/internal/domain"
+	"github.com/kirillinakin/pingcast/internal/port"
 	"github.com/kirillinakin/pingcast/internal/web"
 )
 
@@ -33,12 +34,14 @@ func NewPageHandler(auth *app.AuthService, monitoring *app.MonitoringService, ra
 		"dashboard.html", "monitor_detail.html", "monitor_form.html",
 	}
 
-	templates := make(map[string]*template.Template, len(pages)+1)
+	templates := make(map[string]*template.Template, len(pages)+2)
 	for _, page := range pages {
 		templates[page] = template.Must(template.ParseFS(tmplFS, "layout.html", page))
 	}
 	// Statuspage is standalone (no layout)
 	templates["statuspage.html"] = template.Must(template.ParseFS(tmplFS, "statuspage.html"))
+	// Config fields partial (standalone, no layout)
+	templates["monitor_config_fields.html"] = template.Must(template.ParseFS(tmplFS, "monitor_config_fields.html"))
 
 	return &PageHandler{
 		auth:        auth,
@@ -104,17 +107,23 @@ func (h *PageHandler) Logout(c *fiber.Ctx) error {
 
 func (h *PageHandler) Dashboard(c *fiber.Ctx) error {
 	user := UserFromCtx(c)
+	registry := h.monitoring.Registry()
 
 	rows, _ := h.monitoring.ListMonitorsWithUptime(c.UserContext(), user.ID)
 
 	type MonitorRow struct {
 		Monitor domain.Monitor
 		Uptime  float64
+		Target  string
 	}
 
 	viewRows := make([]MonitorRow, 0, len(rows))
 	for _, r := range rows {
-		viewRows = append(viewRows, MonitorRow{Monitor: r.Monitor, Uptime: r.Uptime})
+		viewRows = append(viewRows, MonitorRow{
+			Monitor: r.Monitor,
+			Uptime:  r.Uptime,
+			Target:  registry.Target(r.Monitor.Type, r.Monitor.CheckConfig),
+		})
 	}
 
 	return h.render(c, "dashboard.html", fiber.Map{
@@ -136,10 +145,12 @@ func (h *PageHandler) MonitorDetail(c *fiber.Ctx) error {
 	}
 
 	chartJSON, _ := json.Marshal([]struct{}{}) // empty for now
+	target := h.monitoring.Registry().Target(detail.Monitor.Type, detail.Monitor.CheckConfig)
 
 	return h.render(c, "monitor_detail.html", fiber.Map{
 		"User":      user,
 		"Monitor":   detail.Monitor,
+		"Target":    target,
 		"Uptime24h": detail.Uptime24h,
 		"Uptime7d":  detail.Uptime7d,
 		"Uptime30d": detail.Uptime30d,
@@ -150,7 +161,10 @@ func (h *PageHandler) MonitorDetail(c *fiber.Ctx) error {
 
 func (h *PageHandler) MonitorNewForm(c *fiber.Ctx) error {
 	user := UserFromCtx(c)
-	return h.render(c, "monitor_form.html", fiber.Map{"User": user})
+	return h.render(c, "monitor_form.html", fiber.Map{
+		"User":         user,
+		"MonitorTypes": h.monitoring.Registry().Types(),
+	})
 }
 
 func (h *PageHandler) MonitorEditForm(c *fiber.Ctx) error {
@@ -163,7 +177,11 @@ func (h *PageHandler) MonitorEditForm(c *fiber.Ctx) error {
 	if err != nil || detail.Monitor.UserID != user.ID {
 		return c.Redirect("/dashboard")
 	}
-	return h.render(c, "monitor_form.html", fiber.Map{"User": user, "Monitor": detail.Monitor})
+	return h.render(c, "monitor_form.html", fiber.Map{
+		"User":         user,
+		"Monitor":      detail.Monitor,
+		"MonitorTypes": h.monitoring.Registry().Types(),
+	})
 }
 
 func (h *PageHandler) MonitorCreate(c *fiber.Ctx) error {
@@ -176,13 +194,6 @@ func (h *PageHandler) MonitorCreate(c *fiber.Ctx) error {
 		}
 	}
 
-	expectedStatus := 200
-	if v := c.FormValue("expected_status"); v != "" {
-		if parsed, err := strconv.Atoi(v); err == nil {
-			expectedStatus = parsed
-		}
-	}
-
 	alertAfter := 3
 	if v := c.FormValue("alert_after_failures"); v != "" {
 		if parsed, err := strconv.Atoi(v); err == nil {
@@ -190,12 +201,14 @@ func (h *PageHandler) MonitorCreate(c *fiber.Ctx) error {
 		}
 	}
 
+	monType := domain.MonitorType(c.FormValue("type"))
+	checkConfig := h.buildCheckConfigFromForm(c, monType)
+
 	input := app.CreateMonitorInput{
 		Name:               c.FormValue("name"),
-		URL:                c.FormValue("url"),
-		Method:             domain.HTTPMethod(c.FormValue("method")),
+		Type:               monType,
+		CheckConfig:        checkConfig,
 		IntervalSeconds:    interval,
-		ExpectedStatus:     expectedStatus,
 		AlertAfterFailures: alertAfter,
 		IsPublic:           c.FormValue("is_public") == "on",
 	}
@@ -203,11 +216,66 @@ func (h *PageHandler) MonitorCreate(c *fiber.Ctx) error {
 	_, err := h.monitoring.CreateMonitor(c.UserContext(), user, input)
 	if err != nil {
 		return h.render(c, "monitor_form.html", fiber.Map{
-			"User": user, "Error": err.Error(),
+			"User":         user,
+			"Error":        err.Error(),
+			"MonitorTypes": h.monitoring.Registry().Types(),
 		})
 	}
 
 	return c.Redirect("/dashboard")
+}
+
+// MonitorConfigFields returns the dynamic config fields for a monitor type (HTMX endpoint).
+func (h *PageHandler) MonitorConfigFields(c *fiber.Ctx) error {
+	monType := domain.MonitorType(c.Query("type"))
+	registry := h.monitoring.Registry()
+
+	chk, err := registry.Get(monType)
+	if err != nil {
+		return c.Status(400).SendString("unknown monitor type")
+	}
+
+	schema := chk.ConfigSchema()
+	return h.render(c, "monitor_config_fields.html", fiber.Map{
+		"Fields": schema.Fields,
+	})
+}
+
+// buildCheckConfigFromForm reads config field values from the form based on the schema.
+func (h *PageHandler) buildCheckConfigFromForm(c *fiber.Ctx, monType domain.MonitorType) json.RawMessage {
+	registry := h.monitoring.Registry()
+	chk, err := registry.Get(monType)
+	if err != nil {
+		return json.RawMessage("{}")
+	}
+
+	schema := chk.ConfigSchema()
+	cfg := make(map[string]any, len(schema.Fields))
+	for _, f := range schema.Fields {
+		val := c.FormValue("config_" + f.Name)
+		if val == "" {
+			continue
+		}
+		switch f.Type {
+		case "number":
+			if n, err := strconv.Atoi(val); err == nil {
+				cfg[f.Name] = n
+			}
+		default:
+			cfg[f.Name] = val
+		}
+	}
+	data, _ := json.Marshal(cfg)
+	return data
+}
+
+// configFieldsForType returns config schema fields for a given type (used by pages that need schema info).
+func configFieldsForType(registry port.CheckerRegistry, monType domain.MonitorType) []port.ConfigField {
+	chk, err := registry.Get(monType)
+	if err != nil {
+		return nil
+	}
+	return chk.ConfigSchema().Fields
 }
 
 func (h *PageHandler) StatusPage(c *fiber.Ctx) error {
@@ -248,7 +316,7 @@ func (h *PageHandler) render(c *fiber.Ctx, name string, data fiber.Map) error {
 
 	// Layout-based pages render via "layout.html", standalone pages by their own name
 	execName := "layout.html"
-	if name == "statuspage.html" {
+	if name == "statuspage.html" || name == "monitor_config_fields.html" {
 		execName = name
 	}
 

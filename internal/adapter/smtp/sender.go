@@ -36,15 +36,15 @@ func (s *Sender) ForRecipient(to string) port.AlertSender {
 	return &recipientAlert{sender: s, to: to}
 }
 
-func (a *recipientAlert) NotifyDown(_ context.Context, name, url, cause string) error {
+func (a *recipientAlert) NotifyDown(_ context.Context, name, target, cause string) error {
 	subject := fmt.Sprintf("[PingCast] %s is DOWN", name)
-	body := fmt.Sprintf("Monitor: %s\nURL: %s\nStatus: DOWN\nCause: %s", name, url, cause)
+	body := fmt.Sprintf("Monitor: %s\nTarget: %s\nStatus: DOWN\nCause: %s", name, target, cause)
 	return a.sender.send(a.to, subject, body)
 }
 
-func (a *recipientAlert) NotifyUp(_ context.Context, name, url string) error {
+func (a *recipientAlert) NotifyUp(_ context.Context, name, target string) error {
 	subject := fmt.Sprintf("[PingCast] %s is back UP", name)
-	body := fmt.Sprintf("Monitor: %s\nURL: %s\nStatus: UP", name, url)
+	body := fmt.Sprintf("Monitor: %s\nTarget: %s\nStatus: UP", name, target)
 	return a.sender.send(a.to, subject, body)
 }
 

@@ -12,7 +12,7 @@
         <span class="status-dot {{if eq .Monitor.CurrentStatus "up"}}status-dot-up{{else if eq .Monitor.CurrentStatus "down"}}status-dot-down{{else}}status-dot-unknown{{end}}"></span>
         <div>
             <div class="name">{{.Monitor.Name}}</div>
-            <div class="url">{{.Monitor.URL}}</div>
+            <div class="url">{{.Target}}</div>
         </div>
         <span class="meta">{{.Monitor.IntervalSeconds}}s</span>
         <span class="uptime {{if ge .Uptime 99.5}}uptime-high{{else if ge .Uptime 95.0}}uptime-mid{{else}}uptime-low{{end}}">{{printf "%.1f" .Uptime}}%</span>

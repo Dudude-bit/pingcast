@@ -68,6 +68,12 @@ func SetupApp(
 		},
 	})
 
+	// Monitor type config (HTMX partial, authenticated)
+	app.Get("/monitors/config-fields", PageMiddleware(authService), pageHandler.MonitorConfigFields)
+
+	// API: list available monitor types
+	app.Get("/api/monitor-types", server.ListMonitorTypes)
+
 	// Authenticated HTML pages
 	authed := app.Group("", PageMiddleware(authService))
 	authed.Get("/dashboard", pageHandler.Dashboard)

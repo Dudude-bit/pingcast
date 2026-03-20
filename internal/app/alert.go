@@ -35,9 +35,9 @@ func (s *AlertService) Handle(ctx context.Context, event *domain.AlertEvent) err
 		var err error
 		switch event.Event {
 		case domain.AlertDown:
-			err = sender.NotifyDown(ctx, event.MonitorName, event.MonitorURL, event.Cause)
+			err = sender.NotifyDown(ctx, event.MonitorName, event.MonitorTarget, event.Cause)
 		case domain.AlertUp:
-			err = sender.NotifyUp(ctx, event.MonitorName, event.MonitorURL)
+			err = sender.NotifyUp(ctx, event.MonitorName, event.MonitorTarget)
 		}
 		if err != nil {
 			return fmt.Errorf("alert delivery failed: %w", err)

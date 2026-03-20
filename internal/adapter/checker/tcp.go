@@ -39,7 +39,7 @@ func (c *TCPChecker) Check(ctx context.Context, monitor *domain.Monitor) *domain
 		return result
 	}
 
-	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	addr := net.JoinHostPort(cfg.Host, fmt.Sprintf("%d", cfg.Port))
 	conn, err := net.DialTimeout("tcp", addr, c.timeout)
 	result.ResponseTimeMs = int(time.Since(start).Milliseconds())
 

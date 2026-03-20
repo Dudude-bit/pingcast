@@ -1,8 +1,10 @@
 package postgres
 
 import (
+	"encoding/json"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/kirillinakin/pingcast/internal/domain"
@@ -103,33 +105,73 @@ func userFromGetBySlugRow(r gen.GetUserBySlugRow) *domain.User {
 // Monitor mappers
 // ---------------------------------------------------------------------------
 
-func monitorFromRow(r gen.Monitor) domain.Monitor {
+func toDomainMonitor(
+	id, userID uuid.UUID,
+	name, typ string,
+	checkConfig []byte,
+	intervalSeconds, alertAfterFailures int32,
+	isPaused, isPublic bool,
+	currentStatus string,
+	createdAt time.Time,
+) domain.Monitor {
 	return domain.Monitor{
-		ID:                 r.ID,
-		UserID:             r.UserID,
-		Name:               r.Name,
-		URL:                r.Url,
-		Method:             domain.HTTPMethod(r.Method),
-		IntervalSeconds:    int(r.IntervalSeconds),
-		ExpectedStatus:     int(r.ExpectedStatus),
-		Keyword:            r.Keyword,
-		AlertAfterFailures: int(r.AlertAfterFailures),
-		IsPaused:           r.IsPaused,
-		IsPublic:           r.IsPublic,
-		CurrentStatus:      domain.MonitorStatus(r.CurrentStatus),
-		CreatedAt:          r.CreatedAt,
+		ID:                 id,
+		UserID:             userID,
+		Name:               name,
+		Type:               domain.MonitorType(typ),
+		CheckConfig:        json.RawMessage(checkConfig),
+		IntervalSeconds:    int(intervalSeconds),
+		AlertAfterFailures: int(alertAfterFailures),
+		IsPaused:           isPaused,
+		IsPublic:           isPublic,
+		CurrentStatus:      domain.MonitorStatus(currentStatus),
+		CreatedAt:          createdAt,
 	}
+}
+
+func monitorFromRow(r gen.Monitor) domain.Monitor {
+	return toDomainMonitor(r.ID, r.UserID, r.Name, r.Type, r.CheckConfig,
+		r.IntervalSeconds, r.AlertAfterFailures, r.IsPaused, r.IsPublic,
+		r.CurrentStatus, r.CreatedAt)
+}
+
+func monitorFromCreateRow(r gen.CreateMonitorRow) domain.Monitor {
+	return toDomainMonitor(r.ID, r.UserID, r.Name, r.Type, r.CheckConfig,
+		r.IntervalSeconds, r.AlertAfterFailures, r.IsPaused, r.IsPublic,
+		r.CurrentStatus, r.CreatedAt)
+}
+
+func monitorFromGetByIDRow(r gen.GetMonitorByIDRow) domain.Monitor {
+	return toDomainMonitor(r.ID, r.UserID, r.Name, r.Type, r.CheckConfig,
+		r.IntervalSeconds, r.AlertAfterFailures, r.IsPaused, r.IsPublic,
+		r.CurrentStatus, r.CreatedAt)
+}
+
+func monitorFromListByUserIDRow(r gen.ListMonitorsByUserIDRow) domain.Monitor {
+	return toDomainMonitor(r.ID, r.UserID, r.Name, r.Type, r.CheckConfig,
+		r.IntervalSeconds, r.AlertAfterFailures, r.IsPaused, r.IsPublic,
+		r.CurrentStatus, r.CreatedAt)
+}
+
+func monitorFromListPublicRow(r gen.ListPublicMonitorsByUserSlugRow) domain.Monitor {
+	return toDomainMonitor(r.ID, r.UserID, r.Name, r.Type, r.CheckConfig,
+		r.IntervalSeconds, r.AlertAfterFailures, r.IsPaused, r.IsPublic,
+		r.CurrentStatus, r.CreatedAt)
+}
+
+func monitorFromListActiveRow(r gen.ListActiveMonitorsRow) domain.Monitor {
+	return toDomainMonitor(r.ID, r.UserID, r.Name, r.Type, r.CheckConfig,
+		r.IntervalSeconds, r.AlertAfterFailures, r.IsPaused, r.IsPublic,
+		r.CurrentStatus, r.CreatedAt)
 }
 
 func monitorToCreateParams(m *domain.Monitor) gen.CreateMonitorParams {
 	return gen.CreateMonitorParams{
 		UserID:             m.UserID,
 		Name:               m.Name,
-		Url:                m.URL,
-		Method:             string(m.Method),
+		Type:               string(m.Type),
+		CheckConfig:        []byte(m.CheckConfig),
 		IntervalSeconds:    int32(m.IntervalSeconds),
-		ExpectedStatus:     int32(m.ExpectedStatus),
-		Keyword:            m.Keyword,
 		AlertAfterFailures: int32(m.AlertAfterFailures),
 		IsPaused:           m.IsPaused,
 		IsPublic:           m.IsPublic,
@@ -141,11 +183,8 @@ func monitorToUpdateParams(m *domain.Monitor) gen.UpdateMonitorParams {
 		ID:                 m.ID,
 		UserID:             m.UserID,
 		Name:               m.Name,
-		Url:                m.URL,
-		Method:             string(m.Method),
+		CheckConfig:        []byte(m.CheckConfig),
 		IntervalSeconds:    int32(m.IntervalSeconds),
-		ExpectedStatus:     int32(m.ExpectedStatus),
-		Keyword:            m.Keyword,
 		AlertAfterFailures: int32(m.AlertAfterFailures),
 		IsPaused:           m.IsPaused,
 		IsPublic:           m.IsPublic,

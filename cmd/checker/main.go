@@ -11,10 +11,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go/jetstream"
 
+	"github.com/kirillinakin/pingcast/internal/adapter/checker"
 	natsadapter "github.com/kirillinakin/pingcast/internal/adapter/nats"
 	"github.com/kirillinakin/pingcast/internal/adapter/postgres"
 	"github.com/kirillinakin/pingcast/internal/app"
-	"github.com/kirillinakin/pingcast/internal/adapter/checker"
 	"github.com/kirillinakin/pingcast/internal/config"
 	"github.com/kirillinakin/pingcast/internal/database"
 	"github.com/kirillinakin/pingcast/internal/domain"
@@ -72,16 +72,19 @@ func main() {
 	// NATS publisher
 	alertPub := natsadapter.NewAlertPublisher(js)
 
-	// Checker (implements port.MonitorChecker)
-	httpChecker := checker.NewClient()
+	// Checker registry
+	registry := checker.NewRegistry()
+	registry.Register(domain.MonitorHTTP, "HTTP", checker.NewHTTPChecker())
+	registry.Register(domain.MonitorTCP, "TCP", checker.NewTCPChecker(10*time.Second))
+	registry.Register(domain.MonitorDNS, "DNS", checker.NewDNSChecker())
 
-	// App service (checker injected via port)
-	monitoringSvc := app.NewMonitoringService(monitorRepo, checkResultRepo, incidentRepo, userRepo, alertPub, httpChecker)
+	// App service (registry injected via port)
+	monitoringSvc := app.NewMonitoringService(monitorRepo, checkResultRepo, incidentRepo, userRepo, alertPub, registry)
 
 	// Worker pool delegates to MonitoringService.RunCheck
-	workerPool := checker.NewWorkerPool(ctx, 100, httpChecker, func(ctx context.Context, monitor *domain.Monitor, result *domain.CheckResult) {
-		if err := monitoringSvc.ProcessCheckResult(ctx, monitor, result); err != nil {
-			slog.Error("failed to process check result", "monitor_id", monitor.ID, "error", err)
+	workerPool := checker.NewWorkerPool(ctx, 100, registry, func(ctx context.Context, monitor *domain.Monitor) {
+		if err := monitoringSvc.RunCheck(ctx, monitor); err != nil {
+			slog.Error("failed to run check", "monitor_id", monitor.ID, "error", err)
 		}
 	})
 

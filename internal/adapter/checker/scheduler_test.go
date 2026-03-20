@@ -1,6 +1,7 @@
 package checker_test
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -19,6 +20,8 @@ func TestScheduler_AddsAndFires(t *testing.T) {
 	id := uuid.New()
 	s.Add(&domain.Monitor{
 		ID:              id,
+		Type:            domain.MonitorHTTP,
+		CheckConfig:     json.RawMessage(`{"url":"http://localhost"}`),
 		IntervalSeconds: 1,
 	})
 	defer s.Stop()
@@ -43,6 +46,8 @@ func TestScheduler_Remove(t *testing.T) {
 	id := uuid.New()
 	s.Add(&domain.Monitor{
 		ID:              id,
+		Type:            domain.MonitorHTTP,
+		CheckConfig:     json.RawMessage(`{"url":"http://localhost"}`),
 		IntervalSeconds: 1,
 	})
 	s.Remove(id)

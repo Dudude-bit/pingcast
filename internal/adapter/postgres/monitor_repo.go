@@ -25,7 +25,7 @@ func (r *MonitorRepo) Create(ctx context.Context, m *domain.Monitor) (*domain.Mo
 	if err != nil {
 		return nil, err
 	}
-	out := monitorFromRow(row)
+	out := monitorFromCreateRow(row)
 	return &out, nil
 }
 
@@ -34,7 +34,7 @@ func (r *MonitorRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Monito
 	if err != nil {
 		return nil, err
 	}
-	out := monitorFromRow(row)
+	out := monitorFromGetByIDRow(row)
 	return &out, nil
 }
 
@@ -45,7 +45,7 @@ func (r *MonitorRepo) ListByUserID(ctx context.Context, userID uuid.UUID) ([]dom
 	}
 	out := make([]domain.Monitor, len(rows))
 	for i, row := range rows {
-		out[i] = monitorFromRow(row)
+		out[i] = monitorFromListByUserIDRow(row)
 	}
 	return out, nil
 }
@@ -57,7 +57,7 @@ func (r *MonitorRepo) ListPublicBySlug(ctx context.Context, slug string) ([]doma
 	}
 	out := make([]domain.Monitor, len(rows))
 	for i, row := range rows {
-		out[i] = monitorFromRow(row)
+		out[i] = monitorFromListPublicRow(row)
 	}
 	return out, nil
 }
@@ -69,7 +69,7 @@ func (r *MonitorRepo) ListActive(ctx context.Context) ([]domain.Monitor, error) 
 	}
 	out := make([]domain.Monitor, len(rows))
 	for i, row := range rows {
-		out[i] = monitorFromRow(row)
+		out[i] = monitorFromListActiveRow(row)
 	}
 	return out, nil
 }

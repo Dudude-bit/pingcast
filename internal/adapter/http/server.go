@@ -1,6 +1,7 @@
 package httpadapter
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -104,7 +105,7 @@ func (s *Server) ListMonitors(c *fiber.Ctx) error {
 	result := make([]apigen.MonitorWithUptime, 0, len(rows))
 	for _, r := range rows {
 		uptimeF := float32(r.Uptime)
-		result = append(result, domainMonitorToAPIWithUptime(&r.Monitor, &uptimeF))
+		result = append(result, s.domainMonitorToAPIWithUptime(&r.Monitor, &uptimeF))
 	}
 
 	return c.JSON(result)
@@ -121,21 +122,22 @@ func (s *Server) CreateMonitor(c *fiber.Ctx) error {
 		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid request body")})
 	}
 
-	input := app.CreateMonitorInput{
-		Name: req.Name,
-		URL:  req.Url,
-	}
+	// Build check config from legacy API fields for backward compatibility.
+	monType := domain.MonitorHTTP
+	var methodStr *string
 	if req.Method != nil {
-		input.Method = domain.HTTPMethod(*req.Method)
+		ms := string(*req.Method)
+		methodStr = &ms
+	}
+	checkConfig := buildHTTPCheckConfig(req.Url, methodStr, req.ExpectedStatus, req.Keyword)
+
+	input := app.CreateMonitorInput{
+		Name:        req.Name,
+		Type:        monType,
+		CheckConfig: checkConfig,
 	}
 	if req.IntervalSeconds != nil {
 		input.IntervalSeconds = int(*req.IntervalSeconds)
-	}
-	if req.ExpectedStatus != nil {
-		input.ExpectedStatus = *req.ExpectedStatus
-	}
-	if req.Keyword != nil {
-		input.Keyword = req.Keyword
 	}
 	if req.AlertAfterFailures != nil {
 		input.AlertAfterFailures = *req.AlertAfterFailures
@@ -153,7 +155,13 @@ func (s *Server) CreateMonitor(c *fiber.Ctx) error {
 		s.events.PublishMonitorChanged(c.UserContext(), domain.ActionCreate, mon.ID, mon)
 	}
 
-	return c.Status(201).JSON(domainMonitorToAPI(mon))
+	return c.Status(201).JSON(s.domainMonitorToAPI(mon))
+}
+
+// ListMonitorTypes returns available monitor types and their config schemas.
+func (s *Server) ListMonitorTypes(c *fiber.Ctx) error {
+	types := s.monitoring.Registry().Types()
+	return c.JSON(types)
 }
 
 func (s *Server) GetMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
@@ -172,7 +180,7 @@ func (s *Server) GetMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 		apiIncidents = append(apiIncidents, domainIncidentToAPI(&inc))
 	}
 
-	return c.JSON(domainMonitorToAPIDetail(
+	return c.JSON(s.domainMonitorToAPIDetail(
 		&detail.Monitor,
 		detail.Uptime24h, detail.Uptime7d, detail.Uptime30d,
 		nil, apiIncidents,
@@ -192,22 +200,22 @@ func (s *Server) UpdateMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 
 	input := app.UpdateMonitorInput{
 		Name:               req.Name,
-		URL:                req.Url,
-		Keyword:            req.Keyword,
 		AlertAfterFailures: req.AlertAfterFailures,
 		IsPaused:           req.IsPaused,
 		IsPublic:           req.IsPublic,
-	}
-	if req.Method != nil {
-		m := domain.HTTPMethod(*req.Method)
-		input.Method = &m
 	}
 	if req.IntervalSeconds != nil {
 		v := int(*req.IntervalSeconds)
 		input.IntervalSeconds = &v
 	}
-	if req.ExpectedStatus != nil {
-		input.ExpectedStatus = req.ExpectedStatus
+	// Build check config from legacy fields if URL is provided.
+	if req.Url != nil {
+		var mStr *string
+		if req.Method != nil {
+			ms := string(*req.Method)
+			mStr = &ms
+		}
+		input.CheckConfig = buildHTTPCheckConfig(*req.Url, mStr, req.ExpectedStatus, req.Keyword)
 	}
 
 	updated, err := s.monitoring.UpdateMonitor(c.UserContext(), user, uuid.UUID(id), input)
@@ -219,7 +227,7 @@ func (s *Server) UpdateMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 		s.events.PublishMonitorChanged(c.UserContext(), domain.ActionUpdate, updated.ID, updated)
 	}
 
-	return c.JSON(domainMonitorToAPI(updated))
+	return c.JSON(s.domainMonitorToAPI(updated))
 }
 
 func (s *Server) DeleteMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
@@ -259,7 +267,7 @@ func (s *Server) ToggleMonitorPause(c *fiber.Ctx, id openapi_types.UUID) error {
 		}
 	}
 
-	return c.JSON(domainMonitorToAPI(updated))
+	return c.JSON(s.domainMonitorToAPI(updated))
 }
 
 func (s *Server) GetStatusPage(c *fiber.Ctx, slug string) error {
@@ -324,20 +332,16 @@ func domainUserToAPI(u *domain.User) *apigen.User {
 	}
 }
 
-func domainMonitorToAPI(m *domain.Monitor) apigen.Monitor {
+func (s *Server) domainMonitorToAPI(m *domain.Monitor) apigen.Monitor {
 	status := apigen.MonitorCurrentStatus(m.CurrentStatus)
-	method := apigen.MonitorMethod(m.Method)
 	intervalSeconds := m.IntervalSeconds
-	expectedStatus := m.ExpectedStatus
 	alertAfter := m.AlertAfterFailures
+	target := s.monitoring.Registry().Target(m.Type, m.CheckConfig)
 	return apigen.Monitor{
 		Id:                 (*openapi_types.UUID)(&m.ID),
 		Name:               &m.Name,
-		Url:                &m.URL,
-		Method:             &method,
+		Url:                &target,
 		IntervalSeconds:    &intervalSeconds,
-		ExpectedStatus:     &expectedStatus,
-		Keyword:            m.Keyword,
 		AlertAfterFailures: &alertAfter,
 		IsPaused:           &m.IsPaused,
 		IsPublic:           &m.IsPublic,
@@ -346,20 +350,16 @@ func domainMonitorToAPI(m *domain.Monitor) apigen.Monitor {
 	}
 }
 
-func domainMonitorToAPIWithUptime(m *domain.Monitor, uptime *float32) apigen.MonitorWithUptime {
+func (s *Server) domainMonitorToAPIWithUptime(m *domain.Monitor, uptime *float32) apigen.MonitorWithUptime {
 	status := apigen.MonitorWithUptimeCurrentStatus(m.CurrentStatus)
-	method := apigen.MonitorWithUptimeMethod(m.Method)
 	intervalSeconds := m.IntervalSeconds
-	expectedStatus := m.ExpectedStatus
 	alertAfter := m.AlertAfterFailures
+	target := s.monitoring.Registry().Target(m.Type, m.CheckConfig)
 	return apigen.MonitorWithUptime{
 		Id:                 (*openapi_types.UUID)(&m.ID),
 		Name:               &m.Name,
-		Url:                &m.URL,
-		Method:             &method,
+		Url:                &target,
 		IntervalSeconds:    &intervalSeconds,
-		ExpectedStatus:     &expectedStatus,
-		Keyword:            m.Keyword,
 		AlertAfterFailures: &alertAfter,
 		IsPaused:           &m.IsPaused,
 		IsPublic:           &m.IsPublic,
@@ -369,23 +369,19 @@ func domainMonitorToAPIWithUptime(m *domain.Monitor, uptime *float32) apigen.Mon
 	}
 }
 
-func domainMonitorToAPIDetail(m *domain.Monitor, u24h, u7d, u30d float64, chartData []apigen.ChartPoint, incidents []apigen.Incident) apigen.MonitorDetail {
+func (s *Server) domainMonitorToAPIDetail(m *domain.Monitor, u24h, u7d, u30d float64, chartData []apigen.ChartPoint, incidents []apigen.Incident) apigen.MonitorDetail {
 	status := apigen.MonitorDetailCurrentStatus(m.CurrentStatus)
-	method := apigen.MonitorDetailMethod(m.Method)
 	intervalSeconds := m.IntervalSeconds
-	expectedStatus := m.ExpectedStatus
 	alertAfter := m.AlertAfterFailures
+	target := s.monitoring.Registry().Target(m.Type, m.CheckConfig)
 	u24 := float32(u24h)
 	u7 := float32(u7d)
 	u30 := float32(u30d)
 	return apigen.MonitorDetail{
 		Id:                 (*openapi_types.UUID)(&m.ID),
 		Name:               &m.Name,
-		Url:                &m.URL,
-		Method:             &method,
+		Url:                &target,
 		IntervalSeconds:    &intervalSeconds,
-		ExpectedStatus:     &expectedStatus,
-		Keyword:            m.Keyword,
 		AlertAfterFailures: &alertAfter,
 		IsPaused:           &m.IsPaused,
 		IsPublic:           &m.IsPublic,
@@ -397,6 +393,26 @@ func domainMonitorToAPIDetail(m *domain.Monitor, u24h, u7d, u30d float64, chartD
 		ChartData:          &chartData,
 		Incidents:          &incidents,
 	}
+}
+
+// buildHTTPCheckConfig constructs a JSON check_config for HTTP monitors from legacy API fields.
+func buildHTTPCheckConfig(url string, method *string, expectedStatus *int, keyword *string) json.RawMessage {
+	cfg := map[string]any{"url": url}
+	if method != nil {
+		cfg["method"] = *method
+	} else {
+		cfg["method"] = "GET"
+	}
+	if expectedStatus != nil {
+		cfg["expected_status"] = *expectedStatus
+	} else {
+		cfg["expected_status"] = 200
+	}
+	if keyword != nil {
+		cfg["keyword"] = *keyword
+	}
+	data, _ := json.Marshal(cfg)
+	return data
 }
 
 func domainIncidentToAPI(i *domain.Incident) apigen.Incident {

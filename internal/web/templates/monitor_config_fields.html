@@ -1,0 +1,16 @@
+{{range .Fields}}
+<div class="form-group">
+    <label for="config_{{.Name}}">{{.Label}}{{if .Required}} *{{end}}</label>
+    {{if eq .Type "select"}}
+    <select id="config_{{.Name}}" name="config_{{.Name}}" {{if .Required}}required{{end}}>
+        {{range .Options}}
+        <option value="{{.Value}}">{{.Label}}</option>
+        {{end}}
+    </select>
+    {{else if eq .Type "number"}}
+    <input type="number" id="config_{{.Name}}" name="config_{{.Name}}" {{if .Required}}required{{end}} {{if .Default}}value="{{.Default}}"{{end}} {{if .Placeholder}}placeholder="{{.Placeholder}}"{{end}}>
+    {{else}}
+    <input type="text" id="config_{{.Name}}" name="config_{{.Name}}" {{if .Required}}required{{end}} {{if .Default}}value="{{.Default}}"{{end}} {{if .Placeholder}}placeholder="{{.Placeholder}}"{{end}}>
+    {{end}}
+</div>
+{{end}}

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -16,7 +17,7 @@ type MonitoringService struct {
 	incidents    port.IncidentRepo
 	users        port.UserRepo
 	alerts       port.AlertEventPublisher
-	checker      port.MonitorChecker
+	registry     port.CheckerRegistry
 }
 
 func NewMonitoringService(
@@ -25,7 +26,7 @@ func NewMonitoringService(
 	incidents port.IncidentRepo,
 	users port.UserRepo,
 	alerts port.AlertEventPublisher,
-	checker port.MonitorChecker,
+	registry port.CheckerRegistry,
 ) *MonitoringService {
 	return &MonitoringService{
 		monitors:     monitors,
@@ -33,24 +34,31 @@ func NewMonitoringService(
 		incidents:    incidents,
 		users:        users,
 		alerts:       alerts,
-		checker:      checker,
+		registry:     registry,
 	}
 }
 
-// RunCheck executes a health check via the injected MonitorChecker port
-// and processes the result (status transitions, incidents, alerts).
+// Registry returns the checker registry.
+func (s *MonitoringService) Registry() port.CheckerRegistry {
+	return s.registry
+}
+
+// RunCheck executes a health check via the registry and processes the result
+// (status transitions, incidents, alerts).
 func (s *MonitoringService) RunCheck(ctx context.Context, monitor *domain.Monitor) error {
-	result := s.checker.Check(ctx, monitor)
+	chk, err := s.registry.Get(monitor.Type)
+	if err != nil {
+		return fmt.Errorf("unknown monitor type %s: %w", monitor.Type, err)
+	}
+	result := chk.Check(ctx, monitor)
 	return s.ProcessCheckResult(ctx, monitor, result)
 }
 
 type CreateMonitorInput struct {
 	Name               string
-	URL                string
-	Method             domain.HTTPMethod
+	Type               domain.MonitorType
+	CheckConfig        json.RawMessage
 	IntervalSeconds    int
-	ExpectedStatus     int
-	Keyword            *string
 	AlertAfterFailures int
 	IsPublic           bool
 }
@@ -64,6 +72,10 @@ func (s *MonitoringService) CreateMonitor(ctx context.Context, user *domain.User
 		return nil, fmt.Errorf("monitor limit reached")
 	}
 
+	if err := s.registry.ValidateConfig(input.Type, input.CheckConfig); err != nil {
+		return nil, fmt.Errorf("invalid check config: %w", err)
+	}
+
 	interval := max(input.IntervalSeconds, user.MinInterval())
 
 	alertAfter := max(input.AlertAfterFailures, 1)
@@ -71,24 +83,12 @@ func (s *MonitoringService) CreateMonitor(ctx context.Context, user *domain.User
 		alertAfter = 3
 	}
 
-	method := input.Method
-	if method == "" {
-		method = domain.MethodGET
-	}
-
-	expectedStatus := input.ExpectedStatus
-	if expectedStatus == 0 {
-		expectedStatus = 200
-	}
-
 	mon := &domain.Monitor{
 		UserID:             user.ID,
 		Name:               input.Name,
-		URL:                input.URL,
-		Method:             method,
+		Type:               input.Type,
+		CheckConfig:        input.CheckConfig,
 		IntervalSeconds:    interval,
-		ExpectedStatus:     expectedStatus,
-		Keyword:            input.Keyword,
 		AlertAfterFailures: alertAfter,
 		IsPublic:           input.IsPublic,
 		CurrentStatus:      domain.StatusUnknown,
@@ -99,11 +99,8 @@ func (s *MonitoringService) CreateMonitor(ctx context.Context, user *domain.User
 
 type UpdateMonitorInput struct {
 	Name               *string
-	URL                *string
-	Method             *domain.HTTPMethod
+	CheckConfig        json.RawMessage
 	IntervalSeconds    *int
-	ExpectedStatus     *int
-	Keyword            *string
 	AlertAfterFailures *int
 	IsPaused           *bool
 	IsPublic           *bool
@@ -121,20 +118,14 @@ func (s *MonitoringService) UpdateMonitor(ctx context.Context, user *domain.User
 	if input.Name != nil {
 		mon.Name = *input.Name
 	}
-	if input.URL != nil {
-		mon.URL = *input.URL
-	}
-	if input.Method != nil {
-		mon.Method = *input.Method
+	if input.CheckConfig != nil {
+		if err := s.registry.ValidateConfig(mon.Type, input.CheckConfig); err != nil {
+			return nil, fmt.Errorf("invalid check config: %w", err)
+		}
+		mon.CheckConfig = input.CheckConfig
 	}
 	if input.IntervalSeconds != nil {
 		mon.IntervalSeconds = *input.IntervalSeconds
-	}
-	if input.ExpectedStatus != nil {
-		mon.ExpectedStatus = *input.ExpectedStatus
-	}
-	if input.Keyword != nil {
-		mon.Keyword = input.Keyword
 	}
 	if input.AlertAfterFailures != nil {
 		mon.AlertAfterFailures = *input.AlertAfterFailures
@@ -255,15 +246,15 @@ func (s *MonitoringService) publishAlert(ctx context.Context, monitor *domain.Mo
 	}
 
 	event := &domain.AlertEvent{
-		MonitorID:   monitor.ID,
-		IncidentID:  incidentID,
-		MonitorName: monitor.Name,
-		MonitorURL:  monitor.URL,
-		Event:       eventType,
-		Cause:       cause,
-		TgChatID:    user.TgChatID,
-		Email:       user.Email,
-		Plan:        user.Plan,
+		MonitorID:     monitor.ID,
+		IncidentID:    incidentID,
+		MonitorName:   monitor.Name,
+		MonitorTarget: s.registry.Target(monitor.Type, monitor.CheckConfig),
+		Event:         eventType,
+		Cause:         cause,
+		TgChatID:      user.TgChatID,
+		Email:         user.Email,
+		Plan:          user.Plan,
 	}
 
 	return s.alerts.PublishAlert(ctx, event)

@@ -2,6 +2,7 @@ package checker_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,7 +11,23 @@ import (
 	"github.com/kirillinakin/pingcast/internal/domain"
 )
 
-func TestChecker_CheckUp(t *testing.T) {
+func httpMonitor(url string, method string, expectedStatus int, keyword *string) *domain.Monitor {
+	cfg := map[string]any{
+		"url":             url,
+		"method":          method,
+		"expected_status": expectedStatus,
+	}
+	if keyword != nil {
+		cfg["keyword"] = *keyword
+	}
+	data, _ := json.Marshal(cfg)
+	return &domain.Monitor{
+		Type:        domain.MonitorHTTP,
+		CheckConfig: data,
+	}
+}
+
+func TestHTTPChecker_CheckUp(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("User-Agent") != "PingCast/1.0 (uptime monitor; https://pingcast.io)" {
 			t.Errorf("unexpected User-Agent: %s", r.Header.Get("User-Agent"))
@@ -20,12 +37,8 @@ func TestChecker_CheckUp(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := checker.NewClient()
-	result := c.Check(context.Background(), &domain.Monitor{
-		URL:            server.URL,
-		Method:         domain.MethodGET,
-		ExpectedStatus: 200,
-	})
+	c := checker.NewHTTPChecker()
+	result := c.Check(context.Background(), httpMonitor(server.URL, "GET", 200, nil))
 
 	if result.Status != domain.StatusUp {
 		t.Errorf("status = %q, want %q", result.Status, domain.StatusUp)
@@ -38,36 +51,28 @@ func TestChecker_CheckUp(t *testing.T) {
 	}
 }
 
-func TestChecker_CheckDown_WrongStatus(t *testing.T) {
+func TestHTTPChecker_CheckDown_WrongStatus(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(500)
 	}))
 	defer server.Close()
 
-	c := checker.NewClient()
-	result := c.Check(context.Background(), &domain.Monitor{
-		URL:            server.URL,
-		Method:         domain.MethodGET,
-		ExpectedStatus: 200,
-	})
+	c := checker.NewHTTPChecker()
+	result := c.Check(context.Background(), httpMonitor(server.URL, "GET", 200, nil))
 
 	if result.Status != domain.StatusDown {
 		t.Errorf("status = %q, want %q", result.Status, domain.StatusDown)
 	}
 }
 
-func TestChecker_CheckDown_Timeout(t *testing.T) {
+func TestHTTPChecker_CheckDown_Timeout(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		<-r.Context().Done()
 	}))
 	defer server.Close()
 
-	c := checker.NewClientWithTimeout(1)
-	result := c.Check(context.Background(), &domain.Monitor{
-		URL:            server.URL,
-		Method:         domain.MethodGET,
-		ExpectedStatus: 200,
-	})
+	c := checker.NewHTTPCheckerWithTimeout(1)
+	result := c.Check(context.Background(), httpMonitor(server.URL, "GET", 200, nil))
 
 	if result.Status != domain.StatusDown {
 		t.Errorf("status = %q, want %q", result.Status, domain.StatusDown)
@@ -77,7 +82,7 @@ func TestChecker_CheckDown_Timeout(t *testing.T) {
 	}
 }
 
-func TestChecker_KeywordFound(t *testing.T) {
+func TestHTTPChecker_KeywordFound(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
 		w.Write([]byte("all systems operational"))
@@ -85,19 +90,14 @@ func TestChecker_KeywordFound(t *testing.T) {
 	defer server.Close()
 
 	keyword := "operational"
-	c := checker.NewClient()
-	result := c.Check(context.Background(), &domain.Monitor{
-		URL:            server.URL,
-		Method:         domain.MethodGET,
-		ExpectedStatus: 200,
-		Keyword:        &keyword,
-	})
+	c := checker.NewHTTPChecker()
+	result := c.Check(context.Background(), httpMonitor(server.URL, "GET", 200, &keyword))
 	if result.Status != domain.StatusUp {
 		t.Errorf("status = %q, want up (keyword found)", result.Status)
 	}
 }
 
-func TestChecker_KeywordMissing(t *testing.T) {
+func TestHTTPChecker_KeywordMissing(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
 		w.Write([]byte("all systems operational"))
@@ -105,13 +105,8 @@ func TestChecker_KeywordMissing(t *testing.T) {
 	defer server.Close()
 
 	missing := "notfound"
-	c := checker.NewClient()
-	result := c.Check(context.Background(), &domain.Monitor{
-		URL:            server.URL,
-		Method:         domain.MethodGET,
-		ExpectedStatus: 200,
-		Keyword:        &missing,
-	})
+	c := checker.NewHTTPChecker()
+	result := c.Check(context.Background(), httpMonitor(server.URL, "GET", 200, &missing))
 	if result.Status != domain.StatusDown {
 		t.Errorf("status = %q, want down (keyword missing)", result.Status)
 	}

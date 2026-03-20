@@ -11,12 +11,14 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/kirillinakin/pingcast/internal/adapter/http"
+	"github.com/kirillinakin/pingcast/internal/adapter/checker"
+	httpadapter "github.com/kirillinakin/pingcast/internal/adapter/http"
 	natsadapter "github.com/kirillinakin/pingcast/internal/adapter/nats"
 	"github.com/kirillinakin/pingcast/internal/adapter/postgres"
 	"github.com/kirillinakin/pingcast/internal/app"
 	"github.com/kirillinakin/pingcast/internal/config"
 	"github.com/kirillinakin/pingcast/internal/database"
+	"github.com/kirillinakin/pingcast/internal/domain"
 	sqlcgen "github.com/kirillinakin/pingcast/internal/sqlc/gen"
 )
 
@@ -77,9 +79,15 @@ func main() {
 	monitorPub := natsadapter.NewMonitorPublisher(js)
 	alertPub := natsadapter.NewAlertPublisher(js)
 
+	// Checker registry
+	registry := checker.NewRegistry()
+	registry.Register(domain.MonitorHTTP, "HTTP", checker.NewHTTPChecker())
+	registry.Register(domain.MonitorTCP, "TCP", checker.NewTCPChecker(10*time.Second))
+	registry.Register(domain.MonitorDNS, "DNS", checker.NewDNSChecker())
+
 	// App services
 	authSvc := app.NewAuthService(userRepo, sessionRepo)
-	monitoringSvc := app.NewMonitoringService(monitorRepo, checkResultRepo, incidentRepo, userRepo, alertPub, nil)
+	monitoringSvc := app.NewMonitoringService(monitorRepo, checkResultRepo, incidentRepo, userRepo, alertPub, registry)
 
 	// HTTP handlers
 	rateLimiter := httpadapter.NewRateLimiter(5, 15*time.Minute)

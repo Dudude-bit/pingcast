@@ -43,13 +43,13 @@ func (s *Sender) ForChat(chatID int64) port.AlertSender {
 	return &chatAlert{sender: s, chatID: chatID}
 }
 
-func (a *chatAlert) NotifyDown(ctx context.Context, name, url, cause string) error {
-	text := fmt.Sprintf("🔴 *%s* is DOWN\n\nURL: `%s`\nCause: %s", name, url, cause)
+func (a *chatAlert) NotifyDown(ctx context.Context, name, target, cause string) error {
+	text := fmt.Sprintf("🔴 *%s* is DOWN\n\nTarget: `%s`\nCause: %s", name, target, cause)
 	return a.sender.send(ctx, a.chatID, text)
 }
 
-func (a *chatAlert) NotifyUp(ctx context.Context, name, url string) error {
-	text := fmt.Sprintf("🟢 *%s* is back UP\n\nURL: `%s`", name, url)
+func (a *chatAlert) NotifyUp(ctx context.Context, name, target string) error {
+	text := fmt.Sprintf("🟢 *%s* is back UP\n\nTarget: `%s`", name, target)
 	return a.sender.send(ctx, a.chatID, text)
 }
 

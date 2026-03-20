@@ -11,19 +11,27 @@
             <label for="name">Name</label>
             <input type="text" id="name" name="name" required value="{{if .Monitor}}{{.Monitor.Name}}{{end}}" placeholder="My API">
         </div>
+
         <div class="form-group">
-            <label for="url">URL</label>
-            <input type="url" id="url" name="url" required value="{{if .Monitor}}{{.Monitor.URL}}{{end}}" placeholder="https://api.example.com/health">
+            <label for="type">Monitor Type</label>
+            <select id="type" name="type" {{if .Monitor}}disabled{{end}}
+                hx-get="/monitors/config-fields"
+                hx-target="#config-fields"
+                hx-trigger="change"
+                hx-include="[name=type]">
+                <option value="">Select type...</option>
+                {{range .MonitorTypes}}
+                <option value="{{.Type}}" {{if and $.Monitor (eq $.Monitor.Type .Type)}}selected{{end}}>{{.Label}}</option>
+                {{end}}
+            </select>
+            {{if .Monitor}}<input type="hidden" name="type" value="{{.Monitor.Type}}">{{end}}
+        </div>
+
+        <div id="config-fields">
+            {{/* Config fields are loaded via HTMX or pre-rendered for edit */}}
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-            <div class="form-group">
-                <label for="method">Method</label>
-                <select id="method" name="method">
-                    <option value="GET" {{if and .Monitor (eq .Monitor.Method "GET")}}selected{{end}}>GET</option>
-                    <option value="POST" {{if and .Monitor (eq .Monitor.Method "POST")}}selected{{end}}>POST</option>
-                </select>
-            </div>
             <div class="form-group">
                 <label for="interval_seconds">Check Interval</label>
                 <select id="interval_seconds" name="interval_seconds">
@@ -33,13 +41,6 @@
                     {{end}}
                     <option value="300" {{if and .Monitor (eq .Monitor.IntervalSeconds 300)}}selected{{end}}>5 minutes</option>
                 </select>
-            </div>
-        </div>
-
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-            <div class="form-group">
-                <label for="expected_status">Expected Status</label>
-                <input type="number" id="expected_status" name="expected_status" value="{{if .Monitor}}{{.Monitor.ExpectedStatus}}{{else}}200{{end}}">
             </div>
             <div class="form-group">
                 <label for="alert_after_failures">Alert After Failures</label>
@@ -61,4 +62,16 @@
         <a href="/dashboard">&larr; Back to Dashboard</a>
     </p>
 </div>
+<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+{{if .Monitor}}
+<script>
+    // On edit page, load config fields for the current type on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        var typeSelect = document.getElementById('type');
+        if (typeSelect && typeSelect.value) {
+            htmx.ajax('GET', '/monitors/config-fields?type=' + typeSelect.value, '#config-fields');
+        }
+    });
+</script>
+{{end}}
 {{end}}
