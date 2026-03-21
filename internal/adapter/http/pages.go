@@ -164,9 +164,11 @@ func (h *PageHandler) MonitorDetail(c *fiber.Ctx) error {
 
 func (h *PageHandler) MonitorNewForm(c *fiber.Ctx) error {
 	user := UserFromCtx(c)
+	channels, _ := h.alerts.ListChannels(c.UserContext(), user.ID)
 	return h.render(c, "monitor_form.html", fiber.Map{
 		"User":         user,
 		"MonitorTypes": h.monitoring.Registry().Types(),
+		"Channels":     channels,
 	})
 }
 
@@ -180,10 +182,12 @@ func (h *PageHandler) MonitorEditForm(c *fiber.Ctx) error {
 	if err != nil || detail.Monitor.UserID != user.ID {
 		return c.Redirect("/dashboard")
 	}
+	channels, _ := h.alerts.ListChannels(c.UserContext(), user.ID)
 	return h.render(c, "monitor_form.html", fiber.Map{
 		"User":         user,
 		"Monitor":      detail.Monitor,
 		"MonitorTypes": h.monitoring.Registry().Types(),
+		"Channels":     channels,
 	})
 }
 
@@ -216,13 +220,24 @@ func (h *PageHandler) MonitorCreate(c *fiber.Ctx) error {
 		IsPublic:           c.FormValue("is_public") == "on",
 	}
 
-	_, err := h.monitoring.CreateMonitor(c.UserContext(), user, input)
+	mon, err := h.monitoring.CreateMonitor(c.UserContext(), user, input)
 	if err != nil {
+		channels, _ := h.alerts.ListChannels(c.UserContext(), user.ID)
 		return h.render(c, "monitor_form.html", fiber.Map{
 			"User":         user,
 			"Error":        err.Error(),
 			"MonitorTypes": h.monitoring.Registry().Types(),
+			"Channels":     channels,
 		})
+	}
+
+	// Bind selected channels
+	channelIDs := c.Context().PostArgs().PeekMulti("channel_ids")
+	for _, cidBytes := range channelIDs {
+		cid, err := uuid.Parse(string(cidBytes))
+		if err == nil {
+			h.alerts.BindChannel(c.UserContext(), user.ID, mon.ID, cid)
+		}
 	}
 
 	return c.Redirect("/dashboard")

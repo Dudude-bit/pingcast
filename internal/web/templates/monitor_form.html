@@ -55,6 +55,19 @@
             </label>
         </div>
 
+        {{if .Channels}}
+        <div class="form-group" style="margin-top: 1rem;">
+            <label>Notification Channels</label>
+            <small style="display: block; margin-bottom: 0.5rem; color: var(--text-muted);">Leave unchecked to use all channels (global). Check specific channels to override.</small>
+            {{range .Channels}}
+            <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 0.4rem;">
+                <input type="checkbox" name="channel_ids" value="{{.ID}}">
+                {{.Name}} <span style="color: var(--text-muted); margin-left: 0.5rem; font-size: 0.8rem;">({{.Type}})</span>
+            </label>
+            {{end}}
+        </div>
+        {{end}}
+
         <button type="submit" class="btn btn-primary btn-full btn-lg">{{if .Monitor}}Save Changes{{else}}Create Monitor{{end}}</button>
     </form>
 
