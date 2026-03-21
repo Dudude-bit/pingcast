@@ -360,51 +360,43 @@ a:hover { color: var(--text-primary); }
 .form-group input[type="checkbox"] {
     -webkit-appearance: none;
     appearance: none;
-    width: 20px;
-    height: 20px;
-    min-width: 20px;
-    border: 1.5px solid var(--border-hover);
-    border-radius: 6px;
-    background: var(--bg-input);
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    padding: 0;
+    border: 1px solid var(--border-hover);
+    border-radius: 4px;
+    background: transparent;
     cursor: pointer;
-    margin-right: 0.6rem;
+    margin-right: 0.5rem;
     position: relative;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    vertical-align: middle;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
 }
 
 .form-group input[type="checkbox"]:hover {
     border-color: var(--accent);
-    background: rgba(59, 130, 246, 0.05);
 }
 
 .form-group input[type="checkbox"]:checked {
     background: var(--accent);
     border-color: var(--accent);
-    box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
 }
 
 .form-group input[type="checkbox"]:checked::after {
     content: '';
     position: absolute;
-    left: 6px;
+    left: 5px;
     top: 2px;
-    width: 5px;
-    height: 10px;
+    width: 4px;
+    height: 8px;
     border: solid white;
-    border-width: 0 2px 2px 0;
+    border-width: 0 1.5px 1.5px 0;
     transform: rotate(45deg);
-    animation: checkmark-pop 0.15s ease-out;
-}
-
-@keyframes checkmark-pop {
-    0% { transform: rotate(45deg) scale(0); opacity: 0; }
-    50% { transform: rotate(45deg) scale(1.2); }
-    100% { transform: rotate(45deg) scale(1); opacity: 1; }
 }
 
 .form-group input[type="checkbox"]:focus-visible {
-    box-shadow: 0 0 0 3px var(--accent-glow);
+    box-shadow: 0 0 0 2px var(--accent-glow);
 }
 
 /* Checkbox label inline styling */
@@ -415,14 +407,9 @@ a:hover { color: var(--text-primary); }
     text-transform: none;
     letter-spacing: 0;
     font-weight: 500;
-    font-size: 0.9rem;
+    font-size: 0.875rem;
     color: var(--text-primary);
-    padding: 0.4rem 0;
-    transition: color 0.15s;
-}
-
-.form-group label:has(input[type="checkbox"]):hover {
-    color: var(--accent);
+    padding: 0.3rem 0;
 }
 
 /* === Alerts === */
