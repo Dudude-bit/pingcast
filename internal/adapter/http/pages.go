@@ -19,11 +19,12 @@ import (
 type PageHandler struct {
 	auth        *app.AuthService
 	monitoring  *app.MonitoringService
+	alerts      *app.AlertService
 	rateLimiter *RateLimiter
 	templates   map[string]*template.Template
 }
 
-func NewPageHandler(auth *app.AuthService, monitoring *app.MonitoringService, rateLimiter *RateLimiter) *PageHandler {
+func NewPageHandler(auth *app.AuthService, monitoring *app.MonitoringService, alerts *app.AlertService, rateLimiter *RateLimiter) *PageHandler {
 	tmplFS, _ := fs.Sub(web.FS, "templates")
 
 	// Parse each page template paired with layout.
@@ -32,6 +33,7 @@ func NewPageHandler(auth *app.AuthService, monitoring *app.MonitoringService, ra
 	pages := []string{
 		"landing.html", "login.html", "register.html",
 		"dashboard.html", "monitor_detail.html", "monitor_form.html",
+		"channels.html", "channel_form.html",
 	}
 
 	templates := make(map[string]*template.Template, len(pages)+2)
@@ -46,6 +48,7 @@ func NewPageHandler(auth *app.AuthService, monitoring *app.MonitoringService, ra
 	return &PageHandler{
 		auth:        auth,
 		monitoring:  monitoring,
+		alerts:      alerts,
 		rateLimiter: rateLimiter,
 		templates:   templates,
 	}
@@ -303,6 +306,85 @@ func (h *PageHandler) StatusPage(c *fiber.Ctx) error {
 	return h.render(c, "statuspage.html", fiber.Map{
 		"Slug": slug, "AllUp": data.AllUp, "Monitors": statusMons, "ShowBranding": data.ShowBranding,
 	})
+}
+
+// --- Channel Pages ---
+
+func (h *PageHandler) ChannelList(c *fiber.Ctx) error {
+	user := UserFromCtx(c)
+	channels, _ := h.alerts.ListChannels(c.UserContext(), user.ID)
+	return h.render(c, "channels.html", fiber.Map{
+		"User": user, "Channels": channels,
+	})
+}
+
+func (h *PageHandler) ChannelNewForm(c *fiber.Ctx) error {
+	user := UserFromCtx(c)
+	return h.render(c, "channel_form.html", fiber.Map{
+		"User": user, "ChannelTypes": h.alerts.Registry().Types(),
+	})
+}
+
+func (h *PageHandler) ChannelCreate(c *fiber.Ctx) error {
+	user := UserFromCtx(c)
+	channelType := domain.ChannelType(c.FormValue("type"))
+	if !channelType.Valid() {
+		return h.render(c, "channel_form.html", fiber.Map{
+			"User": user, "Error": "Invalid channel type", "ChannelTypes": h.alerts.Registry().Types(),
+		})
+	}
+
+	configData := h.buildChannelConfigFromForm(c, channelType)
+
+	_, err := h.alerts.CreateChannel(c.UserContext(), user.ID, app.CreateChannelInput{
+		Name:   c.FormValue("name"),
+		Type:   channelType,
+		Config: configData,
+	})
+	if err != nil {
+		return h.render(c, "channel_form.html", fiber.Map{
+			"User": user, "Error": err.Error(), "ChannelTypes": h.alerts.Registry().Types(),
+		})
+	}
+	return c.Redirect("/channels")
+}
+
+func (h *PageHandler) ChannelConfigFields(c *fiber.Ctx) error {
+	channelType := domain.ChannelType(c.Query("type"))
+	if !channelType.Valid() {
+		return c.SendString("")
+	}
+	factory, err := h.alerts.Registry().Get(channelType)
+	if err != nil {
+		return c.SendString("")
+	}
+	schema := factory.ConfigSchema()
+	return h.render(c, "monitor_config_fields.html", fiber.Map{"Fields": schema.Fields})
+}
+
+func (h *PageHandler) buildChannelConfigFromForm(c *fiber.Ctx, chType domain.ChannelType) json.RawMessage {
+	factory, err := h.alerts.Registry().Get(chType)
+	if err != nil {
+		return json.RawMessage("{}")
+	}
+	schema := factory.ConfigSchema()
+	cfg := make(map[string]any, len(schema.Fields))
+	for _, f := range schema.Fields {
+		val := c.FormValue("config_" + f.Name)
+		if val == "" {
+			continue
+		}
+		switch f.Type {
+		case "number":
+			if n, err := strconv.Atoi(val); err == nil {
+				cfg[f.Name] = n
+			}
+		default:
+			cfg[f.Name] = val
+		}
+	}
+	data, _ := json.Marshal(cfg)
+	return data
 }
 
 func (h *PageHandler) render(c *fiber.Ctx, name string, data fiber.Map) error {

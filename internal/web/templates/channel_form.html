@@ -1,0 +1,39 @@
+{{define "title"}}New Channel &mdash; PingCast{{end}}
+{{define "content"}}
+<div class="auth-container" style="max-width: 520px;">
+    <h1>New Notification Channel</h1>
+    <p class="subtitle">Add a channel to receive alerts</p>
+
+    {{if .Error}}<div class="alert alert-error">{{.Error}}</div>{{end}}
+
+    <form method="POST" action="/channels">
+        <div class="form-group">
+            <label for="name">Name</label>
+            <input type="text" id="name" name="name" required placeholder="My Telegram">
+        </div>
+
+        <div class="form-group">
+            <label for="type">Channel Type</label>
+            <select id="type" name="type"
+                hx-get="/channels/config-fields"
+                hx-target="#config-fields"
+                hx-trigger="change"
+                hx-include="[name=type]">
+                <option value="">Select type...</option>
+                {{range .ChannelTypes}}
+                <option value="{{.Type}}">{{.Label}}</option>
+                {{end}}
+            </select>
+        </div>
+
+        <div id="config-fields">
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-full btn-lg">Create Channel</button>
+    </form>
+
+    <p class="auth-link" style="margin-top: 1rem;">
+        <a href="/channels">&larr; Back to Channels</a>
+    </p>
+</div>
+{{end}}

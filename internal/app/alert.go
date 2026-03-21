@@ -20,6 +20,10 @@ func NewAlertService(channels port.ChannelRepo, registry port.ChannelRegistry) *
 	return &AlertService{channels: channels, registry: registry}
 }
 
+func (s *AlertService) Registry() port.ChannelRegistry {
+	return s.registry
+}
+
 // Handle delivers an alert to all relevant channels (best-effort).
 func (s *AlertService) Handle(ctx context.Context, event *domain.AlertEvent) error {
 	channels, _ := s.channels.ListForMonitor(ctx, event.MonitorID)

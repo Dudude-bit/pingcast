@@ -104,7 +104,7 @@ func main() {
 	// HTTP handlers
 	rateLimiter := httpadapter.NewRateLimiter(5, 15*time.Minute)
 	server := httpadapter.NewServer(authSvc, monitoringSvc, monitorPub, rateLimiter)
-	pageHandler := httpadapter.NewPageHandler(authSvc, monitoringSvc, rateLimiter)
+	pageHandler := httpadapter.NewPageHandler(authSvc, monitoringSvc, alertSvc, rateLimiter)
 	webhookHandler := httpadapter.NewWebhookHandler(authSvc, alertSvc, cfg.LemonSqueezyWebhookSecret)
 
 	// Wire
