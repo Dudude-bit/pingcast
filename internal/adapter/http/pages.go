@@ -55,17 +55,25 @@ func NewPageHandler(auth *app.AuthService, monitoring *app.MonitoringService, al
 }
 
 func (h *PageHandler) Landing(c *fiber.Ctx) error {
-	// If user has a valid session, redirect to dashboard
-	sessionID := c.Cookies("session_id")
-	if sessionID != "" {
-		if user, err := h.auth.ValidateSession(c.UserContext(), sessionID); err == nil && user != nil {
-			return c.Redirect("/dashboard")
-		}
+	if h.isLoggedIn(c) {
+		return c.Redirect("/dashboard")
 	}
 	return h.render(c, "landing.html", nil)
 }
 
+func (h *PageHandler) isLoggedIn(c *fiber.Ctx) bool {
+	sessionID := c.Cookies("session_id")
+	if sessionID == "" {
+		return false
+	}
+	user, err := h.auth.ValidateSession(c.UserContext(), sessionID)
+	return err == nil && user != nil
+}
+
 func (h *PageHandler) LoginPage(c *fiber.Ctx) error {
+	if h.isLoggedIn(c) {
+		return c.Redirect("/dashboard")
+	}
 	return h.render(c, "login.html", nil)
 }
 
@@ -89,6 +97,9 @@ func (h *PageHandler) LoginSubmit(c *fiber.Ctx) error {
 }
 
 func (h *PageHandler) RegisterPage(c *fiber.Ctx) error {
+	if h.isLoggedIn(c) {
+		return c.Redirect("/dashboard")
+	}
 	return h.render(c, "register.html", nil)
 }
 
