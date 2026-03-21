@@ -17,6 +17,7 @@ import (
 type Server struct {
 	auth        *app.AuthService
 	monitoring  *app.MonitoringService
+	alerts      *app.AlertService
 	events      port.MonitorEventPublisher
 	rateLimiter *RateLimiter
 }
@@ -24,12 +25,14 @@ type Server struct {
 func NewServer(
 	auth *app.AuthService,
 	monitoring *app.MonitoringService,
+	alerts *app.AlertService,
 	events port.MonitorEventPublisher,
 	rateLimiter *RateLimiter,
 ) *Server {
 	return &Server{
 		auth:        auth,
 		monitoring:  monitoring,
+		alerts:      alerts,
 		events:      events,
 		rateLimiter: rateLimiter,
 	}
@@ -406,5 +409,148 @@ func domainIncidentToAPI(i *domain.Incident) apigen.Incident {
 		StartedAt:  &i.StartedAt,
 		ResolvedAt: i.ResolvedAt,
 		Cause:      &i.Cause,
+	}
+}
+
+// --- Channel API handlers ---
+
+func (s *Server) ListChannelTypes(c *fiber.Ctx) error {
+	types := s.alerts.Registry().Types()
+	result := make([]apigen.ChannelTypeInfo, 0, len(types))
+	for _, t := range types {
+		typ := string(t.Type)
+		fields := make([]apigen.ConfigField, 0, len(t.Schema.Fields))
+		for _, f := range t.Schema.Fields {
+			fields = append(fields, apigen.ConfigField{
+				Name: &f.Name, Label: &f.Label, Type: &f.Type,
+				Required: &f.Required, Placeholder: &f.Placeholder,
+			})
+		}
+		schema := apigen.ConfigSchema{Fields: &fields}
+		result = append(result, apigen.ChannelTypeInfo{
+			Type: &typ, Label: &t.Label, Schema: &schema,
+		})
+	}
+	return c.JSON(result)
+}
+
+func (s *Server) ListChannels(c *fiber.Ctx) error {
+	user := UserFromCtx(c)
+	if user == nil {
+		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
+	}
+	channels, err := s.alerts.ListChannels(c.UserContext(), user.ID)
+	if err != nil {
+		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("failed to list channels")})
+	}
+	result := make([]apigen.NotificationChannel, 0, len(channels))
+	for _, ch := range channels {
+		result = append(result, domainChannelToAPI(&ch))
+	}
+	return c.JSON(result)
+}
+
+func (s *Server) CreateChannel(c *fiber.Ctx) error {
+	user := UserFromCtx(c)
+	if user == nil {
+		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
+	}
+	var req apigen.CreateChannelRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid request body")})
+	}
+	configJSON, err := json.Marshal(req.Config)
+	if err != nil {
+		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid config")})
+	}
+	ch, err := s.alerts.CreateChannel(c.UserContext(), user.ID, app.CreateChannelInput{
+		Name:   req.Name,
+		Type:   domain.ChannelType(req.Type),
+		Config: configJSON,
+	})
+	if err != nil {
+		return c.Status(400).JSON(apigen.ErrorResponse{Error: new(err.Error())})
+	}
+	return c.Status(201).JSON(domainChannelToAPI(ch))
+}
+
+func (s *Server) UpdateChannel(c *fiber.Ctx, id openapi_types.UUID) error {
+	user := UserFromCtx(c)
+	if user == nil {
+		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
+	}
+	var req apigen.UpdateChannelRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid request body")})
+	}
+	name := ""
+	if req.Name != nil {
+		name = *req.Name
+	}
+	isEnabled := true
+	if req.IsEnabled != nil {
+		isEnabled = *req.IsEnabled
+	}
+	var configJSON json.RawMessage
+	if req.Config != nil {
+		configJSON, _ = json.Marshal(*req.Config)
+	}
+	ch, err := s.alerts.UpdateChannel(c.UserContext(), user.ID, uuid.UUID(id), name, configJSON, isEnabled)
+	if err != nil {
+		return c.Status(400).JSON(apigen.ErrorResponse{Error: new(err.Error())})
+	}
+	return c.JSON(domainChannelToAPI(ch))
+}
+
+func (s *Server) DeleteChannel(c *fiber.Ctx, id openapi_types.UUID) error {
+	user := UserFromCtx(c)
+	if user == nil {
+		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
+	}
+	if err := s.alerts.DeleteChannel(c.UserContext(), user.ID, uuid.UUID(id)); err != nil {
+		return c.Status(400).JSON(apigen.ErrorResponse{Error: new(err.Error())})
+	}
+	return c.SendStatus(204)
+}
+
+func (s *Server) BindChannel(c *fiber.Ctx, id openapi_types.UUID) error {
+	user := UserFromCtx(c)
+	if user == nil {
+		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
+	}
+	var req struct {
+		ChannelID uuid.UUID `json:"channel_id"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid request body")})
+	}
+	if err := s.alerts.BindChannel(c.UserContext(), user.ID, uuid.UUID(id), req.ChannelID); err != nil {
+		return c.Status(400).JSON(apigen.ErrorResponse{Error: new(err.Error())})
+	}
+	return c.SendStatus(200)
+}
+
+func (s *Server) UnbindChannel(c *fiber.Ctx, id openapi_types.UUID, channelId openapi_types.UUID) error {
+	user := UserFromCtx(c)
+	if user == nil {
+		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
+	}
+	if err := s.alerts.UnbindChannel(c.UserContext(), user.ID, uuid.UUID(id), uuid.UUID(channelId)); err != nil {
+		return c.Status(400).JSON(apigen.ErrorResponse{Error: new(err.Error())})
+	}
+	return c.SendStatus(204)
+}
+
+func domainChannelToAPI(ch *domain.NotificationChannel) apigen.NotificationChannel {
+	typ := string(ch.Type)
+	var config map[string]any
+	json.Unmarshal(ch.Config, &config)
+	return apigen.NotificationChannel{
+		Id:        (*openapi_types.UUID)(&ch.ID),
+		Name:      &ch.Name,
+		Type:      &typ,
+		Config:    &config,
+		IsEnabled: &ch.IsEnabled,
+		CreatedAt: &ch.CreatedAt,
 	}
 }

@@ -99,11 +99,11 @@ func main() {
 	// App services
 	authSvc := app.NewAuthService(userRepo, sessionRepo)
 	monitoringSvc := app.NewMonitoringService(monitorRepo, checkResultRepo, incidentRepo, userRepo, alertPub, registry)
-	alertSvc := app.NewAlertService(channelRepo, channelReg)
+	alertSvc := app.NewAlertService(channelRepo, monitorRepo, channelReg)
 
 	// HTTP handlers
 	rateLimiter := httpadapter.NewRateLimiter(5, 15*time.Minute)
-	server := httpadapter.NewServer(authSvc, monitoringSvc, monitorPub, rateLimiter)
+	server := httpadapter.NewServer(authSvc, monitoringSvc, alertSvc, monitorPub, rateLimiter)
 	pageHandler := httpadapter.NewPageHandler(authSvc, monitoringSvc, alertSvc, rateLimiter)
 	webhookHandler := httpadapter.NewWebhookHandler(authSvc, alertSvc, cfg.LemonSqueezyWebhookSecret)
 

@@ -44,6 +44,7 @@ func main() {
 
 	queries := sqlcgen.New(pool)
 	channelRepo := postgres.NewChannelRepo(queries)
+	monitorRepo := postgres.NewMonitorRepo(queries)
 
 	// NATS
 	nc, err := natsadapter.Connect(cfg.NatsURL)
@@ -75,7 +76,7 @@ func main() {
 	channelReg.Register(domain.ChannelWebhook, "Webhook", webhook.NewFactory())
 
 	// Alert service
-	alertSvc := app.NewAlertService(channelRepo, channelReg)
+	alertSvc := app.NewAlertService(channelRepo, monitorRepo, channelReg)
 
 	// Subscribe to alerts
 	alertSub := natsadapter.NewAlertSubscriber(js)

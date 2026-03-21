@@ -13,11 +13,12 @@ import (
 
 type AlertService struct {
 	channels port.ChannelRepo
+	monitors port.MonitorRepo
 	registry port.ChannelRegistry
 }
 
-func NewAlertService(channels port.ChannelRepo, registry port.ChannelRegistry) *AlertService {
-	return &AlertService{channels: channels, registry: registry}
+func NewAlertService(channels port.ChannelRepo, monitors port.MonitorRepo, registry port.ChannelRegistry) *AlertService {
+	return &AlertService{channels: channels, monitors: monitors, registry: registry}
 }
 
 func (s *AlertService) Registry() port.ChannelRegistry {
@@ -102,8 +103,8 @@ func (s *AlertService) ListChannels(ctx context.Context, userID uuid.UUID) ([]do
 	return s.channels.ListByUserID(ctx, userID)
 }
 
-func (s *AlertService) BindChannel(ctx context.Context, userID, monitorID, channelID uuid.UUID, monitors port.MonitorRepo) error {
-	mon, err := monitors.GetByID(ctx, monitorID)
+func (s *AlertService) BindChannel(ctx context.Context, userID, monitorID, channelID uuid.UUID) error {
+	mon, err := s.monitors.GetByID(ctx, monitorID)
 	if err != nil || mon.UserID != userID {
 		return fmt.Errorf("monitor not found")
 	}
@@ -114,8 +115,8 @@ func (s *AlertService) BindChannel(ctx context.Context, userID, monitorID, chann
 	return s.channels.BindToMonitor(ctx, monitorID, channelID)
 }
 
-func (s *AlertService) UnbindChannel(ctx context.Context, userID, monitorID, channelID uuid.UUID, monitors port.MonitorRepo) error {
-	mon, err := monitors.GetByID(ctx, monitorID)
+func (s *AlertService) UnbindChannel(ctx context.Context, userID, monitorID, channelID uuid.UUID) error {
+	mon, err := s.monitors.GetByID(ctx, monitorID)
 	if err != nil || mon.UserID != userID {
 		return fmt.Errorf("monitor not found")
 	}

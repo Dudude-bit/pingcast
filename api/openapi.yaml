@@ -201,6 +201,153 @@ paths:
               schema:
                 $ref: "#/components/schemas/Monitor"
 
+  /api/channel-types:
+    get:
+      operationId: listChannelTypes
+      tags: [channels]
+      responses:
+        "200":
+          description: Available channel types with config schemas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChannelTypeInfo"
+
+  /api/channels:
+    get:
+      operationId: listChannels
+      tags: [channels]
+      security:
+        - sessionAuth: []
+      responses:
+        "200":
+          description: User's channels
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/NotificationChannel"
+    post:
+      operationId: createChannel
+      tags: [channels]
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateChannelRequest"
+      responses:
+        "201":
+          description: Channel created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationChannel"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/channels/{id}:
+    put:
+      operationId: updateChannel
+      tags: [channels]
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateChannelRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationChannel"
+    delete:
+      operationId: deleteChannel
+      tags: [channels]
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /api/monitors/{id}/channels:
+    post:
+      operationId: bindChannel
+      tags: [channels]
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [channel_id]
+              properties:
+                channel_id:
+                  type: string
+                  format: uuid
+      responses:
+        "200":
+          description: Bound
+
+  /api/monitors/{id}/channels/{channelId}:
+    delete:
+      operationId: unbindChannel
+      tags: [channels]
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: channelId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Unbound
+
   /api/status/{slug}:
     get:
       operationId: getStatusPage
@@ -496,6 +643,58 @@ components:
       properties:
         status:
           type: string
+
+    NotificationChannel:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+        config:
+          type: object
+          additionalProperties: true
+        is_enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    CreateChannelRequest:
+      type: object
+      required: [name, type, config]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        config:
+          type: object
+          additionalProperties: true
+
+    UpdateChannelRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        config:
+          type: object
+          additionalProperties: true
+        is_enabled:
+          type: boolean
+
+    ChannelTypeInfo:
+      type: object
+      properties:
+        type:
+          type: string
+        label:
+          type: string
+        schema:
+          $ref: "#/components/schemas/ConfigSchema"
 
     ErrorResponse:
       type: object

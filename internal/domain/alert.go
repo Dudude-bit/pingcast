@@ -20,11 +20,11 @@ const (
 )
 
 type AlertEvent struct {
-	MonitorID     uuid.UUID
-	UserID        uuid.UUID
-	IncidentID    int64
-	MonitorName   string
-	MonitorTarget string
-	Event         AlertEventType
-	Cause         string
+	MonitorID     uuid.UUID      `json:"monitor_id"`
+	UserID        uuid.UUID      `json:"user_id"`
+	IncidentID    int64          `json:"incident_id"`
+	MonitorName   string         `json:"monitor_name"`
+	MonitorTarget string         `json:"monitor_target"`
+	Event         AlertEventType `json:"event"`
+	Cause         string         `json:"cause,omitempty"`
 }

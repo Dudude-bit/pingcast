@@ -103,6 +103,13 @@ type AuthResponse struct {
 	User      *User   `json:"user,omitempty"`
 }
 
+// ChannelTypeInfo defines model for ChannelTypeInfo.
+type ChannelTypeInfo struct {
+	Label  *string       `json:"label,omitempty"`
+	Schema *ConfigSchema `json:"schema,omitempty"`
+	Type   *string       `json:"type,omitempty"`
+}
+
 // ChartPoint defines model for ChartPoint.
 type ChartPoint struct {
 	AvgResponseMs *float32   `json:"avg_response_ms,omitempty"`
@@ -130,6 +137,13 @@ type ConfigOption struct {
 // ConfigSchema defines model for ConfigSchema.
 type ConfigSchema struct {
 	Fields *[]ConfigField `json:"fields,omitempty"`
+}
+
+// CreateChannelRequest defines model for CreateChannelRequest.
+type CreateChannelRequest struct {
+	Config map[string]interface{} `json:"config"`
+	Name   string                 `json:"name"`
+	Type   string                 `json:"type"`
 }
 
 // CreateMonitorRequest defines model for CreateMonitorRequest.
@@ -240,6 +254,16 @@ type MonitorWithUptime struct {
 // MonitorWithUptimeCurrentStatus defines model for MonitorWithUptime.CurrentStatus.
 type MonitorWithUptimeCurrentStatus string
 
+// NotificationChannel defines model for NotificationChannel.
+type NotificationChannel struct {
+	Config    *map[string]interface{} `json:"config,omitempty"`
+	CreatedAt *time.Time              `json:"created_at,omitempty"`
+	Id        *openapi_types.UUID     `json:"id,omitempty"`
+	IsEnabled *bool                   `json:"is_enabled,omitempty"`
+	Name      *string                 `json:"name,omitempty"`
+	Type      *string                 `json:"type,omitempty"`
+}
+
 // RegisterRequest defines model for RegisterRequest.
 type RegisterRequest struct {
 	Email    openapi_types.Email `json:"email"`
@@ -261,6 +285,13 @@ type StatusPageResponse struct {
 	Monitors     *[]StatusMonitor `json:"monitors,omitempty"`
 	ShowBranding *bool            `json:"show_branding,omitempty"`
 	Slug         *string          `json:"slug,omitempty"`
+}
+
+// UpdateChannelRequest defines model for UpdateChannelRequest.
+type UpdateChannelRequest struct {
+	Config    *map[string]interface{} `json:"config,omitempty"`
+	IsEnabled *bool                   `json:"is_enabled,omitempty"`
+	Name      *string                 `json:"name,omitempty"`
 }
 
 // UpdateMonitorRequest defines model for UpdateMonitorRequest.
@@ -285,17 +316,31 @@ type User struct {
 // UserPlan defines model for User.Plan.
 type UserPlan string
 
+// BindChannelJSONBody defines parameters for BindChannel.
+type BindChannelJSONBody struct {
+	ChannelId openapi_types.UUID `json:"channel_id"`
+}
+
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
 
 // RegisterJSONRequestBody defines body for Register for application/json ContentType.
 type RegisterJSONRequestBody = RegisterRequest
 
+// CreateChannelJSONRequestBody defines body for CreateChannel for application/json ContentType.
+type CreateChannelJSONRequestBody = CreateChannelRequest
+
+// UpdateChannelJSONRequestBody defines body for UpdateChannel for application/json ContentType.
+type UpdateChannelJSONRequestBody = UpdateChannelRequest
+
 // CreateMonitorJSONRequestBody defines body for CreateMonitor for application/json ContentType.
 type CreateMonitorJSONRequestBody = CreateMonitorRequest
 
 // UpdateMonitorJSONRequestBody defines body for UpdateMonitor for application/json ContentType.
 type UpdateMonitorJSONRequestBody = UpdateMonitorRequest
+
+// BindChannelJSONRequestBody defines body for BindChannel for application/json ContentType.
+type BindChannelJSONRequestBody BindChannelJSONBody
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -308,6 +353,21 @@ type ServerInterface interface {
 
 	// (POST /api/auth/register)
 	Register(c *fiber.Ctx) error
+
+	// (GET /api/channel-types)
+	ListChannelTypes(c *fiber.Ctx) error
+
+	// (GET /api/channels)
+	ListChannels(c *fiber.Ctx) error
+
+	// (POST /api/channels)
+	CreateChannel(c *fiber.Ctx) error
+
+	// (DELETE /api/channels/{id})
+	DeleteChannel(c *fiber.Ctx, id openapi_types.UUID) error
+
+	// (PUT /api/channels/{id})
+	UpdateChannel(c *fiber.Ctx, id openapi_types.UUID) error
 
 	// (GET /api/monitor-types)
 	ListMonitorTypes(c *fiber.Ctx) error
@@ -326,6 +386,12 @@ type ServerInterface interface {
 
 	// (PUT /api/monitors/{id})
 	UpdateMonitor(c *fiber.Ctx, id openapi_types.UUID) error
+
+	// (POST /api/monitors/{id}/channels)
+	BindChannel(c *fiber.Ctx, id openapi_types.UUID) error
+
+	// (DELETE /api/monitors/{id}/channels/{channelId})
+	UnbindChannel(c *fiber.Ctx, id openapi_types.UUID, channelId openapi_types.UUID) error
 
 	// (POST /api/monitors/{id}/pause)
 	ToggleMonitorPause(c *fiber.Ctx, id openapi_types.UUID) error
@@ -362,6 +428,64 @@ func (siw *ServerInterfaceWrapper) Logout(c *fiber.Ctx) error {
 func (siw *ServerInterfaceWrapper) Register(c *fiber.Ctx) error {
 
 	return siw.Handler.Register(c)
+}
+
+// ListChannelTypes operation middleware
+func (siw *ServerInterfaceWrapper) ListChannelTypes(c *fiber.Ctx) error {
+
+	return siw.Handler.ListChannelTypes(c)
+}
+
+// ListChannels operation middleware
+func (siw *ServerInterfaceWrapper) ListChannels(c *fiber.Ctx) error {
+
+	c.Context().SetUserValue(SessionAuthScopes, []string{})
+
+	return siw.Handler.ListChannels(c)
+}
+
+// CreateChannel operation middleware
+func (siw *ServerInterfaceWrapper) CreateChannel(c *fiber.Ctx) error {
+
+	c.Context().SetUserValue(SessionAuthScopes, []string{})
+
+	return siw.Handler.CreateChannel(c)
+}
+
+// DeleteChannel operation middleware
+func (siw *ServerInterfaceWrapper) DeleteChannel(c *fiber.Ctx) error {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Params("id"), &id, runtime.BindStyledParameterOptions{Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter id: %w", err).Error())
+	}
+
+	c.Context().SetUserValue(SessionAuthScopes, []string{})
+
+	return siw.Handler.DeleteChannel(c, id)
+}
+
+// UpdateChannel operation middleware
+func (siw *ServerInterfaceWrapper) UpdateChannel(c *fiber.Ctx) error {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Params("id"), &id, runtime.BindStyledParameterOptions{Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter id: %w", err).Error())
+	}
+
+	c.Context().SetUserValue(SessionAuthScopes, []string{})
+
+	return siw.Handler.UpdateChannel(c, id)
 }
 
 // ListMonitorTypes operation middleware
@@ -440,6 +564,50 @@ func (siw *ServerInterfaceWrapper) UpdateMonitor(c *fiber.Ctx) error {
 	return siw.Handler.UpdateMonitor(c, id)
 }
 
+// BindChannel operation middleware
+func (siw *ServerInterfaceWrapper) BindChannel(c *fiber.Ctx) error {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Params("id"), &id, runtime.BindStyledParameterOptions{Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter id: %w", err).Error())
+	}
+
+	c.Context().SetUserValue(SessionAuthScopes, []string{})
+
+	return siw.Handler.BindChannel(c, id)
+}
+
+// UnbindChannel operation middleware
+func (siw *ServerInterfaceWrapper) UnbindChannel(c *fiber.Ctx) error {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Params("id"), &id, runtime.BindStyledParameterOptions{Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter id: %w", err).Error())
+	}
+
+	// ------------- Path parameter "channelId" -------------
+	var channelId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "channelId", c.Params("channelId"), &channelId, runtime.BindStyledParameterOptions{Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter channelId: %w", err).Error())
+	}
+
+	c.Context().SetUserValue(SessionAuthScopes, []string{})
+
+	return siw.Handler.UnbindChannel(c, id, channelId)
+}
+
 // ToggleMonitorPause operation middleware
 func (siw *ServerInterfaceWrapper) ToggleMonitorPause(c *fiber.Ctx) error {
 
@@ -507,6 +675,16 @@ func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, option
 
 	router.Post(options.BaseURL+"/api/auth/register", wrapper.Register)
 
+	router.Get(options.BaseURL+"/api/channel-types", wrapper.ListChannelTypes)
+
+	router.Get(options.BaseURL+"/api/channels", wrapper.ListChannels)
+
+	router.Post(options.BaseURL+"/api/channels", wrapper.CreateChannel)
+
+	router.Delete(options.BaseURL+"/api/channels/:id", wrapper.DeleteChannel)
+
+	router.Put(options.BaseURL+"/api/channels/:id", wrapper.UpdateChannel)
+
 	router.Get(options.BaseURL+"/api/monitor-types", wrapper.ListMonitorTypes)
 
 	router.Get(options.BaseURL+"/api/monitors", wrapper.ListMonitors)
@@ -518,6 +696,10 @@ func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, option
 	router.Get(options.BaseURL+"/api/monitors/:id", wrapper.GetMonitor)
 
 	router.Put(options.BaseURL+"/api/monitors/:id", wrapper.UpdateMonitor)
+
+	router.Post(options.BaseURL+"/api/monitors/:id/channels", wrapper.BindChannel)
+
+	router.Delete(options.BaseURL+"/api/monitors/:id/channels/:channelId", wrapper.UnbindChannel)
 
 	router.Post(options.BaseURL+"/api/monitors/:id/pause", wrapper.ToggleMonitorPause)
 
