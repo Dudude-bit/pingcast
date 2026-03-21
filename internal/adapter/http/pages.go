@@ -196,6 +196,16 @@ func (h *PageHandler) MonitorNewForm(c *fiber.Ctx) error {
 	})
 }
 
+func (h *PageHandler) MonitorTogglePause(c *fiber.Ctx) error {
+	user := UserFromCtx(c)
+	monID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Redirect("/dashboard")
+	}
+	h.monitoring.TogglePause(c.UserContext(), user, monID)
+	return c.Redirect("/dashboard")
+}
+
 func (h *PageHandler) MonitorEditForm(c *fiber.Ctx) error {
 	user := UserFromCtx(c)
 	monID, err := uuid.Parse(c.Params("id"))
