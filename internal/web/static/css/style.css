@@ -279,7 +279,7 @@ a:hover { color: var(--text-primary); }
 }
 
 /* --- Text & Number Inputs --- */
-.form-group input,
+.form-group input:not([type="checkbox"]),
 .form-group select {
     width: 100%;
     padding: 0.75rem 1rem;
@@ -293,13 +293,13 @@ a:hover { color: var(--text-primary); }
     outline: none;
 }
 
-.form-group input:hover,
+.form-group input:not([type="checkbox"]):hover,
 .form-group select:hover {
     border-color: var(--border-hover);
     background: var(--bg-card);
 }
 
-.form-group input:focus,
+.form-group input:not([type="checkbox"]):focus,
 .form-group select:focus {
     border-color: var(--accent);
     box-shadow: 0 0 0 3px var(--accent-glow), inset 0 0 0 1px var(--accent);
@@ -357,7 +357,7 @@ a:hover { color: var(--text-primary); }
 }
 
 /* --- Checkbox --- */
-.form-group input[type="checkbox"] {
+input[type="checkbox"] {
     -webkit-appearance: none;
     appearance: none;
     width: 16px;
@@ -370,20 +370,20 @@ a:hover { color: var(--text-primary); }
     cursor: pointer;
     margin-right: 0.5rem;
     position: relative;
-    transition: all 0.15s ease;
+    transition: border-color 0.15s ease, background 0.15s ease;
     flex-shrink: 0;
 }
 
-.form-group input[type="checkbox"]:hover {
+input[type="checkbox"]:hover {
     border-color: var(--accent);
 }
 
-.form-group input[type="checkbox"]:checked {
+input[type="checkbox"]:checked {
     background: var(--accent);
     border-color: var(--accent);
 }
 
-.form-group input[type="checkbox"]:checked::after {
+input[type="checkbox"]:checked::after {
     content: '';
     position: absolute;
     left: 5px;
@@ -395,21 +395,21 @@ a:hover { color: var(--text-primary); }
     transform: rotate(45deg);
 }
 
-.form-group input[type="checkbox"]:focus-visible {
-    box-shadow: 0 0 0 2px var(--accent-glow);
+input[type="checkbox"]:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
 }
 
-/* Checkbox label inline styling */
-.form-group label:has(input[type="checkbox"]) {
+/* Checkbox label */
+.check-label {
     display: inline-flex;
     align-items: center;
     cursor: pointer;
-    text-transform: none;
-    letter-spacing: 0;
     font-weight: 500;
     font-size: 0.875rem;
     color: var(--text-primary);
     padding: 0.3rem 0;
+    margin-bottom: 0.25rem;
 }
 
 /* === Alerts === */

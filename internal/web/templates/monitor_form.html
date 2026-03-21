@@ -49,7 +49,7 @@
         </div>
 
         <div class="form-group">
-            <label style="display: flex; align-items: center; cursor: pointer;">
+            <label class="check-label">
                 <input type="checkbox" name="is_public" {{if and .Monitor .Monitor.IsPublic}}checked{{end}}>
                 Show on public status page
             </label>
@@ -58,9 +58,9 @@
         {{if .Channels}}
         <div class="form-group" style="margin-top: 1rem;">
             <label>Notification Channels</label>
-            <small style="display: block; margin-bottom: 0.5rem; color: var(--text-muted);">Leave unchecked to use all channels (global). Check specific channels to override.</small>
+            <small>Leave unchecked to use all channels (global). Check specific channels to override.</small>
             {{range .Channels}}
-            <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 0.4rem;">
+            <label class="check-label">
                 <input type="checkbox" name="channel_ids" value="{{.ID}}">
                 {{.Name}} <span style="color: var(--text-muted); margin-left: 0.5rem; font-size: 0.8rem;">({{.Type}})</span>
             </label>
