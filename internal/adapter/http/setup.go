@@ -80,6 +80,7 @@ func SetupApp(
 	authed.Get("/monitors/new", pageHandler.MonitorNewForm)
 	authed.Post("/monitors", pageHandler.MonitorCreate)
 	authed.Post("/monitors/:id/pause", pageHandler.MonitorTogglePause)
+	authed.Post("/monitors/:id", pageHandler.MonitorUpdate)
 	authed.Get("/monitors/:id/edit", pageHandler.MonitorEditForm)
 	authed.Get("/monitors/:id", pageHandler.MonitorDetail)
 	authed.Get("/channels", pageHandler.ChannelList)

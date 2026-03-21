@@ -196,6 +196,54 @@ func (h *PageHandler) MonitorNewForm(c *fiber.Ctx) error {
 	})
 }
 
+func (h *PageHandler) MonitorUpdate(c *fiber.Ctx) error {
+	user := UserFromCtx(c)
+	monID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Redirect("/dashboard")
+	}
+
+	monType := domain.MonitorType(c.FormValue("type"))
+	checkConfig := h.buildCheckConfigFromForm(c, monType)
+
+	interval := 300
+	if v := c.FormValue("interval_seconds"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			interval = parsed
+		}
+	}
+	alertAfter := 3
+	if v := c.FormValue("alert_after_failures"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			alertAfter = parsed
+		}
+	}
+
+	name := c.FormValue("name")
+	isPublic := c.FormValue("is_public") == "on"
+
+	input := app.UpdateMonitorInput{
+		Name:               &name,
+		CheckConfig:        checkConfig,
+		IntervalSeconds:    &interval,
+		AlertAfterFailures: &alertAfter,
+		IsPublic:           &isPublic,
+	}
+
+	_, err = h.monitoring.UpdateMonitor(c.UserContext(), user, monID, input)
+	if err != nil {
+		channels, _ := h.alerts.ListChannels(c.UserContext(), user.ID)
+		return h.render(c, "monitor_form.html", fiber.Map{
+			"User":         user,
+			"Error":        err.Error(),
+			"MonitorTypes": h.monitoring.Registry().Types(),
+			"Channels":     channels,
+		})
+	}
+
+	return c.Redirect("/monitors/" + monID.String())
+}
+
 func (h *PageHandler) MonitorTogglePause(c *fiber.Ctx) error {
 	user := UserFromCtx(c)
 	monID, err := uuid.Parse(c.Params("id"))
