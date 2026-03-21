@@ -83,9 +83,11 @@ func SetupApp(
 	authed.Post("/monitors/:id", pageHandler.MonitorUpdate)
 	authed.Get("/monitors/:id/edit", pageHandler.MonitorEditForm)
 	authed.Get("/monitors/:id", pageHandler.MonitorDetail)
+	authed.Post("/monitors/:id/delete", pageHandler.MonitorDelete)
 	authed.Get("/channels", pageHandler.ChannelList)
 	authed.Get("/channels/new", pageHandler.ChannelNewForm)
 	authed.Post("/channels", pageHandler.ChannelCreate)
+	authed.Post("/channels/:id/delete", pageHandler.ChannelDelete)
 	authed.Get("/channels/config-fields", pageHandler.ChannelConfigFields)
 
 	return app

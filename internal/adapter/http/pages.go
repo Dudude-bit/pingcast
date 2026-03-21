@@ -244,6 +244,16 @@ func (h *PageHandler) MonitorUpdate(c *fiber.Ctx) error {
 	return c.Redirect("/monitors/" + monID.String())
 }
 
+func (h *PageHandler) MonitorDelete(c *fiber.Ctx) error {
+	user := UserFromCtx(c)
+	monID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Redirect("/dashboard")
+	}
+	h.monitoring.DeleteMonitor(c.UserContext(), user.ID, monID)
+	return c.Redirect("/dashboard")
+}
+
 func (h *PageHandler) MonitorTogglePause(c *fiber.Ctx) error {
 	user := UserFromCtx(c)
 	monID, err := uuid.Parse(c.Params("id"))
@@ -443,6 +453,16 @@ func (h *PageHandler) ChannelCreate(c *fiber.Ctx) error {
 			"User": user, "Error": err.Error(), "ChannelTypes": h.alerts.Registry().Types(),
 		})
 	}
+	return c.Redirect("/channels")
+}
+
+func (h *PageHandler) ChannelDelete(c *fiber.Ctx) error {
+	user := UserFromCtx(c)
+	chID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Redirect("/channels")
+	}
+	h.alerts.DeleteChannel(c.UserContext(), user.ID, chID)
 	return c.Redirect("/channels")
 }
 

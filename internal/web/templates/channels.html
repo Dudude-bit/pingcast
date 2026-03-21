@@ -15,6 +15,9 @@
             <div class="url">{{.Type}}</div>
         </div>
         <span class="meta">{{if .IsEnabled}}Enabled{{else}}Disabled{{end}}</span>
+        <form method="POST" action="/channels/{{.ID}}/delete" style="display:inline; margin:0;">
+            <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Delete this channel?')">Delete</button>
+        </form>
     </div>
     {{end}}
 </div>
