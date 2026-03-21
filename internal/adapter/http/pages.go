@@ -78,6 +78,9 @@ func (h *PageHandler) LoginPage(c *fiber.Ctx) error {
 }
 
 func (h *PageHandler) LoginSubmit(c *fiber.Ctx) error {
+	if h.isLoggedIn(c) {
+		return c.Redirect("/dashboard")
+	}
 	email := c.FormValue("email")
 	password := c.FormValue("password")
 
@@ -104,6 +107,9 @@ func (h *PageHandler) RegisterPage(c *fiber.Ctx) error {
 }
 
 func (h *PageHandler) RegisterSubmit(c *fiber.Ctx) error {
+	if h.isLoggedIn(c) {
+		return c.Redirect("/dashboard")
+	}
 	email := c.FormValue("email")
 	slug := c.FormValue("slug")
 	password := c.FormValue("password")
