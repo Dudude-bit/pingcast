@@ -26,14 +26,6 @@ func timeToPgtypeTimestamptz(t time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: t, Valid: true}
 }
 
-func pgtypeInt4ToPtr(v pgtype.Int4) *int {
-	if !v.Valid {
-		return nil
-	}
-	i := int(v.Int32)
-	return &i
-}
-
 func intToPgtypeInt4(v *int) pgtype.Int4 {
 	if v == nil {
 		return pgtype.Int4{}
@@ -112,12 +104,6 @@ func toDomainMonitor(
 		CurrentStatus:      domain.MonitorStatus(currentStatus),
 		CreatedAt:          createdAt,
 	}
-}
-
-func monitorFromRow(r gen.Monitor) domain.Monitor {
-	return toDomainMonitor(r.ID, r.UserID, r.Name, r.Type, r.CheckConfig,
-		r.IntervalSeconds, r.AlertAfterFailures, r.IsPaused, r.IsPublic,
-		r.CurrentStatus, r.CreatedAt)
 }
 
 func monitorFromCreateRow(r gen.CreateMonitorRow) domain.Monitor {
