@@ -456,6 +456,50 @@ func (h *PageHandler) ChannelCreate(c *fiber.Ctx) error {
 	return c.Redirect("/channels")
 }
 
+func (h *PageHandler) ChannelEditForm(c *fiber.Ctx) error {
+	user := UserFromCtx(c)
+	chID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Redirect("/channels")
+	}
+	channels, _ := h.alerts.ListChannels(c.UserContext(), user.ID)
+	var channel *domain.NotificationChannel
+	for i := range channels {
+		if channels[i].ID == chID {
+			channel = &channels[i]
+			break
+		}
+	}
+	if channel == nil {
+		return c.Redirect("/channels")
+	}
+	return h.render(c, "channel_form.html", fiber.Map{
+		"User":         user,
+		"Channel":      channel,
+		"ChannelTypes": h.alerts.Registry().Types(),
+	})
+}
+
+func (h *PageHandler) ChannelUpdate(c *fiber.Ctx) error {
+	user := UserFromCtx(c)
+	chID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Redirect("/channels")
+	}
+
+	channelType := domain.ChannelType(c.FormValue("type"))
+	configData := h.buildChannelConfigFromForm(c, channelType)
+	isEnabled := c.FormValue("is_enabled") == "on"
+
+	_, err = h.alerts.UpdateChannel(c.UserContext(), user.ID, chID, c.FormValue("name"), configData, isEnabled)
+	if err != nil {
+		return h.render(c, "channel_form.html", fiber.Map{
+			"User": user, "Error": err.Error(), "ChannelTypes": h.alerts.Registry().Types(),
+		})
+	}
+	return c.Redirect("/channels")
+}
+
 func (h *PageHandler) ChannelDelete(c *fiber.Ctx) error {
 	user := UserFromCtx(c)
 	chID, err := uuid.Parse(c.Params("id"))

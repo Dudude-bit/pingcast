@@ -87,6 +87,8 @@ func SetupApp(
 	authed.Get("/channels", pageHandler.ChannelList)
 	authed.Get("/channels/new", pageHandler.ChannelNewForm)
 	authed.Post("/channels", pageHandler.ChannelCreate)
+	authed.Get("/channels/:id/edit", pageHandler.ChannelEditForm)
+	authed.Post("/channels/:id", pageHandler.ChannelUpdate)
 	authed.Post("/channels/:id/delete", pageHandler.ChannelDelete)
 	authed.Get("/channels/config-fields", pageHandler.ChannelConfigFields)
 
