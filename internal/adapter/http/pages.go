@@ -55,7 +55,14 @@ func NewPageHandler(auth *app.AuthService, monitoring *app.MonitoringService, al
 }
 
 func (h *PageHandler) Landing(c *fiber.Ctx) error {
-	return h.render(c, "landing.html", fiber.Map{"User": UserFromCtx(c)})
+	// If user has a valid session, redirect to dashboard
+	sessionID := c.Cookies("session_id")
+	if sessionID != "" {
+		if user, err := h.auth.ValidateSession(c.UserContext(), sessionID); err == nil && user != nil {
+			return c.Redirect("/dashboard")
+		}
+	}
+	return h.render(c, "landing.html", nil)
 }
 
 func (h *PageHandler) LoginPage(c *fiber.Ctx) error {
