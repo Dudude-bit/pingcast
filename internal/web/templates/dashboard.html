@@ -17,7 +17,7 @@
         <span class="meta">{{.Monitor.IntervalSeconds}}s</span>
         <span class="uptime {{if ge .Uptime 99.5}}uptime-high{{else if ge .Uptime 95.0}}uptime-mid{{else}}uptime-low{{end}}">{{printf "%.1f" .Uptime}}%</span>
         <form method="POST" action="/api/monitors/{{.Monitor.ID}}/pause" onclick="event.stopPropagation();">
-            <button type="submit" class="btn-ghost">{{if .Monitor.IsPaused}}Resume{{else}}Pause{{end}}</button>
+            <button type="submit" class="btn btn-ghost">{{if .Monitor.IsPaused}}Resume{{else}}Pause{{end}}</button>
         </form>
     </a>
     {{end}}
