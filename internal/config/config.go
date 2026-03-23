@@ -7,16 +7,16 @@ import (
 )
 
 type APIConfig struct {
-	Port                       int
-	DatabaseURL                string
-	MaxDBConns                 int
-	RedisURL                   string
-	NatsURL                    string
-	OTelEndpoint               string
+	Port                      int
+	DatabaseURL               string
+	MaxDBConns                int
+	RedisURL                  string
+	NatsURL                   string
+	OTelEndpoint              string
 	LemonSqueezyWebhookSecret string
-	BaseURL                    string
-	EncryptionKey              string
-	EncryptionKeyOld           string
+	BaseURL                   string
+	EncryptionKey             string
+	EncryptionKeyOld          string
 }
 
 type CheckerConfig struct {
@@ -54,16 +54,16 @@ func LoadAPI() (*APIConfig, error) {
 	maxDBConns, _ := strconv.Atoi(getEnv("MAX_DB_CONNS", "10"))
 
 	return &APIConfig{
-		Port:                       port,
-		DatabaseURL:                dbURL,
-		MaxDBConns:                 maxDBConns,
-		RedisURL:                   getEnv("REDIS_URL", "redis://localhost:6379"),
-		NatsURL:                    getEnv("NATS_URL", "nats://localhost:4222"),
-		OTelEndpoint:               os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+		Port:                      port,
+		DatabaseURL:               dbURL,
+		MaxDBConns:                maxDBConns,
+		RedisURL:                  getEnv("REDIS_URL", "redis://localhost:6379"),
+		NatsURL:                   getEnv("NATS_URL", "nats://localhost:4222"),
+		OTelEndpoint:              os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
 		LemonSqueezyWebhookSecret: os.Getenv("LEMONSQUEEZY_WEBHOOK_SECRET"),
-		BaseURL:                    getEnv("BASE_URL", "http://localhost:8080"),
-		EncryptionKey:              os.Getenv("ENCRYPTION_KEY"),
-		EncryptionKeyOld:           os.Getenv("ENCRYPTION_KEY_OLD"),
+		BaseURL:                   getEnv("BASE_URL", "http://localhost:8080"),
+		EncryptionKey:             os.Getenv("ENCRYPTION_KEY"),
+		EncryptionKeyOld:          os.Getenv("ENCRYPTION_KEY_OLD"),
 	}, nil
 }
 

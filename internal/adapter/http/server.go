@@ -7,9 +7,9 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	redisadapter "github.com/kirillinakin/pingcast/internal/adapter/redis"
 	apigen "github.com/kirillinakin/pingcast/internal/api/gen"
 	"github.com/kirillinakin/pingcast/internal/app"
-	redisadapter "github.com/kirillinakin/pingcast/internal/adapter/redis"
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/port"
 	openapi_types "github.com/oapi-codegen/runtime/types"

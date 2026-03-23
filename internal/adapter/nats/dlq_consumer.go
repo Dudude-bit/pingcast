@@ -11,16 +11,16 @@ import (
 // DLQConsumer listens for NATS JetStream max delivery advisory events
 // and writes failed alerts to the database.
 type DLQConsumer struct {
-	nc   *nats.Conn
-	sub  *nats.Subscription
+	nc      *nats.Conn
+	sub     *nats.Subscription
 	handler func(ctx context.Context, streamName, consumerName string, streamSeq uint64, data []byte) error
 }
 
 // MaxDeliveryAdvisory represents a NATS max delivery advisory message.
 type MaxDeliveryAdvisory struct {
-	Type     string `json:"type"`
-	Stream   string `json:"stream"`
-	Consumer string `json:"consumer"`
+	Type      string `json:"type"`
+	Stream    string `json:"stream"`
+	Consumer  string `json:"consumer"`
 	StreamSeq uint64 `json:"stream_seq"`
 }
 

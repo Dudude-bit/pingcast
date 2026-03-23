@@ -19,7 +19,7 @@ var _ port.AlertEventSubscriber = (*AlertSubscriber)(nil)
 
 // MonitorSubscriber subscribes to monitor change events from NATS JetStream.
 type MonitorSubscriber struct {
-	js  jetstream.JetStream
+	js   jetstream.JetStream
 	cons jetstream.ConsumeContext
 }
 
@@ -68,7 +68,7 @@ func (s *MonitorSubscriber) Stop() {
 
 // AlertSubscriber subscribes to alert events from NATS JetStream.
 type AlertSubscriber struct {
-	js  jetstream.JetStream
+	js   jetstream.JetStream
 	cons jetstream.ConsumeContext
 }
 

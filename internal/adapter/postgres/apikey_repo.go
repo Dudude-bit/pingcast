@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -84,9 +83,4 @@ func apiKeyFromRow(row sqlcgen.ApiKey) *domain.APIKey {
 		key.ExpiresAt = &t
 	}
 	return key
-}
-
-// timePtr converts a time.Time to a *time.Time
-func timePtr(t time.Time) *time.Time {
-	return &t
 }

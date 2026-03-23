@@ -17,14 +17,14 @@ const (
 
 // CircuitBreaker implements the circuit breaker pattern.
 type CircuitBreaker struct {
-	mu               sync.Mutex
-	state            State
-	failures         int
-	successes        int
-	maxFailures      int
-	resetTimeout     time.Duration
-	halfOpenMax      int
-	lastFailureTime  time.Time
+	mu              sync.Mutex
+	state           State
+	failures        int
+	successes       int
+	maxFailures     int
+	resetTimeout    time.Duration
+	halfOpenMax     int
+	lastFailureTime time.Time
 }
 
 // NewCircuitBreaker creates a circuit breaker.

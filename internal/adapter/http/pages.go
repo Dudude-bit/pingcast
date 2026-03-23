@@ -11,11 +11,10 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	redisadapter "github.com/kirillinakin/pingcast/internal/adapter/redis"
 	"github.com/kirillinakin/pingcast/internal/app"
 	"github.com/kirillinakin/pingcast/internal/domain"
-	"github.com/kirillinakin/pingcast/internal/port"
 	"github.com/kirillinakin/pingcast/internal/web"
-	redisadapter "github.com/kirillinakin/pingcast/internal/adapter/redis"
 )
 
 type PageHandler struct {
@@ -388,15 +387,6 @@ func (h *PageHandler) buildCheckConfigFromForm(c *fiber.Ctx, monType domain.Moni
 	}
 	data, _ := json.Marshal(cfg)
 	return data
-}
-
-// configFieldsForType returns config schema fields for a given type (used by pages that need schema info).
-func configFieldsForType(registry port.CheckerRegistry, monType domain.MonitorType) []port.ConfigField {
-	chk, err := registry.Get(monType)
-	if err != nil {
-		return nil
-	}
-	return chk.ConfigSchema().Fields
 }
 
 func (h *PageHandler) StatusPage(c *fiber.Ctx) error {

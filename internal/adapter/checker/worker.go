@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"sync"
 
+	redisadapter "github.com/kirillinakin/pingcast/internal/adapter/redis"
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/port"
-	redisadapter "github.com/kirillinakin/pingcast/internal/adapter/redis"
 )
 
 type CheckHandler func(ctx context.Context, monitor *domain.Monitor)

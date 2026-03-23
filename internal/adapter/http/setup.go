@@ -6,15 +6,15 @@ import (
 	"net/http"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/gofiber/fiber/v2/middleware/csrf"
 	"github.com/gofiber/fiber/v2/middleware/filesystem"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
-	apigen "github.com/kirillinakin/pingcast/internal/api/gen"
 	"github.com/kirillinakin/pingcast/internal/adapter/postgres"
+	apigen "github.com/kirillinakin/pingcast/internal/api/gen"
 	"github.com/kirillinakin/pingcast/internal/app"
+	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/web"
 )
 

@@ -10,9 +10,9 @@ import (
 
 // HostLimiter limits concurrent checks per host using Redis INCR/DECR with TTL.
 type HostLimiter struct {
-	client   *goredis.Client
-	maxConc  int64
-	ttl      time.Duration
+	client  *goredis.Client
+	maxConc int64
+	ttl     time.Duration
 }
 
 // NewHostLimiter creates a Redis-based host limiter.

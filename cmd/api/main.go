@@ -17,15 +17,15 @@ import (
 	natsadapter "github.com/kirillinakin/pingcast/internal/adapter/nats"
 	"github.com/kirillinakin/pingcast/internal/adapter/postgres"
 	redisadapter "github.com/kirillinakin/pingcast/internal/adapter/redis"
-	"github.com/kirillinakin/pingcast/internal/crypto"
-	"github.com/kirillinakin/pingcast/internal/observability"
 	smtpadapter "github.com/kirillinakin/pingcast/internal/adapter/smtp"
 	"github.com/kirillinakin/pingcast/internal/adapter/telegram"
 	"github.com/kirillinakin/pingcast/internal/adapter/webhook"
 	"github.com/kirillinakin/pingcast/internal/app"
 	"github.com/kirillinakin/pingcast/internal/config"
+	"github.com/kirillinakin/pingcast/internal/crypto"
 	"github.com/kirillinakin/pingcast/internal/database"
 	"github.com/kirillinakin/pingcast/internal/domain"
+	"github.com/kirillinakin/pingcast/internal/observability"
 	sqlcgen "github.com/kirillinakin/pingcast/internal/sqlc/gen"
 )
 
