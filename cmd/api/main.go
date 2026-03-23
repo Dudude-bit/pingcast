@@ -150,7 +150,7 @@ func main() {
 	// HTTP handlers
 	rateLimiter := redisadapter.NewRateLimiter(rdb, "login", 5, 15*time.Minute)
 	server := httpadapter.NewServer(authSvc, monitoringSvc, alertSvc, monitorPub, rateLimiter)
-	pageHandler := httpadapter.NewPageHandler(authSvc, monitoringSvc, alertSvc, rateLimiter)
+	pageHandler := httpadapter.NewPageHandler(authSvc, monitoringSvc, alertSvc, rateLimiter, apiKeyRepo)
 	webhookHandler := httpadapter.NewWebhookHandler(authSvc, alertSvc, cfg.LemonSqueezyWebhookSecret)
 
 	// Health checker

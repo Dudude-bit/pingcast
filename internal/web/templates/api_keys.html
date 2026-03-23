@@ -1,0 +1,48 @@
+{{define "title"}}API Keys &mdash; PingCast{{end}}
+{{define "content"}}
+<div class="page-header">
+    <h1>API Keys</h1>
+    <a href="/api-keys/new" class="btn btn-primary">+ New API Key</a>
+</div>
+
+{{if .RawKey}}
+<div class="alert" style="background: var(--status-up-bg); color: var(--status-up); border: 1px solid var(--status-up-border); flex-direction: column; align-items: flex-start; gap: 0.75rem;">
+    <div style="font-weight: 700;">Your new API key has been created</div>
+    <div style="display: flex; align-items: center; gap: 0.5rem; width: 100%;">
+        <code id="raw-key" style="flex: 1; padding: 0.5rem 0.75rem; background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-primary); word-break: break-all;">{{.RawKey}}</code>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('raw-key').textContent).then(function(){this.textContent='Copied!'}.bind(this))">Copy</button>
+    </div>
+    <div style="font-size: 0.8rem; color: var(--status-unknown);">This key won't be shown again. Store it securely now.</div>
+</div>
+{{end}}
+
+{{if .APIKeys}}
+<div class="monitor-list">
+    {{range .APIKeys}}
+    <div class="monitor-row" style="grid-template-columns: 1fr auto auto auto auto auto;">
+        <div>
+            <div class="name">{{.Name}}</div>
+            <div class="url">{{range $i, $s := .Scopes}}{{if $i}}, {{end}}{{$s}}{{end}}</div>
+        </div>
+        <span class="meta">Created {{.CreatedAt.Format "Jan 02, 2006"}}</span>
+        <span class="meta">{{if .LastUsedAt}}Used {{.LastUsedAt.Format "Jan 02, 2006"}}{{else}}Never used{{end}}</span>
+        <span class="meta">{{if .ExpiresAt}}Expires {{.ExpiresAt.Format "Jan 02, 2006"}}{{else}}No expiry{{end}}</span>
+        <form method="POST" action="/api-keys/{{.ID}}/revoke" style="display:inline; margin:0;">
+            {{if $.CsrfToken}}<input type="hidden" name="_csrf" value="{{$.CsrfToken}}">{{end}}
+            <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Revoke this API key?')">Revoke</button>
+        </form>
+    </div>
+    {{end}}
+</div>
+{{else}}
+<div class="empty-state">
+    <div class="icon">&#128273;</div>
+    <p>No API keys yet. Create one to access the PingCast API.</p>
+    <a href="/api-keys/new" class="btn btn-primary">Create API Key</a>
+</div>
+{{end}}
+
+<div class="info-bar">
+    <a href="/dashboard">&larr; Back to Dashboard</a>
+</div>
+{{end}}

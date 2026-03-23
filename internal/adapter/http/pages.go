@@ -2,12 +2,18 @@ package httpadapter
 
 import (
 	"bytes"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"io/fs"
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -22,10 +28,11 @@ type PageHandler struct {
 	monitoring  *app.MonitoringService
 	alerts      *app.AlertService
 	rateLimiter port.RateLimiter
+	apiKeyRepo  port.APIKeyRepo
 	templates   map[string]*template.Template
 }
 
-func NewPageHandler(auth *app.AuthService, monitoring *app.MonitoringService, alerts *app.AlertService, rateLimiter port.RateLimiter) *PageHandler {
+func NewPageHandler(auth *app.AuthService, monitoring *app.MonitoringService, alerts *app.AlertService, rateLimiter port.RateLimiter, apiKeyRepo port.APIKeyRepo) *PageHandler {
 	tmplFS, _ := fs.Sub(web.FS, "templates")
 
 	// Parse each page template paired with layout.
@@ -35,6 +42,7 @@ func NewPageHandler(auth *app.AuthService, monitoring *app.MonitoringService, al
 		"landing.html", "login.html", "register.html",
 		"dashboard.html", "monitor_detail.html", "monitor_form.html",
 		"channels.html", "channel_form.html",
+		"api_keys.html", "api_key_form.html",
 	}
 
 	templates := make(map[string]*template.Template, len(pages)+2)
@@ -51,6 +59,7 @@ func NewPageHandler(auth *app.AuthService, monitoring *app.MonitoringService, al
 		monitoring:  monitoring,
 		alerts:      alerts,
 		rateLimiter: rateLimiter,
+		apiKeyRepo:  apiKeyRepo,
 		templates:   templates,
 	}
 }
@@ -548,6 +557,104 @@ func (h *PageHandler) buildChannelConfigFromForm(c *fiber.Ctx, chType domain.Cha
 	}
 	data, _ := json.Marshal(cfg)
 	return data
+}
+
+// --- API Key Pages ---
+
+func (h *PageHandler) APIKeyList(c *fiber.Ctx) error {
+	user := UserFromCtx(c)
+	keys, _ := h.apiKeyRepo.ListByUser(c.UserContext(), user.ID)
+	return h.render(c, "api_keys.html", fiber.Map{
+		"User": user, "APIKeys": keys,
+	})
+}
+
+func (h *PageHandler) APIKeyCreate(c *fiber.Ctx) error {
+	user := UserFromCtx(c)
+	return h.render(c, "api_key_form.html", fiber.Map{
+		"User": user,
+	})
+}
+
+func (h *PageHandler) APIKeyCreateSubmit(c *fiber.Ctx) error {
+	user := UserFromCtx(c)
+
+	name := strings.TrimSpace(c.FormValue("name"))
+	if name == "" {
+		return h.render(c, "api_key_form.html", fiber.Map{
+			"User": user, "Error": "Name is required.",
+		})
+	}
+
+	// Collect scopes from multi-value checkboxes
+	var scopes []string
+	for _, v := range c.Context().PostArgs().PeekMulti("scopes") {
+		if s := strings.TrimSpace(string(v)); s != "" {
+			scopes = append(scopes, s)
+		}
+	}
+	if len(scopes) == 0 {
+		return h.render(c, "api_key_form.html", fiber.Map{
+			"User": user, "Error": "Select at least one scope.",
+		})
+	}
+
+	// Parse expiry
+	var expiresAt *time.Time
+	if days := c.FormValue("expires"); days != "" && days != "0" {
+		d, err := strconv.Atoi(days)
+		if err == nil && d > 0 {
+			t := time.Now().Add(time.Duration(d) * 24 * time.Hour)
+			expiresAt = &t
+		}
+	}
+
+	// Generate raw key: pc_live_ + 32 random bytes hex
+	randomBytes := make([]byte, 32)
+	if _, err := rand.Read(randomBytes); err != nil {
+		slog.Error("failed to generate api key", "error", err)
+		return h.render(c, "api_key_form.html", fiber.Map{
+			"User": user, "Error": "Failed to generate key. Try again.",
+		})
+	}
+	rawKey := fmt.Sprintf("pc_live_%s", hex.EncodeToString(randomBytes))
+
+	// Hash the full key string with sha256
+	hash := sha256.Sum256([]byte(rawKey))
+	keyHash := hex.EncodeToString(hash[:])
+
+	apiKey := &domain.APIKey{
+		ID:        uuid.New(),
+		UserID:    user.ID,
+		KeyHash:   keyHash,
+		Name:      name,
+		Scopes:    scopes,
+		CreatedAt: time.Now(),
+		ExpiresAt: expiresAt,
+	}
+
+	if _, err := h.apiKeyRepo.Create(c.UserContext(), apiKey); err != nil {
+		slog.Error("failed to store api key", "error", err)
+		return h.render(c, "api_key_form.html", fiber.Map{
+			"User": user, "Error": "Failed to create key. Try again.",
+		})
+	}
+
+	// Show list with the raw key displayed once
+	keys, _ := h.apiKeyRepo.ListByUser(c.UserContext(), user.ID)
+	return h.render(c, "api_keys.html", fiber.Map{
+		"User": user, "APIKeys": keys, "RawKey": rawKey,
+	})
+}
+
+func (h *PageHandler) APIKeyRevoke(c *fiber.Ctx) error {
+	user := UserFromCtx(c)
+	keyID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Redirect("/api-keys")
+	}
+	h.apiKeyRepo.Delete(c.UserContext(), keyID, user.ID)
+	return c.Redirect("/api-keys")
 }
 
 func (h *PageHandler) render(c *fiber.Ctx, name string, data fiber.Map) error {

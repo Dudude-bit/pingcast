@@ -150,6 +150,10 @@ func SetupApp(
 	authed.Post("/channels/:id", pageHandler.ChannelUpdate)
 	authed.Post("/channels/:id/delete", pageHandler.ChannelDelete)
 	authed.Get("/channels/config-fields", pageHandler.ChannelConfigFields)
+	authed.Get("/api-keys", pageHandler.APIKeyList)
+	authed.Get("/api-keys/new", pageHandler.APIKeyCreate)
+	authed.Post("/api-keys", pageHandler.APIKeyCreateSubmit)
+	authed.Post("/api-keys/:id/revoke", pageHandler.APIKeyRevoke)
 
 	return app
 }
