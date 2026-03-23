@@ -158,14 +158,21 @@ func SetupApp(
 	return app
 }
 
-// authMiddlewareSelector returns a middleware that applies auth only to protected routes.
+// authMiddlewareSelector returns a middleware that applies auth only to /api/ routes.
+// Non-API routes (HTML pages, webhooks, health, static) are passed through —
+// they have their own auth via PageMiddleware.
 func authMiddlewareSelector(authService *app.AuthService, apiKeyRepo port.APIKeyRepo) apigen.MiddlewareFunc {
 	return func(c *fiber.Ctx) error {
 		path := c.Path()
 
-		// Public API endpoints
+		// Only apply auth to /api/* routes — everything else has its own middleware
+		if len(path) < 5 || path[:5] != "/api/" {
+			return c.Next()
+		}
+
+		// Public API endpoints (no auth needed)
 		if path == "/api/auth/register" || path == "/api/auth/login" ||
-			path == "/health" || len(path) > 12 && path[:12] == "/api/status/" {
+			(len(path) > 12 && path[:12] == "/api/status/") {
 			return c.Next()
 		}
 

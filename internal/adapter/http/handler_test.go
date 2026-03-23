@@ -661,10 +661,14 @@ func TestDashboard_Unauthenticated(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	// Unauthenticated access should be rejected — either 302 redirect (PageMiddleware)
-	// or 401 (AuthMiddleware for API routes). Both are valid rejections.
-	if resp.StatusCode != 302 && resp.StatusCode != 401 {
-		t.Fatalf("expected 302 or 401 for unauthenticated access, got %d", resp.StatusCode)
+	// PageMiddleware must redirect unauthenticated HTML requests to /login.
+	if resp.StatusCode != 302 {
+		t.Fatalf("expected 302 redirect to /login, got %d", resp.StatusCode)
+	}
+
+	location := resp.Header.Get("Location")
+	if location != "/login" {
+		t.Errorf("expected redirect to /login, got %q", location)
 	}
 }
 
