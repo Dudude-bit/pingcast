@@ -333,7 +333,7 @@ func (s *Server) domainMonitorToAPI(m *domain.Monitor) apigen.Monitor {
 	status := apigen.MonitorCurrentStatus(m.CurrentStatus)
 	intervalSeconds := m.IntervalSeconds
 	alertAfter := m.AlertAfterFailures
-	target := s.monitoring.Registry().Target(m.Type, m.CheckConfig)
+	target, _ := s.monitoring.Registry().Target(m.Type, m.CheckConfig)
 	monType := string(m.Type)
 	checkConfig, err := m.ParseCheckConfig()
 	if err != nil {
@@ -358,7 +358,7 @@ func (s *Server) domainMonitorToAPIWithUptime(m *domain.Monitor, uptime *float32
 	status := apigen.MonitorWithUptimeCurrentStatus(m.CurrentStatus)
 	intervalSeconds := m.IntervalSeconds
 	alertAfter := m.AlertAfterFailures
-	target := s.monitoring.Registry().Target(m.Type, m.CheckConfig)
+	target, _ := s.monitoring.Registry().Target(m.Type, m.CheckConfig)
 	monType := string(m.Type)
 	checkConfig, err := m.ParseCheckConfig()
 	if err != nil {
@@ -384,7 +384,7 @@ func (s *Server) domainMonitorToAPIDetail(m *domain.Monitor, u24h, u7d, u30d flo
 	status := apigen.MonitorDetailCurrentStatus(m.CurrentStatus)
 	intervalSeconds := m.IntervalSeconds
 	alertAfter := m.AlertAfterFailures
-	target := s.monitoring.Registry().Target(m.Type, m.CheckConfig)
+	target, _ := s.monitoring.Registry().Target(m.Type, m.CheckConfig)
 	monType := string(m.Type)
 	checkConfig, err := m.ParseCheckConfig()
 	if err != nil {

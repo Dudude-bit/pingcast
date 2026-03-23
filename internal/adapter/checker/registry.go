@@ -55,18 +55,18 @@ func (r *Registry) ValidateConfig(t domain.MonitorType, raw json.RawMessage) err
 	return checker.ValidateConfig(raw)
 }
 
-func (r *Registry) Target(t domain.MonitorType, raw json.RawMessage) string {
+func (r *Registry) Target(t domain.MonitorType, raw json.RawMessage) (string, error) {
 	checker, err := r.Get(t)
 	if err != nil {
-		return ""
+		return "", err
 	}
 	return checker.Target(raw)
 }
 
-func (r *Registry) Host(t domain.MonitorType, raw json.RawMessage) string {
+func (r *Registry) Host(t domain.MonitorType, raw json.RawMessage) (string, error) {
 	checker, err := r.Get(t)
 	if err != nil {
-		return ""
+		return "", err
 	}
 	return checker.Host(raw)
 }

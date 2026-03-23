@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -83,53 +84,66 @@ func main() {
 
 	// Checker registry
 	registry := checker.NewRegistry()
-	registry.Register(domain.MonitorHTTP, "HTTP", checker.NewHTTPChecker())
-	registry.Register(domain.MonitorTCP, "TCP", checker.NewTCPChecker(10*time.Second))
+	checkTimeout := time.Duration(cfg.DefaultTimeoutSecs) * time.Second
+	registry.Register(domain.MonitorHTTP, "HTTP", checker.NewHTTPCheckerWithTimeout(cfg.DefaultTimeoutSecs))
+	registry.Register(domain.MonitorTCP, "TCP", checker.NewTCPChecker(checkTimeout))
 	registry.Register(domain.MonitorDNS, "DNS", checker.NewDNSChecker())
 
 	// App service (registry injected via port)
 	monitoringSvc := app.NewMonitoringService(monitorRepo, checkResultRepo, incidentRepo, userRepo, uptimeRepo, alertPub, registry)
 
-	// Host limiter (Redis-based, distributed across replicas)
-	hostLimiter := redisadapter.NewHostLimiter(rdb, 3, 30*time.Second)
+	// --- NATS Work Queue Architecture ---
+	// Leader-elected scheduler publishes check tasks to NATS.
+	// Stateless checker workers consume tasks via pull-based NATS consumer.
 
-	// Worker pool delegates to MonitoringService.RunCheck
-	workerPool := checker.NewWorkerPool(ctx, 100, registry, hostLimiter, func(ctx context.Context, monitor *domain.Monitor) {
-		if err := monitoringSvc.RunCheck(ctx, monitor); err != nil {
-			slog.Error("failed to run check", "monitor_id", monitor.ID, "error", err)
-		}
-	})
+	// Check task publisher (scheduler → NATS)
+	checkPub := natsadapter.NewCheckPublisher(js)
 
-	scheduler := checker.NewScheduler(func(m *domain.Monitor) {
-		workerPool.Submit(m)
-	})
+	// Leader scheduler (only one instance runs at a time)
+	leaderScheduler := checker.NewLeaderScheduler(rdb, checkPub)
 
-	// Load existing monitors from DB
+	// Load existing monitors into scheduler
 	activeMonitors, err := monitorRepo.ListActive(ctx)
 	if err != nil {
 		slog.Error("failed to load active monitors", "error", err)
 		os.Exit(1)
 	}
 	for i := range activeMonitors {
-		scheduler.Add(&activeMonitors[i])
+		leaderScheduler.Add(&activeMonitors[i])
 	}
 	slog.Info("loaded monitors", "count", len(activeMonitors))
 
-	// Subscribe to monitor changes via NATS
+	// Start leader scheduler in background
+	go leaderScheduler.Run(ctx)
+
+	// Subscribe to monitor changes via NATS (updates scheduler)
 	monitorSub := natsadapter.NewMonitorSubscriber(js)
 	if err := monitorSub.Subscribe(ctx, func(ctx context.Context, action domain.MonitorAction, monitorID uuid.UUID, monitor *domain.Monitor) error {
 		switch action {
 		case domain.ActionCreate, domain.ActionUpdate, domain.ActionResume:
 			if monitor != nil {
-				scheduler.Add(monitor)
+				leaderScheduler.Add(monitor)
 			}
 		case domain.ActionDelete, domain.ActionPause:
-			scheduler.Remove(monitorID)
+			leaderScheduler.Remove(monitorID)
 		}
 		slog.Info("processed monitor change", "action", action, "monitor_id", monitorID)
 		return nil
 	}); err != nil {
 		slog.Error("failed to subscribe to monitor changes", "error", err)
+		os.Exit(1)
+	}
+
+	// Check task subscriber (NATS → workers, pull-based)
+	checkSub := natsadapter.NewCheckSubscriber(js)
+	if err := checkSub.Subscribe(ctx, func(ctx context.Context, monitorID uuid.UUID) error {
+		monitor, err := monitorRepo.GetByID(ctx, monitorID)
+		if err != nil {
+			return fmt.Errorf("get monitor %s: %w", monitorID, err)
+		}
+		return monitoringSvc.RunCheck(ctx, monitor)
+	}); err != nil {
+		slog.Error("failed to subscribe to check tasks", "error", err)
 		os.Exit(1)
 	}
 
@@ -152,7 +166,7 @@ func main() {
 					continue
 				}
 
-				cutoff := time.Now().Add(-90 * 24 * time.Hour)
+				cutoff := time.Now().Add(-time.Duration(cfg.RetentionDays) * 24 * time.Hour)
 				deleted, err := checkResultRepo.DeleteOlderThan(ctx, cutoff)
 				if err != nil {
 					slog.Error("retention cleanup failed", "error", err)
@@ -176,16 +190,12 @@ func main() {
 	defer shutdownCancel()
 
 	monitorSub.Stop()
-	scheduler.Stop()
+	leaderScheduler.Stop()
+	checkSub.Stop()
 
-	// Wait for in-flight checks to complete
-	done := make(chan struct{})
-	go func() {
-		workerPool.Stop()
-		close(done)
-	}()
+	// Allow in-flight check tasks to complete
 	select {
-	case <-done:
+	case <-time.After(5 * time.Second):
 		slog.Info("checker shutdown complete")
 	case <-shutdownCtx.Done():
 		slog.Warn("checker shutdown timed out, force stopping")

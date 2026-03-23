@@ -2,9 +2,12 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 
 	"github.com/google/uuid"
 
+	"github.com/kirillinakin/pingcast/internal/crypto"
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/port"
 	"github.com/kirillinakin/pingcast/internal/sqlc/gen"
@@ -13,19 +16,61 @@ import (
 var _ port.MonitorRepo = (*MonitorRepo)(nil)
 
 type MonitorRepo struct {
-	q *gen.Queries
+	q   *gen.Queries
+	enc *crypto.Encryptor // nil = no encryption
 }
 
 func NewMonitorRepo(q *gen.Queries) *MonitorRepo {
 	return &MonitorRepo{q: q}
 }
 
+func NewMonitorRepoWithEncryption(q *gen.Queries, enc *crypto.Encryptor) *MonitorRepo {
+	return &MonitorRepo{q: q, enc: enc}
+}
+
+func (r *MonitorRepo) encryptConfig(config json.RawMessage) (json.RawMessage, error) {
+	if r.enc == nil || len(config) == 0 {
+		return config, nil
+	}
+	encrypted, err := r.enc.Encrypt(config)
+	if err != nil {
+		return nil, fmt.Errorf("encrypt config: %w", err)
+	}
+	// Store as JSON string: "encrypted_base64"
+	return json.Marshal(encrypted)
+}
+
+func (r *MonitorRepo) decryptConfig(config json.RawMessage) (json.RawMessage, error) {
+	if r.enc == nil || len(config) == 0 {
+		return config, nil
+	}
+	// Try to unmarshal as a JSON string (encrypted value)
+	var encrypted string
+	if err := json.Unmarshal(config, &encrypted); err != nil {
+		// Not a string — likely unencrypted JSON object, return as-is
+		return config, nil
+	}
+	decrypted, err := r.enc.Decrypt(encrypted)
+	if err != nil {
+		// Decryption failed — might be unencrypted data, return as-is
+		return config, nil
+	}
+	return json.RawMessage(decrypted), nil
+}
+
 func (r *MonitorRepo) Create(ctx context.Context, m *domain.Monitor) (*domain.Monitor, error) {
-	row, err := r.q.CreateMonitor(ctx, monitorToCreateParams(m))
+	encConfig, err := r.encryptConfig(m.CheckConfig)
+	if err != nil {
+		return nil, err
+	}
+	mCopy := *m
+	mCopy.CheckConfig = encConfig
+	row, err := r.q.CreateMonitor(ctx, monitorToCreateParams(&mCopy))
 	if err != nil {
 		return nil, err
 	}
 	out := monitorFromCreateRow(row)
+	out.CheckConfig, _ = r.decryptConfig(out.CheckConfig)
 	return &out, nil
 }
 
@@ -35,6 +80,7 @@ func (r *MonitorRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Monito
 		return nil, err
 	}
 	out := monitorFromGetByIDRow(row)
+	out.CheckConfig, _ = r.decryptConfig(out.CheckConfig)
 	return &out, nil
 }
 
@@ -46,6 +92,7 @@ func (r *MonitorRepo) ListByUserID(ctx context.Context, userID uuid.UUID) ([]dom
 	out := make([]domain.Monitor, len(rows))
 	for i, row := range rows {
 		out[i] = monitorFromListByUserIDRow(row)
+		out[i].CheckConfig, _ = r.decryptConfig(out[i].CheckConfig)
 	}
 	return out, nil
 }
@@ -58,6 +105,7 @@ func (r *MonitorRepo) ListPublicBySlug(ctx context.Context, slug string) ([]doma
 	out := make([]domain.Monitor, len(rows))
 	for i, row := range rows {
 		out[i] = monitorFromListPublicRow(row)
+		out[i].CheckConfig, _ = r.decryptConfig(out[i].CheckConfig)
 	}
 	return out, nil
 }
@@ -70,6 +118,7 @@ func (r *MonitorRepo) ListActive(ctx context.Context) ([]domain.Monitor, error) 
 	out := make([]domain.Monitor, len(rows))
 	for i, row := range rows {
 		out[i] = monitorFromListActiveRow(row)
+		out[i].CheckConfig, _ = r.decryptConfig(out[i].CheckConfig)
 	}
 	return out, nil
 }
@@ -83,7 +132,13 @@ func (r *MonitorRepo) CountByUserID(ctx context.Context, userID uuid.UUID) (int,
 }
 
 func (r *MonitorRepo) Update(ctx context.Context, m *domain.Monitor) error {
-	return r.q.UpdateMonitor(ctx, monitorToUpdateParams(m))
+	encConfig, err := r.encryptConfig(m.CheckConfig)
+	if err != nil {
+		return err
+	}
+	mCopy := *m
+	mCopy.CheckConfig = encConfig
+	return r.q.UpdateMonitor(ctx, monitorToUpdateParams(&mCopy))
 }
 
 func (r *MonitorRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status domain.MonitorStatus) error {

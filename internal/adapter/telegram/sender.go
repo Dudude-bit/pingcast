@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/kirillinakin/pingcast/internal/domain"
@@ -81,13 +82,28 @@ type sender struct {
 	chatID int64
 }
 
+// escapeMarkdown escapes Telegram MarkdownV1 special characters.
+func escapeMarkdown(s string) string {
+	replacer := strings.NewReplacer(
+		"_", "\\_",
+		"*", "\\*",
+		"`", "\\`",
+		"[", "\\[",
+	)
+	return replacer.Replace(s)
+}
+
 func (s *sender) Send(ctx context.Context, event *domain.AlertEvent) error {
+	name := escapeMarkdown(event.MonitorName)
+	target := escapeMarkdown(event.MonitorTarget)
+	cause := escapeMarkdown(event.Cause)
+
 	var text string
 	switch event.Event {
 	case domain.AlertDown:
-		text = fmt.Sprintf("🔴 *%s* is DOWN\n\nTarget: `%s`\nCause: %s", event.MonitorName, event.MonitorTarget, event.Cause)
+		text = fmt.Sprintf("🔴 *%s* is DOWN\n\nTarget: `%s`\nCause: %s", name, target, cause)
 	case domain.AlertUp:
-		text = fmt.Sprintf("🟢 *%s* is back UP\n\nTarget: `%s`", event.MonitorName, event.MonitorTarget)
+		text = fmt.Sprintf("🟢 *%s* is back UP\n\nTarget: `%s`", name, target)
 	default:
 		return nil
 	}

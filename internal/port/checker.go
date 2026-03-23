@@ -11,16 +11,16 @@ type MonitorChecker interface {
 	Check(ctx context.Context, monitor *domain.Monitor) *domain.CheckResult
 	ValidateConfig(raw json.RawMessage) error
 	ConfigSchema() ConfigSchema
-	Target(raw json.RawMessage) string
-	Host(raw json.RawMessage) string
+	Target(raw json.RawMessage) (string, error)
+	Host(raw json.RawMessage) (string, error)
 }
 
 type CheckerRegistry interface {
 	Get(monitorType domain.MonitorType) (MonitorChecker, error)
 	Types() []MonitorTypeInfo
 	ValidateConfig(monitorType domain.MonitorType, raw json.RawMessage) error
-	Target(monitorType domain.MonitorType, raw json.RawMessage) string
-	Host(monitorType domain.MonitorType, raw json.RawMessage) string
+	Target(monitorType domain.MonitorType, raw json.RawMessage) (string, error)
+	Host(monitorType domain.MonitorType, raw json.RawMessage) (string, error)
 }
 
 type MonitorTypeInfo struct {

@@ -3,8 +3,14 @@ package domain
 import (
 	"fmt"
 	"net/mail"
+	"slices"
 	"strings"
 )
+
+// ValidEnum checks if a value is in the allowed list.
+func ValidEnum[T comparable](value T, allowed []T) bool {
+	return slices.Contains(allowed, value)
+}
 
 // ValidateMonitorInput validates monitor fields shared by Create and Update.
 func ValidateMonitorInput(name string, intervalSeconds, alertAfterFailures int) error {

@@ -99,18 +99,18 @@ func (c *DNSChecker) ConfigSchema() port.ConfigSchema {
 	}}
 }
 
-func (c *DNSChecker) Target(raw json.RawMessage) string {
+func (c *DNSChecker) Target(raw json.RawMessage) (string, error) {
 	var cfg DNSCheckConfig
-	if json.Unmarshal(raw, &cfg) != nil {
-		return ""
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return "", fmt.Errorf("invalid dns config: %w", err)
 	}
-	return "dns://" + cfg.Hostname
+	return "dns://" + cfg.Hostname, nil
 }
 
-func (c *DNSChecker) Host(raw json.RawMessage) string {
+func (c *DNSChecker) Host(raw json.RawMessage) (string, error) {
 	var cfg DNSCheckConfig
-	if json.Unmarshal(raw, &cfg) != nil {
-		return ""
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return "", fmt.Errorf("invalid dns config: %w", err)
 	}
-	return cfg.Hostname
+	return cfg.Hostname, nil
 }

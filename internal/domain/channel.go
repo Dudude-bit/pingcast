@@ -16,12 +16,10 @@ const (
 	ChannelWebhook  ChannelType = "webhook"
 )
 
+var validChannelTypes = []ChannelType{ChannelTelegram, ChannelEmail, ChannelWebhook}
+
 func (t ChannelType) Valid() bool {
-	switch t {
-	case ChannelTelegram, ChannelEmail, ChannelWebhook:
-		return true
-	}
-	return false
+	return ValidEnum(t, validChannelTypes)
 }
 
 type NotificationChannel struct {

@@ -65,7 +65,11 @@ func (wp *WorkerPool) worker() {
 				return
 			}
 
-			host := wp.registry.Host(m.Type, m.CheckConfig)
+			host, err := wp.registry.Host(m.Type, m.CheckConfig)
+			if err != nil {
+				slog.Error("failed to resolve host", "monitor_id", m.ID, "error", err)
+				continue
+			}
 			acquired, err := wp.hostLimiter.Acquire(wp.ctx, host)
 			if err != nil {
 				slog.Error("host limiter acquire failed", "host", host, "error", err)

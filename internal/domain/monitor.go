@@ -24,12 +24,10 @@ const (
 	MonitorDNS  MonitorType = "dns"
 )
 
+var validMonitorTypes = []MonitorType{MonitorHTTP, MonitorTCP, MonitorDNS}
+
 func (t MonitorType) Valid() bool {
-	switch t {
-	case MonitorHTTP, MonitorTCP, MonitorDNS:
-		return true
-	}
-	return false
+	return ValidEnum(t, validMonitorTypes)
 }
 
 type Monitor struct {

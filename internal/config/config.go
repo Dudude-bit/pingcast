@@ -20,10 +20,15 @@ type APIConfig struct {
 }
 
 type CheckerConfig struct {
-	DatabaseURL string
-	MaxDBConns  int
-	RedisURL    string
-	NatsURL     string
+	DatabaseURL        string
+	MaxDBConns         int
+	RedisURL           string
+	NatsURL            string
+	OTelEndpoint       string
+	WorkerPoolSize     int
+	HostConcurrency    int
+	RetentionDays      int
+	DefaultTimeoutSecs int
 }
 
 type NotifierConfig struct {
@@ -69,12 +74,21 @@ func LoadChecker() (*CheckerConfig, error) {
 	}
 
 	maxDBConns, _ := strconv.Atoi(getEnv("MAX_DB_CONNS", "15"))
+	workerPoolSize, _ := strconv.Atoi(getEnv("WORKER_POOL_SIZE", "100"))
+	hostConcurrency, _ := strconv.Atoi(getEnv("HOST_CONCURRENCY", "3"))
+	retentionDays, _ := strconv.Atoi(getEnv("RETENTION_DAYS", "90"))
+	defaultTimeout, _ := strconv.Atoi(getEnv("DEFAULT_TIMEOUT_SECS", "10"))
 
 	return &CheckerConfig{
-		DatabaseURL: dbURL,
-		MaxDBConns:  maxDBConns,
-		RedisURL:    getEnv("REDIS_URL", "redis://localhost:6379"),
-		NatsURL:     getEnv("NATS_URL", "nats://localhost:4222"),
+		DatabaseURL:        dbURL,
+		MaxDBConns:         maxDBConns,
+		RedisURL:           getEnv("REDIS_URL", "redis://localhost:6379"),
+		NatsURL:            getEnv("NATS_URL", "nats://localhost:4222"),
+		OTelEndpoint:       os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+		WorkerPoolSize:     workerPoolSize,
+		HostConcurrency:    hostConcurrency,
+		RetentionDays:      retentionDays,
+		DefaultTimeoutSecs: defaultTimeout,
 	}, nil
 }
 

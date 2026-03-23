@@ -76,18 +76,18 @@ func (c *TCPChecker) ConfigSchema() port.ConfigSchema {
 	}}
 }
 
-func (c *TCPChecker) Target(raw json.RawMessage) string {
+func (c *TCPChecker) Target(raw json.RawMessage) (string, error) {
 	var cfg TCPCheckConfig
-	if json.Unmarshal(raw, &cfg) != nil {
-		return ""
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return "", fmt.Errorf("invalid tcp config: %w", err)
 	}
-	return fmt.Sprintf("tcp://%s:%d", cfg.Host, cfg.Port)
+	return fmt.Sprintf("tcp://%s:%d", cfg.Host, cfg.Port), nil
 }
 
-func (c *TCPChecker) Host(raw json.RawMessage) string {
+func (c *TCPChecker) Host(raw json.RawMessage) (string, error) {
 	var cfg TCPCheckConfig
-	if json.Unmarshal(raw, &cfg) != nil {
-		return ""
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return "", fmt.Errorf("invalid tcp config: %w", err)
 	}
-	return cfg.Host
+	return cfg.Host, nil
 }

@@ -254,12 +254,17 @@ func (s *MonitoringService) handleRecovery(ctx context.Context, monitor *domain.
 }
 
 func (s *MonitoringService) publishAlert(ctx context.Context, monitor *domain.Monitor, eventType domain.AlertEventType, cause string, incidentID int64) error {
+	target, err := s.registry.Target(monitor.Type, monitor.CheckConfig)
+	if err != nil {
+		slog.Error("failed to resolve monitor target", "monitor_id", monitor.ID, "error", err)
+	}
+
 	event := &domain.AlertEvent{
 		MonitorID:     monitor.ID,
 		UserID:        monitor.UserID,
 		IncidentID:    incidentID,
 		MonitorName:   monitor.Name,
-		MonitorTarget: s.registry.Target(monitor.Type, monitor.CheckConfig),
+		MonitorTarget: target,
 		Event:         eventType,
 		Cause:         cause,
 	}

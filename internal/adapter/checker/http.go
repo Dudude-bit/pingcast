@@ -164,28 +164,28 @@ func (c *HTTPChecker) ConfigSchema() port.ConfigSchema {
 	}}
 }
 
-func (c *HTTPChecker) Target(raw json.RawMessage) string {
+func (c *HTTPChecker) Target(raw json.RawMessage) (string, error) {
 	var cfg HTTPCheckConfig
-	if json.Unmarshal(raw, &cfg) != nil {
-		return ""
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return "", fmt.Errorf("invalid http config: %w", err)
 	}
 	method := string(cfg.Method)
 	if method == "" {
 		method = "GET"
 	}
-	return method + " " + cfg.URL
+	return method + " " + cfg.URL, nil
 }
 
-func (c *HTTPChecker) Host(raw json.RawMessage) string {
+func (c *HTTPChecker) Host(raw json.RawMessage) (string, error) {
 	var cfg HTTPCheckConfig
-	if json.Unmarshal(raw, &cfg) != nil {
-		return ""
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return "", fmt.Errorf("invalid http config: %w", err)
 	}
 	u, err := url.Parse(cfg.URL)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("invalid url: %w", err)
 	}
-	return u.Host
+	return u.Host, nil
 }
 
 func classifyError(err error) string {

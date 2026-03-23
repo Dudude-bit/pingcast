@@ -153,10 +153,11 @@ func (h *PageHandler) Dashboard(c *fiber.Ctx) error {
 
 	viewRows := make([]MonitorRow, 0, len(rows))
 	for _, r := range rows {
+		target, _ := registry.Target(r.Monitor.Type, r.Monitor.CheckConfig)
 		viewRows = append(viewRows, MonitorRow{
 			Monitor: r.Monitor,
 			Uptime:  r.Uptime,
-			Target:  registry.Target(r.Monitor.Type, r.Monitor.CheckConfig),
+			Target:  target,
 		})
 	}
 
@@ -179,7 +180,7 @@ func (h *PageHandler) MonitorDetail(c *fiber.Ctx) error {
 	}
 
 	chartJSON, _ := json.Marshal([]struct{}{}) // empty for now
-	target := h.monitoring.Registry().Target(detail.Monitor.Type, detail.Monitor.CheckConfig)
+	target, _ := h.monitoring.Registry().Target(detail.Monitor.Type, detail.Monitor.CheckConfig)
 
 	return h.render(c, "monitor_detail.html", fiber.Map{
 		"User":      user,
