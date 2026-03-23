@@ -100,12 +100,13 @@ func main() {
 
 	// Redsync for distributed locks (Redlock algorithm)
 	rs := redisadapter.NewRedsync(rdb)
+	schedulerMutex := rs.NewMutex("lock:scheduler:leader", redsync.WithExpiry(30*time.Second))
 
 	// Check task publisher (scheduler → NATS)
 	checkPub := natsadapter.NewCheckPublisher(js)
 
-	// Leader scheduler (only one instance runs at a time, redsync for election)
-	leaderScheduler := checker.NewLeaderScheduler(rs, checkPub)
+	// Leader scheduler (only one instance runs at a time)
+	leaderScheduler := checker.NewLeaderScheduler(schedulerMutex, checkPub)
 
 	// Load existing monitors into scheduler
 	activeMonitors, err := monitorRepo.ListActive(ctx)

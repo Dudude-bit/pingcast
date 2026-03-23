@@ -22,7 +22,7 @@ type HostLimiter interface {
 // DistributedMutex provides distributed locking.
 type DistributedMutex interface {
 	Lock() error
-	Unlock() error
+	Unlock() (bool, error)
 	Extend() (bool, error)
 }
 

@@ -6,12 +6,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-redsync/redsync/v4"
 	"github.com/google/uuid"
 	"github.com/kirillinakin/pingcast/internal/domain"
+	"github.com/kirillinakin/pingcast/internal/port"
 )
-
-const schedulerLockTTL = 30 * time.Second
 
 // CheckPublisher is the interface for publishing check tasks.
 type CheckPublisher interface {
@@ -19,9 +17,9 @@ type CheckPublisher interface {
 }
 
 // LeaderScheduler is a scheduler that only runs on the leader instance.
-// Uses redsync (Redlock algorithm) for leader election.
+// Uses port.DistributedMutex for leader election.
 type LeaderScheduler struct {
-	mutex     *redsync.Mutex
+	mutex     port.DistributedMutex
 	publisher CheckPublisher
 	monitors  map[uuid.UUID]*scheduledMonitor
 	mu        sync.Mutex
@@ -34,10 +32,10 @@ type scheduledMonitor struct {
 	lastTick time.Time
 }
 
-func NewLeaderScheduler(rs *redsync.Redsync, publisher CheckPublisher) *LeaderScheduler {
+func NewLeaderScheduler(mutex port.DistributedMutex, publisher CheckPublisher) *LeaderScheduler {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &LeaderScheduler{
-		mutex:     rs.NewMutex("lock:scheduler:leader", redsync.WithExpiry(schedulerLockTTL)),
+		mutex:     mutex,
 		publisher: publisher,
 		monitors:  make(map[uuid.UUID]*scheduledMonitor),
 		ctx:       ctx,
