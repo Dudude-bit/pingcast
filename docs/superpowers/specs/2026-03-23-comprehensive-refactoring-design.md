@@ -170,7 +170,7 @@ Errors silently ignored in three methods:
 
 ```sql
 -- New indexes
-CREATE INDEX idx_check_results_monitor_created ON check_results (monitor_id, created_at DESC);
+CREATE INDEX idx_check_results_monitor_created ON check_results (monitor_id, checked_at DESC);
 CREATE INDEX idx_monitor_channels_channel ON monitor_channels (channel_id);
 -- monitor_channels(monitor_id) NOT needed: covered by PK (monitor_id, channel_id)
 
@@ -187,8 +187,8 @@ Note: `idx_check_results_monitor_status(monitor_id, status)` was considered but 
 **Problem:** At 1000 monitors × 1 check/min = 43M rows/month. With 90-day retention = ~130M rows. `DELETE FROM check_results WHERE created_at < X` is a heavy operation that locks rows and generates dead tuples requiring VACUUM.
 
 **Fix:** Native Postgres time-based partitioning:
-- `check_results` becomes a partitioned table: `PARTITION BY RANGE (created_at)`
-- **PK change required:** current `id BIGSERIAL PRIMARY KEY` must become composite `PRIMARY KEY (id, created_at)` — Postgres requires partition key in PK. No other tables have FK references to `check_results.id` (verified), so this is safe.
+- `check_results` becomes a partitioned table: `PARTITION BY RANGE (checked_at)`
+- **PK change required:** current `id BIGSERIAL PRIMARY KEY` must become composite `PRIMARY KEY (id, checked_at)` — Postgres requires partition key in PK. No other tables have FK references to `check_results.id` (verified), so this is safe.
 - Monthly partitions: `check_results_2026_03`, `check_results_2026_04`, etc.
 - Retention cleanup: `DROP TABLE check_results_2026_01` — instant, no locks, no VACUUM
 - Scheduled job creates next month's partition in advance (avoid runtime partition creation)
@@ -556,7 +556,7 @@ Alert event data interpolated into Markdown without escaping. Monitor names with
 
 | Migration | Changes |
 |-----------|---------|
-| `009_add_missing_indexes.sql` | Indexes on check_results, incidents, sessions, monitor_channels |
+| `009_add_missing_indexes.sql` | Indexes on check_results, monitor_channels; recreate incidents index with DESC |
 | `010_enable_rls.sql` | Row-Level Security policies on monitors, channels, incidents, check_results |
 | `011_partition_check_results.sql` | Convert check_results to time-based partitioned table (monthly) |
 | `012_add_soft_delete.sql` | `deleted_at` column + partial indexes on users, monitors, channels |
