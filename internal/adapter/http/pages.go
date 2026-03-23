@@ -142,7 +142,11 @@ func (h *PageHandler) Dashboard(c *fiber.Ctx) error {
 	user := UserFromCtx(c)
 	registry := h.monitoring.Registry()
 
-	rows, _ := h.monitoring.ListMonitorsWithUptime(c.UserContext(), user.ID)
+	rows, err := h.monitoring.ListMonitorsWithUptime(c.UserContext(), user.ID)
+	if err != nil {
+		slog.Error("failed to list monitors", "user_id", user.ID, "error", err)
+		return h.render(c, "dashboard.html", fiber.Map{"User": user, "Error": "Failed to load monitors."})
+	}
 
 	type MonitorRow struct {
 		Monitor domain.Monitor

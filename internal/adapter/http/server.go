@@ -503,7 +503,11 @@ func (s *Server) UpdateChannel(c *fiber.Ctx, id openapi_types.UUID) error {
 	}
 	var configJSON json.RawMessage
 	if req.Config != nil {
-		configJSON, _ = json.Marshal(*req.Config)
+		var err error
+		configJSON, err = json.Marshal(*req.Config)
+		if err != nil {
+			return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid config JSON")})
+		}
 	}
 	ch, err := s.alerts.UpdateChannel(c.UserContext(), user.ID, uuid.UUID(id), name, configJSON, isEnabled)
 	if err != nil {
