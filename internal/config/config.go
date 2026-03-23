@@ -13,6 +13,8 @@ type APIConfig struct {
 	NatsURL                    string
 	LemonSqueezyWebhookSecret string
 	BaseURL                    string
+	EncryptionKey              string
+	EncryptionKeyOld           string
 }
 
 type CheckerConfig struct {
@@ -48,6 +50,8 @@ func LoadAPI() (*APIConfig, error) {
 		NatsURL:                    getEnv("NATS_URL", "nats://localhost:4222"),
 		LemonSqueezyWebhookSecret: os.Getenv("LEMONSQUEEZY_WEBHOOK_SECRET"),
 		BaseURL:                    getEnv("BASE_URL", "http://localhost:8080"),
+		EncryptionKey:              os.Getenv("ENCRYPTION_KEY"),
+		EncryptionKeyOld:           os.Getenv("ENCRYPTION_KEY_OLD"),
 	}, nil
 }
 
