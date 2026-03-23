@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kirillinakin/pingcast/internal/adapter/checker"
 	"github.com/kirillinakin/pingcast/internal/domain"
+	"github.com/kirillinakin/pingcast/internal/mocks"
 )
 
 func TestScheduler_AddsAndFires(t *testing.T) {
@@ -133,14 +134,9 @@ func TestScheduler_Count(t *testing.T) {
 
 // --- LeaderScheduler tests (paused monitors) ---
 
-// stubMutex implements port.DistributedMutex for testing.
-type stubMutex struct{}
-
-func (m *stubMutex) Lock() error              { return nil }
-func (m *stubMutex) Unlock() (bool, error)    { return true, nil }
-func (m *stubMutex) Extend() (bool, error)    { return true, nil }
-
 // stubPublisher implements checker.CheckPublisher for testing.
+// Kept as hand-written stub because it collects published IDs for polling assertions
+// — mockery mocks don't support .get() to retrieve captured args.
 type stubPublisher struct {
 	mu        sync.Mutex
 	published []uuid.UUID
@@ -163,7 +159,11 @@ func (p *stubPublisher) get() []uuid.UUID {
 
 func TestLeaderScheduler_PausedMonitorsNotDispatched(t *testing.T) {
 	pub := &stubPublisher{}
-	ls := checker.NewLeaderScheduler(&stubMutex{}, pub)
+	mutex := mocks.NewMockDistributedMutex(t)
+	mutex.EXPECT().Lock().Return(nil).Maybe()
+	mutex.EXPECT().Extend().Return(true, nil).Maybe()
+	mutex.EXPECT().Unlock().Return(true, nil).Maybe()
+	ls := checker.NewLeaderScheduler(mutex, pub)
 
 	activeID := uuid.New()
 	pausedID := uuid.New()
