@@ -6,27 +6,22 @@
 
 ## Summary
 
-Preventive reliability audit of PingCast identified 31 issues across 4 components (NATS messaging, Notifier, Checker, API). Issues range from critical (silent message loss, race conditions, hex-arch violations) to medium (missing validation, logging improvements). All fixes are organized into 5 PRs (Component 4 split into two for safer review). Three additional issues (1.5, 1.6, 2.9) address hex-arch compliance — decoupling domain models from events, moving orchestration to the app layer, and cleaning up port interfaces.
+Preventive reliability audit of PingCast identified 29 issues across 4 components (NATS messaging, Notifier, Checker, API). Issues range from critical (silent message loss, race conditions, hex-arch violations) to medium (missing validation, logging improvements). All fixes are organized into 5 PRs (Component 4 split into two for safer review). Issues 1.5, 1.6, and 2.9 address hex-arch compliance — decoupling domain models from events, moving orchestration to the app layer, and cleaning up port interfaces. Issues 1.1 and 1.1a were merged into a single issue (publish errors + ordering are handled in app layer after 1.6).
 
 ---
 
 ## Component 1: NATS Messaging
 
-### 1.1. Handle Publish Errors in HTTP Handlers
+### 1.1. Handle Publish Errors + Correct Ordering in App Layer
 
-**Problem:** `PublishMonitorChanged()` errors are ignored in `server.go`. User gets 200, but checker never learns about the monitor.
+**Problem:** `PublishMonitorChanged()` errors are ignored, and in `DeleteMonitor` the event is published *before* the DB delete. Both problems exist in `server.go` but will be **relocated to app layer** by Issue 1.6.
 
-**Fix:** If Publish fails, return HTTP 500 with message `"monitor saved but sync failed, retry later"`. The DB write has already succeeded, so the monitor exists but isn't being checked until the next sync. Note: `ToggleMonitorPause` has two publish calls (pause/resume) — each needs individual error handling.
+**Fix (applied in app layer after 1.6):**
+- If Publish fails after DB write, return wrapped `ErrEventPublishFailed`. HTTP adapter maps it to 500 with `"monitor saved but sync failed, retry later"`.
+- `DeleteMonitor`: delete from DB first, then publish. If publish fails after successful delete, checker syncs via periodic reload.
+- `TogglePause`: two publish paths (pause/resume) — each needs individual error handling.
 
-**Files:** `internal/adapter/http/server.go` (lines 169, 244, 261, 285, 287)
-
-### 1.1a. Fix DeleteMonitor Publish-Before-Delete Ordering
-
-**Problem:** In `DeleteMonitor`, the event is published *before* the DB delete. If publish succeeds but DB delete fails, the checker removes a monitor that still exists.
-
-**Fix:** Reorder: delete from DB first, then publish. If publish fails after a successful delete, the checker will eventually sync via periodic monitor reload.
-
-**Files:** `internal/adapter/http/server.go` (lines 260-262)
+**Files:** `internal/app/monitoring.go` (after 1.6 relocation)
 
 ### 1.2. Per-Message Context in Subscribe Closures
 
@@ -120,8 +115,6 @@ Remove `events port.MonitorEventPublisher` from `Server` struct — it no longer
 
 **Files:** `internal/app/monitoring.go`, `internal/adapter/http/server.go`, `cmd/api/main.go` (wiring)
 
-**Files:** `internal/adapter/nats/client.go` (lines 31-67)
-
 ---
 
 ## Component 2: Notifier
@@ -162,7 +155,7 @@ Remove `events port.MonitorEventPublisher` from `Server` struct — it no longer
 
 **Problem:** One CB per channel type (telegram, email). One user's misconfigured channel triggers CB for all users of that type.
 
-**Fix:** Move CB creation to `CreateSenderWithRetry()` with key `channelType:channelID`. Store CBs in `sync.Map` inside Registry. Add periodic cleanup (every 10 minutes) to evict entries for channels that no longer exist in the DB, preventing unbounded map growth from deleted channels. This requires injecting a channel-existence-check function (e.g., `func(channelID uuid.UUID) bool`) into the Registry to avoid a hard dependency on `port.ChannelRepo`.
+**Fix:** Move CB creation to `CreateSender()` (renamed per Issue 2.9) with key `channelType:channelID`. Store CBs in `sync.Map` inside Registry. Add periodic cleanup (every 10 minutes) to evict entries for channels that no longer exist in the DB, preventing unbounded map growth from deleted channels. This requires injecting a channel-existence-check function (e.g., `func(channelID uuid.UUID) bool`) into the Registry to avoid a hard dependency on `port.ChannelRepo`.
 
 **Files:** `internal/adapter/channel/registry.go`
 
@@ -280,14 +273,16 @@ Note: A plain `RETURNING (SELECT ...)` subquery would read the post-update state
 
 **Problem:** Read-modify-write in `TogglePause()`. Concurrent requests can cause lost update.
 
-**Fix:** Single SQL:
+**Fix:** Single SQL that returns the full monitor row (needed by Issue 1.6 to construct the event DTO):
 ```sql
 UPDATE monitors SET is_paused = NOT is_paused
-WHERE id = $1 AND user_id = $2
-RETURNING is_paused
+WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
+RETURNING id, name, type, check_config, interval_seconds, alert_after_failures, is_paused, current_status, user_id
 ```
 
-**Files:** `internal/app/monitoring.go`, `internal/adapter/postgres/monitor_repo.go`
+The repo method `TogglePause(ctx, monitorID, userID) (*domain.Monitor, error)` returns the full monitor with the toggled state. The app layer uses the returned `IsPaused` to decide which event to publish (per 1.6).
+
+**Files:** `internal/app/monitoring.go`, `internal/adapter/postgres/monitor_repo.go`, sqlc queries
 
 ### 4.4. Error Sanitization
 
@@ -353,7 +348,7 @@ Return 400 with description on invalid values.
 
 **Fix:** Restructure the Decrypt method to capture both errors in the outer scope, then return a combined error:
 ```go
-var primaryErr, oldErr error
+var oldErr error
 plaintext, primaryErr := e.decryptWith(e.primary, data)
 if primaryErr == nil {
     return plaintext, nil
