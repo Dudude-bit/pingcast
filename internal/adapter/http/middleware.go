@@ -7,16 +7,16 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/kirillinakin/pingcast/internal/adapter/postgres"
 	"github.com/kirillinakin/pingcast/internal/app"
 	"github.com/kirillinakin/pingcast/internal/domain"
+	"github.com/kirillinakin/pingcast/internal/port"
 )
 
 const userCtxKey = "auth.user"
 
 // AuthMiddleware returns a Fiber handler that validates the session cookie
 // or API key and stores *domain.User in Locals. Returns 401 JSON on failure.
-func AuthMiddleware(auth *app.AuthService, apiKeyRepo *postgres.APIKeyRepo) fiber.Handler {
+func AuthMiddleware(auth *app.AuthService, apiKeyRepo port.APIKeyRepo) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		// Try API key first (Authorization: Bearer pc_live_...)
 		if authHeader := c.Get("Authorization"); strings.HasPrefix(authHeader, "Bearer ") {
@@ -43,7 +43,7 @@ func AuthMiddleware(auth *app.AuthService, apiKeyRepo *postgres.APIKeyRepo) fibe
 	}
 }
 
-func authenticateWithAPIKey(c *fiber.Ctx, auth *app.AuthService, apiKeyRepo *postgres.APIKeyRepo, rawKey string) error {
+func authenticateWithAPIKey(c *fiber.Ctx, auth *app.AuthService, apiKeyRepo port.APIKeyRepo, rawKey string) error {
 	hash := sha256.Sum256([]byte(rawKey))
 	keyHash := hex.EncodeToString(hash[:])
 

@@ -7,8 +7,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/kirillinakin/pingcast/internal/domain"
+	"github.com/kirillinakin/pingcast/internal/port"
 	sqlcgen "github.com/kirillinakin/pingcast/internal/sqlc/gen"
 )
+
+var _ port.APIKeyRepo = (*APIKeyRepo)(nil)
 
 type APIKeyRepo struct {
 	q *sqlcgen.Queries

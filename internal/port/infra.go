@@ -1,6 +1,11 @@
 package port
 
-import "context"
+import (
+	"context"
+
+	"github.com/google/uuid"
+	"github.com/kirillinakin/pingcast/internal/domain"
+)
 
 // RateLimiter checks and records rate limits.
 type RateLimiter interface {
@@ -19,4 +24,10 @@ type DistributedMutex interface {
 	Lock() error
 	Unlock() error
 	Extend() (bool, error)
+}
+
+// APIKeyRepo provides API key lookup for authentication.
+type APIKeyRepo interface {
+	GetByHash(ctx context.Context, keyHash string) (*domain.APIKey, error)
+	Touch(ctx context.Context, id uuid.UUID) error
 }

@@ -11,10 +11,10 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
-	"github.com/kirillinakin/pingcast/internal/adapter/postgres"
 	apigen "github.com/kirillinakin/pingcast/internal/api/gen"
 	"github.com/kirillinakin/pingcast/internal/app"
 	"github.com/kirillinakin/pingcast/internal/domain"
+	"github.com/kirillinakin/pingcast/internal/port"
 	"github.com/kirillinakin/pingcast/internal/web"
 )
 
@@ -23,7 +23,7 @@ func SetupApp(
 	pageHandler *PageHandler,
 	server *Server,
 	webhookHandler *WebhookHandler,
-	apiKeyRepo *postgres.APIKeyRepo,
+	apiKeyRepo port.APIKeyRepo,
 	healthChecker *HealthChecker,
 ) *fiber.App {
 	app := fiber.New(fiber.Config{
@@ -155,7 +155,7 @@ func SetupApp(
 }
 
 // authMiddlewareSelector returns a middleware that applies auth only to protected routes.
-func authMiddlewareSelector(authService *app.AuthService, apiKeyRepo *postgres.APIKeyRepo) apigen.MiddlewareFunc {
+func authMiddlewareSelector(authService *app.AuthService, apiKeyRepo port.APIKeyRepo) apigen.MiddlewareFunc {
 	return func(c *fiber.Ctx) error {
 		path := c.Path()
 
