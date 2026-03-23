@@ -155,7 +155,7 @@ func TestLeaderScheduler_PausedMonitorsNotDispatched(t *testing.T) {
 	mutex.EXPECT().Extend().Return(true, nil).Maybe()
 	mutex.EXPECT().Unlock().Return(true, nil).Maybe()
 
-	ls := checker.NewLeaderScheduler(mutex, pub)
+	ls := checker.NewLeaderScheduler(mutex, pub, "test-instance")
 
 	activeID := uuid.New()
 	pausedID := uuid.New()

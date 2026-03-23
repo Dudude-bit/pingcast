@@ -15,13 +15,14 @@ import (
 // LeaderScheduler is a scheduler that only runs on the leader instance.
 // Uses port.DistributedMutex for leader election with fencing via Extend().
 type LeaderScheduler struct {
-	mutex     port.DistributedMutex
-	publisher port.CheckPublisher
-	monitors  map[uuid.UUID]*scheduledMonitor
-	mu        sync.Mutex
-	isLeader  atomic.Bool
-	ctx       context.Context
-	cancel    context.CancelFunc
+	mutex      port.DistributedMutex
+	publisher  port.CheckPublisher
+	instanceID string
+	monitors   map[uuid.UUID]*scheduledMonitor
+	mu         sync.Mutex
+	isLeader   atomic.Bool
+	ctx        context.Context
+	cancel     context.CancelFunc
 }
 
 type scheduledMonitor struct {
@@ -29,14 +30,15 @@ type scheduledMonitor struct {
 	lastTick time.Time
 }
 
-func NewLeaderScheduler(mutex port.DistributedMutex, publisher port.CheckPublisher) *LeaderScheduler {
+func NewLeaderScheduler(mutex port.DistributedMutex, publisher port.CheckPublisher, instanceID string) *LeaderScheduler {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &LeaderScheduler{
-		mutex:     mutex,
-		publisher: publisher,
-		monitors:  make(map[uuid.UUID]*scheduledMonitor),
-		ctx:       ctx,
-		cancel:    cancel,
+		mutex:      mutex,
+		publisher:  publisher,
+		instanceID: instanceID,
+		monitors:   make(map[uuid.UUID]*scheduledMonitor),
+		ctx:        ctx,
+		cancel:     cancel,
 	}
 }
 
@@ -73,7 +75,7 @@ func (s *LeaderScheduler) Run(ctx context.Context) {
 			// If extend fails, step down immediately — do NOT dispatch.
 			ok, err := s.mutex.Extend()
 			if err != nil || !ok {
-				slog.Warn("lost leader lock, stepping down", "error", err)
+				slog.Warn("lost leader lock, stepping down", "instance", s.instanceID, "error", err)
 				s.isLeader.Store(false)
 				continue
 			}
@@ -89,7 +91,7 @@ func (s *LeaderScheduler) tryAcquireLeadership() {
 	if err := s.mutex.Lock(); err != nil {
 		return
 	}
-	slog.Info("became scheduler leader")
+	slog.Info("became scheduler leader", "instance", s.instanceID)
 	s.isLeader.Store(true)
 }
 
@@ -123,7 +125,7 @@ func (s *LeaderScheduler) Stop() {
 	s.cancel()
 	if s.isLeader.Load() {
 		if _, err := s.mutex.Unlock(); err != nil {
-			slog.Warn("failed to release leader lock on shutdown", "error", err)
+			slog.Warn("failed to release leader lock on shutdown", "instance", s.instanceID, "error", err)
 		}
 		s.isLeader.Store(false)
 	}

@@ -86,13 +86,15 @@ func main() {
 
 	// Redsync for distributed locks
 	rs := redisadapter.NewRedsync(rdb)
-	schedulerMutex := rs.NewMutex("lock:scheduler:leader", redsync.WithExpiry(30*time.Second))
+	schedulerMutex := rs.NewMutex("lock:scheduler:leader", redsync.WithExpiry(10*time.Second))
 
 	// Check task publisher (scheduler → NATS)
 	checkPub := natsadapter.NewCheckPublisher(js)
 
-	// Leader scheduler
-	leaderScheduler := checker.NewLeaderScheduler(schedulerMutex, checkPub)
+	// Leader scheduler with instance ID for tracing transitions
+	hostname, _ := os.Hostname()
+	instanceID := fmt.Sprintf("%s-%d", hostname, os.Getpid())
+	leaderScheduler := checker.NewLeaderScheduler(schedulerMutex, checkPub, instanceID)
 
 	// Load existing monitors
 	activeMonitors, err := monitorRepo.ListActive(ctx)
