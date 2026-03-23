@@ -170,7 +170,7 @@ Errors silently ignored in three methods:
 
 ```sql
 -- New indexes
-CREATE INDEX idx_check_results_monitor_created ON check_results (monitor_id, checked_at DESC);
+CREATE INDEX idx_check_results_monitor_checked ON check_results (monitor_id, checked_at DESC);
 CREATE INDEX idx_monitor_channels_channel ON monitor_channels (channel_id);
 -- monitor_channels(monitor_id) NOT needed: covered by PK (monitor_id, channel_id)
 
@@ -283,11 +283,14 @@ At scale (many replicas), add PgBouncer as connection pooler between services an
 - Configurable per-host concurrency limit (default: 3)
 - All checker replicas share the same counter
 
-### 3.5 Worker Pool Backpressure
+### 3.5 Backpressure (NATS Work Queue)
 
-**Problem:** Submit blocks or drops tasks silently when pool is overwhelmed.
+**Problem:** In the new architecture (P4.6), backpressure operates at two levels that must be specified.
 
-**Fix:** `Submit() bool` — returns accepted/dropped. Scheduler logs dropped checks. Metric `checks_dropped_total` for alerting on overload.
+**Fix:**
+- **Scheduler → NATS:** if NATS stream hits max messages/bytes limit, `Publish()` returns error. Scheduler logs warning and skips the tick. Metric `scheduler_publish_failures_total`.
+- **NATS → Workers:** pull-based consumption (described in P4.6). Workers call `Fetch(batch)` only when local semaphore has capacity. Natural backpressure — no messages pulled when workers are busy.
+- **Combined metric:** `checks_dropped_total` tracks checks that were neither published (scheduler failure) nor executed (all workers saturated and NATS redelivery exhausted).
 
 ### 3.6 HTTP Checker Body Optimization
 
