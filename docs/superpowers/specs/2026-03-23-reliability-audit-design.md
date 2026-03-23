@@ -6,7 +6,7 @@
 
 ## Summary
 
-Preventive reliability audit of PingCast identified 28 issues across 4 components (NATS messaging, Notifier, Checker, API). Issues range from critical (silent message loss, race conditions, hex-arch violations) to medium (missing validation, logging improvements). All fixes are organized into 5 PRs (Component 4 split into two for safer review). Issues 1.5, 1.6, and 2.9 address hex-arch compliance — decoupling domain models from events, moving orchestration to the app layer, and cleaning up port interfaces. Issues 1.1 and 1.1a were merged into a single issue (publish errors + ordering are handled in app layer after 1.6).
+Preventive reliability audit of PingCast identified 29 issues across 4 components (NATS messaging, Notifier, Checker, API). Issues range from critical (silent message loss, race conditions, hex-arch violations) to medium (missing validation, logging improvements). All fixes are organized into 6 PRs (Component 4 split into two for safer review, plus a standalone encryption overhaul). Issues 1.5, 1.6, and 2.9 address hex-arch compliance — decoupling domain models from events, moving orchestration to the app layer, and cleaning up port interfaces. Issues 1.1 and 1.1a were merged into a single issue (publish errors + ordering are handled in app layer after 1.6).
 
 ---
 
@@ -344,7 +344,111 @@ Return 400 with description on invalid values.
 
 ### ~~4.9. Crypto Error Reporting for Key Rotation~~ — REMOVED
 
-Originally proposed to report both primary and old key errors on decrypt failure. After code review: both errors are identical (`cipher: message authentication failed` from AES-GCM), so combining them adds no diagnostic value. The current message "decrypt: cipher: message authentication failed" is sufficient — it means neither key matched. Not worth the code change.
+Originally proposed to report both primary and old key errors on decrypt failure. After code review: both errors are identical (`cipher: message authentication failed` from AES-GCM), so combining them adds no diagnostic value. Not worth the code change.
+
+### 4.10. Replace Encryptor with Key-Versioned Encryption + Hex-Arch Port
+
+**Problem (scalability):** Current `crypto.Encryptor` supports max 2 keys (primary + old). No key ID in ciphertext — decryption brute-forces keys. No re-encryption mechanism — old key can never be retired. Repos depend on concrete `*crypto.Encryptor` type instead of a port interface.
+
+**Fix:** Replace with key-versioned AES-256-GCM encryption and proper hex-arch port.
+
+#### Ciphertext format
+
+```
+Binary (pre-base64): [1-byte version][12-byte nonce][ciphertext + 16-byte GCM tag]
+AEAD associated data: []byte{version} (binds version to ciphertext, prevents downgrade)
+```
+
+Version `0x00` reserved — used to detect legacy unversioned ciphertext during migration.
+
+#### Port interface (`internal/port/crypto.go`)
+
+```go
+// Cipher encrypts/decrypts sensitive data with key versioning.
+type Cipher interface {
+    Encrypt(ctx context.Context, plaintext []byte) (string, error)
+    Decrypt(ctx context.Context, encrypted string) ([]byte, error)
+    NeedsReEncryption(encrypted string) bool
+}
+```
+
+#### NoOp implementation for disabled encryption
+
+```go
+type NoOpCipher struct{}
+func (n NoOpCipher) Encrypt(_ context.Context, p []byte) (string, error) { return string(p), nil }
+func (n NoOpCipher) Decrypt(_ context.Context, s string) ([]byte, error) { return []byte(s), nil }
+func (n NoOpCipher) NeedsReEncryption(_ string) bool { return false }
+```
+
+#### Key-versioned Encryptor (`internal/crypto/encryptor.go`)
+
+```go
+type Encryptor struct {
+    primary byte              // current key version
+    keys    map[byte][32]byte // version -> raw AES-256 key
+}
+
+func (e *Encryptor) Encrypt(ctx context.Context, plaintext []byte) (string, error) {
+    // [1-byte version][12-byte nonce][ciphertext+tag]
+    // AD = []byte{version}
+}
+
+func (e *Encryptor) Decrypt(ctx context.Context, encoded string) ([]byte, error) {
+    // base64 decode → read version byte → lookup key by version → decrypt
+    // O(1) key lookup, no brute-force
+}
+
+func (e *Encryptor) NeedsReEncryption(encoded string) bool {
+    // base64 decode → check if version byte != e.primary
+}
+```
+
+#### Configuration
+
+Replace single `ENCRYPTION_KEY` / `ENCRYPTION_KEY_OLD` with:
+```
+ENCRYPTION_KEYS=1:base64key1,2:base64key2,3:base64key3
+ENCRYPTION_PRIMARY_VERSION=3
+```
+
+Backward-compatible: if `ENCRYPTION_KEY` is set (old format), treat as version 1.
+
+#### Repos depend on port, not concrete type
+
+```go
+// Before:
+type MonitorRepo struct {
+    enc *crypto.Encryptor  // concrete type, nil = disabled
+}
+
+// After:
+type MonitorRepo struct {
+    cipher port.Cipher  // port interface, NoOpCipher if disabled
+}
+```
+
+Removes dual constructor (`NewMonitorRepo` / `NewMonitorRepoWithEncryption`) — single constructor always takes `port.Cipher`.
+
+#### Re-encryption strategy
+
+1. **On every Update:** `Encrypt()` always uses primary key, so data migrates naturally on write
+2. **Batch CLI command:** `pingcast reencrypt --table monitors --column check_config` for bulk migration
+3. **Detection:** `NeedsReEncryption()` checks version byte vs primary
+
+After batch migration completes, old keys can be safely removed from config.
+
+#### Migration from current format
+
+One-time migration job:
+1. Read all encrypted fields
+2. Detect unversioned ciphertext (try decrypt with current Encryptor's primary/old keys)
+3. Re-encrypt with new key-versioned format (version byte prepended)
+4. Write back
+
+Run as a DB migration step or CLI command before switching to the new Encryptor.
+
+**Files:** `internal/crypto/encryptor.go` (rewrite), `internal/port/crypto.go` (new), `internal/adapter/postgres/monitor_repo.go`, `internal/adapter/postgres/channel_repo.go`, `internal/config/config.go`, `cmd/api/main.go`
 
 ---
 
@@ -355,8 +459,9 @@ Originally proposed to report both primary and old key errors on decrypt failure
 3. **PR 3: Checker** (issues 3.1-3.4) — depends on NATS context fix (1.2) and event DTO (1.5)
 4. **PR 4a: API Race Conditions** (issues 4.1, 4.3, 4.6) — high-risk DB changes, needs careful testing
 5. **PR 4b: API Defensive Coding** (issues 4.2, 4.4, 4.5, 4.7, 4.8) — lower-risk, safety improvements
+6. **PR 5: Encryption Overhaul** (issue 4.10) — key-versioned encryption, hex-arch port, migration
 
-PRs 3, 4a, and 4b can be developed in parallel after PR 1 is merged.
+PR 5 is independent of all other PRs and can be developed in parallel at any point. PRs 3, 4a, and 4b can be developed in parallel after PR 1 is merged.
 
 Note: PR 1 is now the largest PR due to issues 1.5 and 1.6 (event DTO + publish relocation). These changes touch port interfaces, app layer, HTTP adapter, and NATS adapter. Consider splitting into PR 1a (event DTO + publish relocation) and PR 1b (error handling + stream limits) if the diff is too large for review.
 
