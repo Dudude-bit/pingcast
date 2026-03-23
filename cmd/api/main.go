@@ -17,6 +17,7 @@ import (
 	natsadapter "github.com/kirillinakin/pingcast/internal/adapter/nats"
 	"github.com/kirillinakin/pingcast/internal/adapter/postgres"
 	redisadapter "github.com/kirillinakin/pingcast/internal/adapter/redis"
+	"github.com/kirillinakin/pingcast/internal/crypto"
 	"github.com/kirillinakin/pingcast/internal/observability"
 	smtpadapter "github.com/kirillinakin/pingcast/internal/adapter/smtp"
 	"github.com/kirillinakin/pingcast/internal/adapter/telegram"
@@ -90,10 +91,32 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Encryption (optional — disabled if ENCRYPTION_KEY not set)
+	var enc *crypto.Encryptor
+	if cfg.EncryptionKey != "" {
+		var err error
+		enc, err = crypto.NewEncryptor(cfg.EncryptionKey, cfg.EncryptionKeyOld)
+		if err != nil {
+			slog.Error("failed to initialize encryption", "error", err)
+			os.Exit(1)
+		}
+		slog.Info("encryption enabled for config data")
+	} else {
+		slog.Warn("encryption disabled: ENCRYPTION_KEY not set")
+	}
+
 	// Postgres repos
 	userRepo := postgres.NewUserRepo(queries)
 	sessionRepo := redisadapter.NewSessionRepo(rdb)
-	monitorRepo := postgres.NewMonitorRepo(queries)
+	var monitorRepo *postgres.MonitorRepo
+	var channelRepo *postgres.ChannelRepo
+	if enc != nil {
+		monitorRepo = postgres.NewMonitorRepoWithEncryption(queries, enc)
+		channelRepo = postgres.NewChannelRepoWithEncryption(queries, enc)
+	} else {
+		monitorRepo = postgres.NewMonitorRepo(queries)
+		channelRepo = postgres.NewChannelRepo(queries)
+	}
 	checkResultRepo := postgres.NewCheckResultRepo(queries)
 	incidentRepo := postgres.NewIncidentRepo(queries)
 	uptimeRepo := postgres.NewUptimeRepo(queries)
@@ -112,7 +135,6 @@ func main() {
 	apiKeyRepo := postgres.NewAPIKeyRepo(queries)
 
 	// Channel registry (API: validation + schema only, no sending credentials needed)
-	channelRepo := postgres.NewChannelRepo(queries)
 	channelReg := channel.NewRegistry()
 	channelReg.Register(domain.ChannelTelegram, "Telegram", telegram.NewFactory(""))
 	channelReg.Register(domain.ChannelEmail, "Email", smtpadapter.NewFactory("", 0, "", "", ""))
