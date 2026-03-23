@@ -19,6 +19,7 @@ type MonitoringService struct {
 	incidents    port.IncidentRepo
 	users        port.UserRepo
 	uptime       port.UptimeRepo
+	uow          port.UnitOfWork
 	alerts       port.AlertEventPublisher
 	registry     port.CheckerRegistry
 }
@@ -29,6 +30,7 @@ func NewMonitoringService(
 	incidents port.IncidentRepo,
 	users port.UserRepo,
 	uptime port.UptimeRepo,
+	uow port.UnitOfWork,
 	alerts port.AlertEventPublisher,
 	registry port.CheckerRegistry,
 ) *MonitoringService {
@@ -38,6 +40,7 @@ func NewMonitoringService(
 		incidents:    incidents,
 		users:        users,
 		uptime:       uptime,
+		uow:          uow,
 		alerts:       alerts,
 		registry:     registry,
 	}
@@ -66,6 +69,7 @@ type CreateMonitorInput struct {
 	IntervalSeconds    int
 	AlertAfterFailures int
 	IsPublic           bool
+	ChannelIDs         []uuid.UUID
 }
 
 func (s *MonitoringService) CreateMonitor(ctx context.Context, user *domain.User, input CreateMonitorInput) (*domain.Monitor, error) {
@@ -101,7 +105,34 @@ func (s *MonitoringService) CreateMonitor(ctx context.Context, user *domain.User
 		CurrentStatus:      domain.StatusUnknown,
 	}
 
-	return s.monitors.Create(ctx, mon)
+	// No channels to bind — simple create without transaction
+	if len(input.ChannelIDs) == 0 {
+		return s.monitors.Create(ctx, mon)
+	}
+
+	// Transactional: create monitor + bind channels atomically
+	tx, err := s.uow.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	created, err := tx.Monitors().Create(ctx, mon)
+	if err != nil {
+		return nil, fmt.Errorf("create monitor: %w", err)
+	}
+
+	for _, cid := range input.ChannelIDs {
+		if err := tx.Channels().BindToMonitor(ctx, created.ID, cid); err != nil {
+			return nil, fmt.Errorf("bind channel %s: %w", cid, err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return created, nil
 }
 
 type UpdateMonitorInput struct {

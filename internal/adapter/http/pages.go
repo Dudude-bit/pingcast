@@ -314,6 +314,14 @@ func (h *PageHandler) MonitorCreate(c *fiber.Ctx) error {
 	monType := domain.MonitorType(c.FormValue("type"))
 	checkConfig := h.buildCheckConfigFromForm(c, monType)
 
+	// Parse selected channel IDs
+	var channelIDs []uuid.UUID
+	for _, cidBytes := range c.Context().PostArgs().PeekMulti("channel_ids") {
+		if cid, err := uuid.Parse(string(cidBytes)); err == nil {
+			channelIDs = append(channelIDs, cid)
+		}
+	}
+
 	input := app.CreateMonitorInput{
 		Name:               c.FormValue("name"),
 		Type:               monType,
@@ -321,9 +329,10 @@ func (h *PageHandler) MonitorCreate(c *fiber.Ctx) error {
 		IntervalSeconds:    interval,
 		AlertAfterFailures: alertAfter,
 		IsPublic:           c.FormValue("is_public") == "on",
+		ChannelIDs:         channelIDs,
 	}
 
-	mon, err := h.monitoring.CreateMonitor(c.UserContext(), user, input)
+	_, err := h.monitoring.CreateMonitor(c.UserContext(), user, input)
 	if err != nil {
 		channels, _ := h.alerts.ListChannels(c.UserContext(), user.ID)
 		return h.render(c, "monitor_form.html", fiber.Map{
@@ -332,18 +341,6 @@ func (h *PageHandler) MonitorCreate(c *fiber.Ctx) error {
 			"MonitorTypes": h.monitoring.Registry().Types(),
 			"Channels":     channels,
 		})
-	}
-
-	// Bind selected channels
-	channelIDs := c.Context().PostArgs().PeekMulti("channel_ids")
-	for _, cidBytes := range channelIDs {
-		cid, err := uuid.Parse(string(cidBytes))
-		if err != nil {
-			continue
-		}
-		if err := h.alerts.BindChannel(c.UserContext(), user.ID, mon.ID, cid); err != nil {
-			slog.Error("failed to bind channel to monitor", "monitor_id", mon.ID, "channel_id", cid, "error", err)
-		}
 	}
 
 	return c.Redirect("/dashboard")

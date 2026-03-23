@@ -92,7 +92,7 @@ func main() {
 	registry.Register(domain.MonitorDNS, "DNS", checker.NewDNSChecker())
 
 	// App service (registry injected via port)
-	monitoringSvc := app.NewMonitoringService(monitorRepo, checkResultRepo, incidentRepo, userRepo, uptimeRepo, alertPub, registry)
+	monitoringSvc := app.NewMonitoringService(monitorRepo, checkResultRepo, incidentRepo, userRepo, uptimeRepo, nil, alertPub, registry)
 
 	// --- NATS Work Queue Architecture ---
 	// Leader-elected scheduler publishes check tasks to NATS.

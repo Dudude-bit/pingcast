@@ -120,6 +120,7 @@ func main() {
 	checkResultRepo := postgres.NewCheckResultRepo(queries)
 	incidentRepo := postgres.NewIncidentRepo(queries)
 	uptimeRepo := postgres.NewUptimeRepo(queries)
+	uow := postgres.NewUnitOfWork(pool, enc)
 
 	// NATS publishers
 	monitorPub := natsadapter.NewMonitorPublisher(js)
@@ -143,7 +144,7 @@ func main() {
 
 	// App services
 	authSvc := app.NewAuthService(userRepo, sessionRepo)
-	monitoringSvc := app.NewMonitoringService(monitorRepo, checkResultRepo, incidentRepo, userRepo, uptimeRepo, alertPub, registry)
+	monitoringSvc := app.NewMonitoringService(monitorRepo, checkResultRepo, incidentRepo, userRepo, uptimeRepo, uow, alertPub, registry)
 	alertSvc := app.NewAlertService(channelRepo, monitorRepo, channelReg)
 
 	// HTTP handlers
