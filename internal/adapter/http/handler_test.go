@@ -564,11 +564,8 @@ func TestLoginSubmit_InvalidCredentials(t *testing.T) {
 	// Add a user so the email exists but password is wrong.
 	te.userRepo.addUser("test@example.com", "test-user", "correct-password-123")
 
-	// First GET to /login to obtain a CSRF token (from cookie).
+	// First GET to /login to obtain a CSRF token from the rendered HTML.
 	csrfToken, csrfCookie := getCSRFToken(t, te.app, "/login")
-	if csrfToken == "" {
-		t.Skip("CSRF token not available in test environment — CSRF middleware may need real template rendering")
-	}
 
 	formData := fmt.Sprintf("email=test@example.com&password=wrong-password&_csrf=%s", csrfToken)
 	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(formData))
@@ -607,10 +604,6 @@ func TestLoginSubmit_RateLimited(t *testing.T) {
 	te.userRepo.addUser("limited@example.com", "limited", "some-password-123")
 
 	// Exhaust rate limit with 5 calls.
-	csrfToken, csrfCookie := getCSRFToken(t, te.app, "/login")
-	if csrfToken == "" {
-		t.Skip("CSRF token not available in test environment")
-	}
 	for i := range 5 {
 		csrfToken, csrfCookie := getCSRFToken(t, te.app, "/login")
 		formData := fmt.Sprintf("email=limited@example.com&password=wrong-pass-%d&_csrf=%s", i, csrfToken)
@@ -626,7 +619,7 @@ func TestLoginSubmit_RateLimited(t *testing.T) {
 	}
 
 	// 6th request should be rate limited.
-	csrfToken, csrfCookie = getCSRFToken(t, te.app, "/login")
+	csrfToken, csrfCookie := getCSRFToken(t, te.app, "/login")
 	formData := fmt.Sprintf("email=limited@example.com&password=wrong-pass-6&_csrf=%s", csrfToken)
 	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(formData))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -826,8 +819,7 @@ func getCSRFToken(t *testing.T, app *fiber.App, path string) (token string, cook
 	// or value='...' variants.
 	token = extractInputValue(bodyStr, "_csrf")
 	if token == "" {
-		// CSRF token not in HTML — templates may not render in test environment
-		return "", ""
+		t.Fatalf("getCSRFToken: _csrf hidden field not found in HTML for %s — CSRF middleware may be misconfigured", path)
 	}
 
 	// Collect all Set-Cookie headers for the csrf cookie.

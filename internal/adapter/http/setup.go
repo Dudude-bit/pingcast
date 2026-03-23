@@ -77,6 +77,7 @@ func SetupApp(
 		CookieName:     "csrf_",
 		CookieSameSite: "Lax",
 		CookieHTTPOnly: true,
+		ContextKey:     "csrf",
 		Next: func(c *fiber.Ctx) bool {
 			// Skip CSRF for JSON API, webhooks, and health endpoints
 			path := c.Path()
