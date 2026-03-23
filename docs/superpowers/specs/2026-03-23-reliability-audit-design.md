@@ -6,7 +6,7 @@
 
 ## Summary
 
-Preventive reliability audit of PingCast identified 25 issues across 4 components (NATS messaging, Notifier, Checker, API). Issues range from critical (silent message loss, race conditions) to medium (missing validation, logging improvements). All fixes are organized into 4 independent work streams.
+Preventive reliability audit of PingCast identified 28 issues across 4 components (NATS messaging, Notifier, Checker, API). Issues range from critical (silent message loss, race conditions) to medium (missing validation, logging improvements). All fixes are organized into 5 PRs (Component 4 split into two for safer review).
 
 ---
 
@@ -20,20 +20,32 @@ Preventive reliability audit of PingCast identified 25 issues across 4 component
 
 **Files:** `internal/adapter/http/server.go` (lines 169, 244, 261, 285, 287)
 
+### 1.1a. Fix DeleteMonitor Publish-Before-Delete Ordering
+
+**Problem:** In `DeleteMonitor`, the event is published *before* the DB delete. If publish succeeds but DB delete fails, the checker removes a monitor that still exists.
+
+**Fix:** Reorder: delete from DB first, then publish. If publish fails after a successful delete, the checker will eventually sync via periodic monitor reload.
+
+**Files:** `internal/adapter/http/server.go` (lines 260-262)
+
 ### 1.2. Per-Message Context in Subscribe Closures
 
 **Problem:** App-level context passed to NATS handler closures. On shutdown, all in-flight messages get cancelled context, causing failures and potential message loss.
 
-**Fix:** Create per-message context with timeout instead of using the captured app context:
+**Fix:** Create per-message context with timeout instead of using the captured app context. Timeout should be tuned per subscriber:
+- MonitorSubscriber: 5s (in-memory operations only — Add/Remove on scheduler map)
+- AlertSubscriber: 30s (network I/O — channel delivery with retries)
+- CheckSubscriber: 60s (matches existing AckWait)
+
 ```go
-msgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+msgCtx, cancel := context.WithTimeout(context.Background(), timeout)
 defer cancel()
 handler(msgCtx, &event)
 ```
 
 `consumer.Stop()` prevents new message delivery; in-flight messages complete with their own deadline.
 
-**Files:** `internal/adapter/nats/subscriber.go` (lines 47, 98)
+**Files:** `internal/adapter/nats/subscriber.go` (lines 47, 98), `internal/adapter/nats/check_subscriber.go` (line 73)
 
 ### 1.3. MaxDeliver + BackOff for MonitorSubscriber
 
@@ -47,7 +59,10 @@ handler(msgCtx, &event)
 
 **Problem:** No `MaxBytes` limit on MONITORS, CHECKS, ALERTS streams. If consumers stop, disk fills up.
 
-**Fix:** Add `MaxBytes: 1 * 1024 * 1024 * 1024` (1 GB) to all three stream configs.
+**Fix:** Add `MaxBytes` to all three stream configs. Use different limits based on storage type:
+- MONITORS stream (FileStorage): 1 GB
+- ALERTS stream (FileStorage): 1 GB
+- CHECKS stream (MemoryStorage): 100 MB (lower limit — RAM is more expensive than disk)
 
 **Files:** `internal/adapter/nats/client.go` (lines 31-67)
 
@@ -71,13 +86,13 @@ handler(msgCtx, &event)
 
 **Files:** `internal/app/alert.go` (lines 57-84)
 
-### 2.3. DLQ Write Before Ack
+### 2.3. Reliable DLQ Write on Partial Failure
 
-**Problem:** Alert is Ack'd to NATS before DLQ write. If DLQ write fails, partial failure metadata is lost forever.
+**Problem:** `writeToDLQ()` silently swallows its own errors (logs then returns). If the DB write fails, partial failure metadata is lost, and the alert is Ack'd anyway.
 
-**Fix:** Move `writeToDLQ()` before `return nil`. If DLQ write fails, return error so NATS retries the message.
+**Fix:** Retry the DLQ write itself with backoff (3 attempts, 1s/2s/4s). If all retries fail, log at Error level with full event context for manual recovery. Do NOT return error to NATS — that would cause duplicate notifications to channels that already succeeded. The DLQ write is a best-effort audit trail; re-sending to successful channels is worse than losing the audit record.
 
-**Files:** `internal/app/alert.go` (lines 86-104)
+**Files:** `internal/app/alert.go` (lines 86-104, 109-123)
 
 ### 2.4. Wire DLQConsumer in Notifier
 
@@ -91,7 +106,7 @@ handler(msgCtx, &event)
 
 **Problem:** One CB per channel type (telegram, email). One user's misconfigured channel triggers CB for all users of that type.
 
-**Fix:** Move CB creation to `CreateSenderWithRetry()` with key `channelType:channelID`. Store CBs in `sync.Map` inside Registry.
+**Fix:** Move CB creation to `CreateSenderWithRetry()` with key `channelType:channelID`. Store CBs in `sync.Map` inside Registry. Add periodic cleanup (every 10 minutes) to evict entries for channels that no longer exist in the DB, preventing unbounded map growth from deleted channels.
 
 **Files:** `internal/adapter/channel/registry.go`
 
@@ -99,9 +114,9 @@ handler(msgCtx, &event)
 
 **Problem:** Telegram and Webhook senders don't drain response body before closing. Prevents HTTP connection reuse.
 
-**Fix:** Add `io.Copy(io.Discard, resp.Body)` before `resp.Body.Close()` in both senders.
+**Fix:** Add `io.Copy(io.Discard, resp.Body)` before `resp.Body.Close()` in all HTTP-based senders and the HTTP checker.
 
-**Files:** `internal/adapter/telegram/sender.go`, `internal/adapter/webhook/sender.go`
+**Files:** `internal/adapter/telegram/sender.go`, `internal/adapter/webhook/sender.go`, `internal/adapter/checker/http.go`
 
 ### 2.7. BackOff Array Matches MaxDeliver
 
@@ -125,11 +140,11 @@ handler(msgCtx, &event)
 
 ### 3.1. Startup Order: Subscribe Before Run
 
-**Problem:** `leaderScheduler.Run()` starts before `monitorSub.Subscribe()`. Race condition on `s.monitors` map between scheduler iteration and subscription handler.
+**Problem:** `leaderScheduler.Run()` starts before `monitorSub.Subscribe()`. During the gap between Run and Subscribe, any monitor changes published to NATS are missed. The scheduler has the full set from DB load, so this is a brief window — but on a busy system with frequent monitor updates, it can lose events.
 
 **Fix:** Reorder: `monitorSub.Subscribe()` first, then `go leaderScheduler.Run()`. Subscribe buffers NATS messages while Run starts with complete state.
 
-**Files:** `cmd/checker/main.go` (lines 136, 140)
+**Files:** `cmd/scheduler/main.go`
 
 ### 3.2. Cleanup Goroutine: WaitGroup + Graceful Stop
 
@@ -137,7 +152,7 @@ handler(msgCtx, &event)
 
 **Fix:** Add `sync.WaitGroup` for cleanup goroutine. Shutdown sequence: cancel context -> `wg.Wait()` -> close DB pool.
 
-**Files:** `cmd/checker/main.go` (lines 171-215, 218-235)
+**Files:** `cmd/scheduler/main.go`
 
 ### 3.3. Cleanup Lock Failure: Error Differentiation
 
@@ -147,7 +162,7 @@ handler(msgCtx, &event)
 - `redsync.ErrFailed` (lock held by another instance) -> `slog.Debug` (normal)
 - All other errors -> `slog.Warn` (infrastructure problem)
 
-**Files:** `cmd/checker/main.go` (lines 179-182)
+**Files:** `cmd/scheduler/main.go`
 
 ### 3.4. HTTP Client Caching by Timeout
 
@@ -165,14 +180,19 @@ handler(msgCtx, &event)
 
 **Problem:** Read-modify-write pattern in `ProcessCheckResult()` — GetByID then UpdateStatus. Race condition causes duplicate incidents or missed recovery.
 
-**Fix:** Single SQL query:
+**Fix:** Use a CTE to atomically read the previous status and update in one query:
 ```sql
+WITH prev AS (
+    SELECT current_status FROM monitors WHERE id = $1
+)
 UPDATE monitors SET current_status = $2
 WHERE id = $1
-RETURNING (SELECT current_status FROM monitors WHERE id = $1) AS previous_status
+RETURNING (SELECT current_status FROM prev) AS previous_status
 ```
 
-**Files:** `internal/app/monitoring.go` (lines 227-270), `internal/adapter/postgres/monitor_repo.go`
+Note: A plain `RETURNING (SELECT ...)` subquery would read the post-update state, which is wrong. The CTE captures the pre-update snapshot.
+
+**Files:** `internal/app/monitoring.go` (lines 227-270), `internal/adapter/postgres/monitor_repo.go`, sqlc queries
 
 ### 4.2. Nil Check on UserFromCtx
 
@@ -204,7 +224,9 @@ RETURNING is_paused
 - `ErrNotFound` -> `"resource not found"`
 - Everything else -> `"internal error"` (details in logs only)
 
-**Files:** `internal/adapter/http/server.go`
+Apply both to individual handlers in `server.go` and the global error handler in `setup.go` (which also leaks `err.Error()` for non-DomainError cases). Also fix HTML pages in `pages.go` that render raw errors into templates (e.g., `RegisterSubmit`).
+
+**Files:** `internal/adapter/http/server.go`, `internal/adapter/http/setup.go`, `internal/adapter/http/pages.go`
 
 ### 4.5. Background Touch: Detached Context
 
@@ -224,6 +246,8 @@ CREATE UNIQUE INDEX idx_incidents_active_monitor
 ON incidents (monitor_id) WHERE resolved_at IS NULL
 ```
 Catch constraint violation in Go, treat as "cooldown active".
+
+**Pre-migration step:** Check for existing duplicate unresolved incidents (`SELECT monitor_id, COUNT(*) FROM incidents WHERE resolved_at IS NULL GROUP BY monitor_id HAVING COUNT(*) > 1`). If any exist, resolve duplicates before applying the index.
 
 **Files:** `internal/adapter/postgres/`, new migration
 
@@ -251,8 +275,19 @@ Return 400 with description on invalid values.
 
 **Problem:** When both encryption keys fail, only primary key error is returned. Confuses debugging during key rotation.
 
-**Fix:** Return wrapped error with both causes:
+**Fix:** Restructure the Decrypt method to capture both errors in the outer scope, then return a combined error:
 ```go
+var primaryErr, oldErr error
+plaintext, primaryErr := e.decryptWith(e.primary, data)
+if primaryErr == nil {
+    return plaintext, nil
+}
+if e.old != nil {
+    plaintext, oldErr = e.decryptWith(e.old, data)
+    if oldErr == nil {
+        return plaintext, nil
+    }
+}
 return nil, fmt.Errorf("decrypt failed: primary: %w; old key: %v", primaryErr, oldErr)
 ```
 
@@ -264,10 +299,21 @@ return nil, fmt.Errorf("decrypt failed: primary: %w; old key: %v", primaryErr, o
 
 1. **PR 1: NATS Messaging** (issues 1.1-1.4) — foundation for all inter-service communication
 2. **PR 2: Notifier** (issues 2.1-2.8) — depends on NATS fixes being in place
-3. **PR 3: Checker** (issues 3.1-3.4) — independent of Notifier
-4. **PR 4: API** (issues 4.1-4.9) — independent, largest scope
+3. **PR 3: Checker** (issues 3.1-3.4) — depends on NATS context fix (1.2)
+4. **PR 4a: API Race Conditions** (issues 4.1, 4.3, 4.6) — high-risk DB changes, needs careful testing
+5. **PR 4b: API Defensive Coding** (issues 4.2, 4.4, 4.5, 4.7, 4.8, 4.9) — lower-risk, safety improvements
 
-PRs 3 and 4 can be developed in parallel after PR 1 is merged.
+PRs 3, 4a, and 4b can be developed in parallel after PR 1 is merged.
+
+## Shared Utility
+
+The pattern of creating a detached context with timeout is repeated across Issues 1.2, 2.1, and 4.5. Extract a shared utility:
+```go
+// internal/xcontext/detached.go
+func Detached(timeout time.Duration) (context.Context, context.CancelFunc) {
+    return context.WithTimeout(context.Background(), timeout)
+}
+```
 
 ## Testing Strategy
 
