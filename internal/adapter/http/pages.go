@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"html/template"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -333,8 +334,11 @@ func (h *PageHandler) MonitorCreate(c *fiber.Ctx) error {
 	channelIDs := c.Context().PostArgs().PeekMulti("channel_ids")
 	for _, cidBytes := range channelIDs {
 		cid, err := uuid.Parse(string(cidBytes))
-		if err == nil {
-			h.alerts.BindChannel(c.UserContext(), user.ID, mon.ID, cid)
+		if err != nil {
+			continue
+		}
+		if err := h.alerts.BindChannel(c.UserContext(), user.ID, mon.ID, cid); err != nil {
+			slog.Error("failed to bind channel to monitor", "monitor_id", mon.ID, "channel_id", cid, "error", err)
 		}
 	}
 

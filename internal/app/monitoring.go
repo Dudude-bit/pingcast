@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -73,20 +74,22 @@ func (s *MonitoringService) CreateMonitor(ctx context.Context, user *domain.User
 		return nil, fmt.Errorf("monitor limit reached")
 	}
 
+	interval := max(input.IntervalSeconds, user.MinInterval())
+	alertAfter := input.AlertAfterFailures
+	if alertAfter == 0 {
+		alertAfter = 3
+	}
+
+	if err := domain.ValidateMonitorInput(input.Name, interval, alertAfter); err != nil {
+		return nil, err
+	}
 	if err := s.registry.ValidateConfig(input.Type, input.CheckConfig); err != nil {
 		return nil, fmt.Errorf("invalid check config: %w", err)
 	}
 
-	interval := max(input.IntervalSeconds, user.MinInterval())
-
-	alertAfter := max(input.AlertAfterFailures, 1)
-	if input.AlertAfterFailures == 0 {
-		alertAfter = 3
-	}
-
 	mon := &domain.Monitor{
 		UserID:             user.ID,
-		Name:               input.Name,
+		Name:               strings.TrimSpace(input.Name),
 		Type:               input.Type,
 		CheckConfig:        input.CheckConfig,
 		IntervalSeconds:    interval,
@@ -117,7 +120,7 @@ func (s *MonitoringService) UpdateMonitor(ctx context.Context, user *domain.User
 	}
 
 	if input.Name != nil {
-		mon.Name = *input.Name
+		mon.Name = strings.TrimSpace(*input.Name)
 	}
 	if input.CheckConfig != nil {
 		if err := s.registry.ValidateConfig(mon.Type, input.CheckConfig); err != nil {
@@ -126,7 +129,7 @@ func (s *MonitoringService) UpdateMonitor(ctx context.Context, user *domain.User
 		mon.CheckConfig = input.CheckConfig
 	}
 	if input.IntervalSeconds != nil {
-		mon.IntervalSeconds = *input.IntervalSeconds
+		mon.IntervalSeconds = max(*input.IntervalSeconds, user.MinInterval())
 	}
 	if input.AlertAfterFailures != nil {
 		mon.AlertAfterFailures = *input.AlertAfterFailures
@@ -138,7 +141,9 @@ func (s *MonitoringService) UpdateMonitor(ctx context.Context, user *domain.User
 		mon.IsPublic = *input.IsPublic
 	}
 
-	mon.IntervalSeconds = max(mon.IntervalSeconds, user.MinInterval())
+	if err := domain.ValidateMonitorInput(mon.Name, mon.IntervalSeconds, mon.AlertAfterFailures); err != nil {
+		return nil, err
+	}
 
 	if err := s.monitors.Update(ctx, mon); err != nil {
 		return nil, fmt.Errorf("update monitor: %w", err)

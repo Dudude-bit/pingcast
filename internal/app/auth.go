@@ -37,6 +37,9 @@ func NewAuthService(users port.UserRepo, sessions port.SessionRepo) *AuthService
 }
 
 func (s *AuthService) Register(ctx context.Context, email, slug, password string) (*domain.User, string, error) {
+	if err := domain.ValidateEmail(email); err != nil {
+		return nil, "", err
+	}
 	if err := ValidateSlug(slug); err != nil {
 		return nil, "", err
 	}
