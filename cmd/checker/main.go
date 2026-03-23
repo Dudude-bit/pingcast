@@ -12,6 +12,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go/jetstream"
 
+	"github.com/go-redsync/redsync/v4"
+
 	"github.com/kirillinakin/pingcast/internal/adapter/checker"
 	natsadapter "github.com/kirillinakin/pingcast/internal/adapter/nats"
 	"github.com/kirillinakin/pingcast/internal/adapter/postgres"
@@ -96,11 +98,14 @@ func main() {
 	// Leader-elected scheduler publishes check tasks to NATS.
 	// Stateless checker workers consume tasks via pull-based NATS consumer.
 
+	// Redsync for distributed locks (Redlock algorithm)
+	rs := redisadapter.NewRedsync(rdb)
+
 	// Check task publisher (scheduler → NATS)
 	checkPub := natsadapter.NewCheckPublisher(js)
 
-	// Leader scheduler (only one instance runs at a time)
-	leaderScheduler := checker.NewLeaderScheduler(rdb, checkPub)
+	// Leader scheduler (only one instance runs at a time, redsync for election)
+	leaderScheduler := checker.NewLeaderScheduler(rs, checkPub)
 
 	// Load existing monitors into scheduler
 	activeMonitors, err := monitorRepo.ListActive(ctx)
@@ -147,7 +152,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Data retention cleanup (daily, with distributed lock)
+	// Data retention cleanup (daily, with distributed lock via redsync)
+	cleanupMutex := rs.NewMutex("lock:cleanup:retention", redsync.WithExpiry(1*time.Hour))
 	go func() {
 		ticker := time.NewTicker(24 * time.Hour)
 		defer ticker.Stop()
@@ -156,13 +162,8 @@ func main() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				acquired, err := redisadapter.TryLock(ctx, rdb, "cleanup:retention", 1*time.Hour)
-				if err != nil {
-					slog.Error("failed to acquire cleanup lock", "error", err)
-					continue
-				}
-				if !acquired {
-					slog.Debug("cleanup lock held by another instance, skipping")
+				if err := cleanupMutex.Lock(); err != nil {
+					slog.Debug("cleanup lock held by another instance, skipping", "error", err)
 					continue
 				}
 
@@ -174,7 +175,7 @@ func main() {
 					slog.Info("retention cleanup", "deleted_rows", deleted)
 				}
 
-				if err := redisadapter.Unlock(ctx, rdb, "cleanup:retention"); err != nil {
+				if _, err := cleanupMutex.Unlock(); err != nil {
 					slog.Error("failed to release cleanup lock", "error", err)
 				}
 			}

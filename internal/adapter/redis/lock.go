@@ -1,29 +1,14 @@
 package redis
 
 import (
-	"context"
-	"time"
-
+	"github.com/go-redsync/redsync/v4"
+	redsyncgoredis "github.com/go-redsync/redsync/v4/redis/goredis/v9"
 	goredis "github.com/redis/go-redis/v9"
 )
 
-// TryLock attempts to acquire a distributed lock using Redis SET NX with TTL.
-// Returns true if the lock was acquired, false if another process holds it.
-func TryLock(ctx context.Context, client *goredis.Client, key string, ttl time.Duration) (bool, error) {
-	result, err := client.SetArgs(ctx, "lock:"+key, "1", goredis.SetArgs{
-		Mode: "NX",
-		TTL:  ttl,
-	}).Result()
-	if err == goredis.Nil {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return result == "OK", nil
-}
-
-// Unlock releases a distributed lock.
-func Unlock(ctx context.Context, client *goredis.Client, key string) error {
-	return client.Del(ctx, "lock:"+key).Err()
+// NewRedsync creates a redsync instance from a go-redis client.
+// Use rs.NewMutex("lock-name") to create distributed locks.
+func NewRedsync(client *goredis.Client) *redsync.Redsync {
+	pool := redsyncgoredis.NewPool(client)
+	return redsync.New(pool)
 }

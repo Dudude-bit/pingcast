@@ -2,59 +2,37 @@ package channel
 
 import (
 	"context"
-	"log/slog"
 	"time"
+
+	"github.com/cenkalti/backoff/v5"
+	"github.com/sony/gobreaker/v2"
 
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/port"
 )
 
-// RetryingSender wraps an AlertSender with retry logic and circuit breaker.
+// RetryingSender wraps an AlertSender with retry (cenkalti/backoff) and circuit breaker (sony/gobreaker).
 type RetryingSender struct {
-	inner   port.AlertSender
-	cb      *CircuitBreaker
-	retries int
-	backoff []time.Duration
+	inner port.AlertSender
+	cb    *gobreaker.CircuitBreaker[any]
 }
 
-// NewRetryingSender wraps a sender with 3 retries (1s, 2s, 4s) and a circuit breaker.
-func NewRetryingSender(inner port.AlertSender, cb *CircuitBreaker) *RetryingSender {
-	return &RetryingSender{
-		inner:   inner,
-		cb:      cb,
-		retries: 3,
-		backoff: []time.Duration{1 * time.Second, 2 * time.Second, 4 * time.Second},
-	}
+// NewRetryingSender wraps a sender with exponential backoff retry and circuit breaker.
+func NewRetryingSender(inner port.AlertSender, cb *gobreaker.CircuitBreaker[any]) *RetryingSender {
+	return &RetryingSender{inner: inner, cb: cb}
 }
 
 func (s *RetryingSender) Send(ctx context.Context, event *domain.AlertEvent) error {
-	if err := s.cb.Allow(); err != nil {
-		return err
-	}
+	_, err := s.cb.Execute(func() (any, error) {
+		b := backoff.NewExponentialBackOff()
+		b.InitialInterval = 1 * time.Second
+		b.MaxInterval = 4 * time.Second
 
-	var lastErr error
-	for attempt := range s.retries {
-		lastErr = s.inner.Send(ctx, event)
-		if lastErr == nil {
-			s.cb.RecordSuccess()
-			return nil
-		}
+		_, err := backoff.Retry(ctx, backoff.Operation[struct{}](func() (struct{}, error) {
+			return struct{}{}, s.inner.Send(ctx, event)
+		}), backoff.WithBackOff(b), backoff.WithMaxTries(3))
 
-		slog.Warn("alert send failed, retrying",
-			"attempt", attempt+1,
-			"max_retries", s.retries,
-			"error", lastErr,
-		)
-
-		if attempt < s.retries-1 {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(s.backoff[attempt]):
-			}
-		}
-	}
-
-	s.cb.RecordFailure()
-	return lastErr
+		return nil, err
+	})
+	return err
 }

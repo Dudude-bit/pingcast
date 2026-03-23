@@ -6,16 +6,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-redsync/redsync/v4"
 	"github.com/google/uuid"
-	redisadapter "github.com/kirillinakin/pingcast/internal/adapter/redis"
 	"github.com/kirillinakin/pingcast/internal/domain"
-	goredis "github.com/redis/go-redis/v9"
 )
 
-const (
-	schedulerLockKey = "scheduler:leader"
-	schedulerLockTTL = 30 * time.Second
-)
+const schedulerLockTTL = 30 * time.Second
 
 // CheckPublisher is the interface for publishing check tasks.
 type CheckPublisher interface {
@@ -23,9 +19,9 @@ type CheckPublisher interface {
 }
 
 // LeaderScheduler is a scheduler that only runs on the leader instance.
-// Uses Redis lock for leader election with fencing.
+// Uses redsync (Redlock algorithm) for leader election.
 type LeaderScheduler struct {
-	rdb       *goredis.Client
+	mutex     *redsync.Mutex
 	publisher CheckPublisher
 	monitors  map[uuid.UUID]*scheduledMonitor
 	mu        sync.Mutex
@@ -38,10 +34,10 @@ type scheduledMonitor struct {
 	lastTick time.Time
 }
 
-func NewLeaderScheduler(rdb *goredis.Client, publisher CheckPublisher) *LeaderScheduler {
+func NewLeaderScheduler(rs *redsync.Redsync, publisher CheckPublisher) *LeaderScheduler {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &LeaderScheduler{
-		rdb:       rdb,
+		mutex:     rs.NewMutex("lock:scheduler:leader", redsync.WithExpiry(schedulerLockTTL)),
 		publisher: publisher,
 		monitors:  make(map[uuid.UUID]*scheduledMonitor),
 		ctx:       ctx,
@@ -68,9 +64,6 @@ func (s *LeaderScheduler) Run(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
-	leaderTicker := time.NewTicker(10 * time.Second)
-	defer leaderTicker.Stop()
-
 	isLeader := false
 
 	for {
@@ -79,34 +72,22 @@ func (s *LeaderScheduler) Run(ctx context.Context) {
 			return
 		case <-s.ctx.Done():
 			return
-		case <-leaderTicker.C:
-			acquired, err := redisadapter.TryLock(ctx, s.rdb, schedulerLockKey, schedulerLockTTL)
-			if err != nil {
-				slog.Error("leader election failed", "error", err)
-				isLeader = false
-				continue
-			}
-			if acquired && !isLeader {
-				slog.Info("became scheduler leader")
-				isLeader = true
-			} else if !acquired && isLeader {
-				slog.Warn("lost scheduler leadership")
-				isLeader = false
-			}
 		case <-ticker.C:
 			if !isLeader {
-				continue
-			}
-
-			// Refresh lock (fencing)
-			acquired, err := redisadapter.TryLock(ctx, s.rdb, schedulerLockKey, schedulerLockTTL)
-			if err != nil || !acquired {
-				// Lock refresh failed — another instance may have taken over
-				if isLeader {
-					slog.Warn("failed to refresh leader lock, stepping down")
-					isLeader = false
+				// Try to acquire leadership
+				if err := s.mutex.Lock(); err != nil {
+					continue // another instance holds the lock
 				}
-				continue
+				slog.Info("became scheduler leader")
+				isLeader = true
+			} else {
+				// Refresh lock (fencing) — extend TTL
+				ok, err := s.mutex.Extend()
+				if err != nil || !ok {
+					slog.Warn("failed to refresh leader lock, stepping down", "error", err)
+					isLeader = false
+					continue
+				}
 			}
 
 			s.dispatchDueChecks(ctx)
@@ -139,7 +120,8 @@ func (s *LeaderScheduler) dispatchDueChecks(ctx context.Context) {
 	}
 }
 
-// Stop stops the scheduler.
+// Stop stops the scheduler and releases the lock.
 func (s *LeaderScheduler) Stop() {
 	s.cancel()
+	s.mutex.Unlock()
 }

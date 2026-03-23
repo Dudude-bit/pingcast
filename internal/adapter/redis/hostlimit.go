@@ -8,21 +8,36 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-// HostLimiter limits concurrent checks per host using Redis INCR/DECR with TTL.
+// Lua script for atomic semaphore acquire: INCR, check limit, DECR if over.
+var acquireScript = goredis.NewScript(`
+local key = KEYS[1]
+local limit = tonumber(ARGV[1])
+local ttl = tonumber(ARGV[2])
+
+local current = redis.call('INCR', key)
+if current == 1 then
+    redis.call('PEXPIRE', key, ttl)
+end
+if current > limit then
+    redis.call('DECR', key)
+    return 0
+end
+return 1
+`)
+
+// HostLimiter limits concurrent checks per host using a Redis atomic Lua script.
 type HostLimiter struct {
 	client  *goredis.Client
 	maxConc int64
-	ttl     time.Duration
+	ttlMs   int64
 }
 
 // NewHostLimiter creates a Redis-based host limiter.
-// maxConcurrency is the max concurrent checks per host (default 3).
-// ttl is the auto-release timeout if a worker crashes (should be >= check timeout).
 func NewHostLimiter(client *goredis.Client, maxConcurrency int, ttl time.Duration) *HostLimiter {
 	return &HostLimiter{
 		client:  client,
 		maxConc: int64(maxConcurrency),
-		ttl:     ttl,
+		ttlMs:   ttl.Milliseconds(),
 	}
 }
 
@@ -30,33 +45,23 @@ func (h *HostLimiter) key(host string) string {
 	return fmt.Sprintf("hostlimit:%s", host)
 }
 
-// Acquire tries to acquire a slot for the given host.
-// Returns true if acquired, false if host is at max concurrency.
+// Acquire atomically tries to acquire a slot for the host.
+// Returns true if acquired, false if at max concurrency.
 func (h *HostLimiter) Acquire(ctx context.Context, host string) (bool, error) {
-	k := h.key(host)
-	val, err := h.client.Incr(ctx, k).Result()
+	result, err := acquireScript.Run(ctx, h.client, []string{h.key(host)}, h.maxConc, h.ttlMs).Int64()
 	if err != nil {
-		return false, fmt.Errorf("incr host limiter: %w", err)
+		return false, fmt.Errorf("host limiter acquire: %w", err)
 	}
-	// Set TTL on first acquisition (or refresh)
-	h.client.Expire(ctx, k, h.ttl)
-
-	if val > h.maxConc {
-		// Over limit — decrement back
-		h.client.Decr(ctx, k)
-		return false, nil
-	}
-	return true, nil
+	return result == 1, nil
 }
 
-// Release releases a slot for the given host.
+// Release decrements the host counter.
 func (h *HostLimiter) Release(ctx context.Context, host string) error {
 	k := h.key(host)
 	val, err := h.client.Decr(ctx, k).Result()
 	if err != nil {
-		return fmt.Errorf("decr host limiter: %w", err)
+		return fmt.Errorf("host limiter release: %w", err)
 	}
-	// Clean up key if no more slots held
 	if val <= 0 {
 		h.client.Del(ctx, k)
 	}

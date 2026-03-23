@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/sony/gobreaker/v2"
+
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/port"
 )
@@ -14,7 +16,7 @@ var _ port.ChannelRegistry = (*Registry)(nil)
 type registryEntry struct {
 	label   string
 	factory port.ChannelSenderFactory
-	cb      *CircuitBreaker
+	cb      *gobreaker.CircuitBreaker[any]
 }
 
 type Registry struct {
@@ -29,7 +31,7 @@ func (r *Registry) Register(t domain.ChannelType, label string, f port.ChannelSe
 	r.entries[t] = registryEntry{
 		label:   label,
 		factory: f,
-		cb:      NewCircuitBreaker(5, 60*time.Second),
+		cb:      NewCircuitBreaker(string(t), 5, 60*time.Second),
 	}
 }
 
