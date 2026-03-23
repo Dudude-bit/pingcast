@@ -165,7 +165,10 @@ func (h *PageHandler) Dashboard(c *fiber.Ctx) error {
 
 	viewRows := make([]MonitorRow, 0, len(rows))
 	for _, r := range rows {
-		target, _ := registry.Target(r.Monitor.Type, r.Monitor.CheckConfig)
+		target, err := registry.Target(r.Monitor.Type, r.Monitor.CheckConfig)
+		if err != nil {
+			target = "(config error)"
+		}
 		viewRows = append(viewRows, MonitorRow{
 			Monitor: r.Monitor,
 			Uptime:  r.Uptime,
@@ -192,7 +195,12 @@ func (h *PageHandler) MonitorDetail(c *fiber.Ctx) error {
 	}
 
 	chartJSON, _ := json.Marshal([]struct{}{}) // empty for now
-	target, _ := h.monitoring.Registry().Target(detail.Monitor.Type, detail.Monitor.CheckConfig)
+	target, err := h.monitoring.Registry().Target(detail.Monitor.Type, detail.Monitor.CheckConfig)
+	if err != nil {
+		return h.render(c, "monitor_detail.html", fiber.Map{
+			"User": user, "Monitor": detail.Monitor, "Error": "Failed to resolve monitor target: " + err.Error(),
+		})
+	}
 
 	return h.render(c, "monitor_detail.html", fiber.Map{
 		"User":      user,
@@ -208,7 +216,11 @@ func (h *PageHandler) MonitorDetail(c *fiber.Ctx) error {
 
 func (h *PageHandler) MonitorNewForm(c *fiber.Ctx) error {
 	user := UserFromCtx(c)
-	channels, _ := h.alerts.ListChannels(c.UserContext(), user.ID)
+	channels, err := h.alerts.ListChannels(c.UserContext(), user.ID)
+	if err != nil {
+		slog.Error("failed to list channels", "user_id", user.ID, "error", err)
+		return h.render(c, "monitor_form.html", fiber.Map{"User": user, "Error": "Failed to load channels."})
+	}
 	return h.render(c, "monitor_form.html", fiber.Map{
 		"User":         user,
 		"MonitorTypes": h.monitoring.Registry().Types(),
@@ -252,7 +264,11 @@ func (h *PageHandler) MonitorUpdate(c *fiber.Ctx) error {
 
 	_, err = h.monitoring.UpdateMonitor(c.UserContext(), user, monID, input)
 	if err != nil {
-		channels, _ := h.alerts.ListChannels(c.UserContext(), user.ID)
+		channels, chErr := h.alerts.ListChannels(c.UserContext(), user.ID)
+		if chErr != nil {
+			slog.Error("failed to list channels", "user_id", user.ID, "error", chErr)
+			return h.render(c, "monitor_form.html", fiber.Map{"User": user, "Error": "Failed to load channels."})
+		}
 		return h.render(c, "monitor_form.html", fiber.Map{
 			"User":         user,
 			"Error":        err.Error(),
@@ -294,7 +310,11 @@ func (h *PageHandler) MonitorEditForm(c *fiber.Ctx) error {
 	if err != nil || detail.Monitor.UserID != user.ID {
 		return c.Redirect("/dashboard")
 	}
-	channels, _ := h.alerts.ListChannels(c.UserContext(), user.ID)
+	channels, err := h.alerts.ListChannels(c.UserContext(), user.ID)
+	if err != nil {
+		slog.Error("failed to list channels", "user_id", user.ID, "error", err)
+		return h.render(c, "monitor_form.html", fiber.Map{"User": user, "Error": "Failed to load channels."})
+	}
 	return h.render(c, "monitor_form.html", fiber.Map{
 		"User":         user,
 		"Monitor":      detail.Monitor,
@@ -343,7 +363,11 @@ func (h *PageHandler) MonitorCreate(c *fiber.Ctx) error {
 
 	_, err := h.monitoring.CreateMonitor(c.UserContext(), user, input)
 	if err != nil {
-		channels, _ := h.alerts.ListChannels(c.UserContext(), user.ID)
+		channels, chErr := h.alerts.ListChannels(c.UserContext(), user.ID)
+		if chErr != nil {
+			slog.Error("failed to list channels", "user_id", user.ID, "error", chErr)
+			return h.render(c, "monitor_form.html", fiber.Map{"User": user, "Error": "Failed to load channels."})
+		}
 		return h.render(c, "monitor_form.html", fiber.Map{
 			"User":         user,
 			"Error":        err.Error(),
@@ -430,7 +454,11 @@ func (h *PageHandler) StatusPage(c *fiber.Ctx) error {
 
 func (h *PageHandler) ChannelList(c *fiber.Ctx) error {
 	user := UserFromCtx(c)
-	channels, _ := h.alerts.ListChannels(c.UserContext(), user.ID)
+	channels, err := h.alerts.ListChannels(c.UserContext(), user.ID)
+	if err != nil {
+		slog.Error("failed to list channels", "user_id", user.ID, "error", err)
+		return h.render(c, "channels.html", fiber.Map{"User": user, "Error": "Failed to load channels."})
+	}
 	return h.render(c, "channels.html", fiber.Map{
 		"User": user, "Channels": channels,
 	})
@@ -473,7 +501,11 @@ func (h *PageHandler) ChannelEditForm(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Redirect("/channels")
 	}
-	channels, _ := h.alerts.ListChannels(c.UserContext(), user.ID)
+	channels, err := h.alerts.ListChannels(c.UserContext(), user.ID)
+	if err != nil {
+		slog.Error("failed to list channels", "user_id", user.ID, "error", err)
+		return h.render(c, "channel_form.html", fiber.Map{"User": user, "Error": "Failed to load channels."})
+	}
 	var channel *domain.NotificationChannel
 	for i := range channels {
 		if channels[i].ID == chID {
@@ -563,7 +595,11 @@ func (h *PageHandler) buildChannelConfigFromForm(c *fiber.Ctx, chType domain.Cha
 
 func (h *PageHandler) APIKeyList(c *fiber.Ctx) error {
 	user := UserFromCtx(c)
-	keys, _ := h.apiKeyRepo.ListByUser(c.UserContext(), user.ID)
+	keys, err := h.apiKeyRepo.ListByUser(c.UserContext(), user.ID)
+	if err != nil {
+		slog.Error("failed to list API keys", "user_id", user.ID, "error", err)
+		return h.render(c, "api_keys.html", fiber.Map{"User": user, "Error": "Failed to load API keys."})
+	}
 	return h.render(c, "api_keys.html", fiber.Map{
 		"User": user, "APIKeys": keys,
 	})
@@ -641,7 +677,11 @@ func (h *PageHandler) APIKeyCreateSubmit(c *fiber.Ctx) error {
 	}
 
 	// Show list with the raw key displayed once
-	keys, _ := h.apiKeyRepo.ListByUser(c.UserContext(), user.ID)
+	keys, err := h.apiKeyRepo.ListByUser(c.UserContext(), user.ID)
+	if err != nil {
+		slog.Error("failed to list API keys", "user_id", user.ID, "error", err)
+		return h.render(c, "api_keys.html", fiber.Map{"User": user, "Error": "Failed to load API keys."})
+	}
 	return h.render(c, "api_keys.html", fiber.Map{
 		"User": user, "APIKeys": keys, "RawKey": rawKey,
 	})

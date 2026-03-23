@@ -43,6 +43,24 @@ func AuthMiddleware(auth *app.AuthService, apiKeyRepo port.APIKeyRepo) fiber.Han
 	}
 }
 
+// requiredScope determines the API key scope needed for a given HTTP method and path.
+func requiredScope(method, path string) string {
+	// Determine resource from path: /api/monitors/... → monitors, /api/channels/... → channels, etc.
+	resource := "monitors" // default
+	if strings.HasPrefix(path, "/api/channels") {
+		resource = "channels"
+	} else if strings.HasPrefix(path, "/api/incidents") {
+		resource = "incidents"
+	}
+
+	switch method {
+	case fiber.MethodGet, fiber.MethodHead:
+		return resource + ":read"
+	default:
+		return resource + ":write"
+	}
+}
+
 func authenticateWithAPIKey(c *fiber.Ctx, auth *app.AuthService, apiKeyRepo port.APIKeyRepo, rawKey string) error {
 	hash := sha256.Sum256([]byte(rawKey))
 	keyHash := hex.EncodeToString(hash[:])
@@ -54,6 +72,13 @@ func authenticateWithAPIKey(c *fiber.Ctx, auth *app.AuthService, apiKeyRepo port
 
 	if apiKey.IsExpired() {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "api key expired"})
+	}
+
+	// Check scope enforcement
+	scope := requiredScope(c.Method(), c.Path())
+	if !apiKey.HasScope(scope) {
+		slog.Warn("api key missing required scope", "key_id", apiKey.ID, "required", scope, "scopes", apiKey.Scopes)
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "insufficient scope", "required": scope})
 	}
 
 	user, err := auth.GetUserByID(c.UserContext(), apiKey.UserID)

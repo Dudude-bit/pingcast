@@ -27,11 +27,14 @@ import (
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/observability"
 	sqlcgen "github.com/kirillinakin/pingcast/internal/sqlc/gen"
+	"github.com/kirillinakin/pingcast/internal/version"
 )
 
 func main() {
 	inner := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})
 	slog.SetDefault(slog.New(observability.NewTracingHandler(inner)))
+
+	slog.Info("starting", "service", "api", "version", version.Version, "commit", version.Commit)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()

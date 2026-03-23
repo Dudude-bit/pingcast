@@ -18,6 +18,10 @@ import (
 // Setup initializes OpenTelemetry with OTLP exporters.
 // Returns a shutdown function that should be called on application exit.
 // If otelEndpoint is empty, OTel is disabled (noop).
+//
+// Metrics are exported via OTLP gRPC to the OTel Collector, which exposes
+// a Prometheus scrape endpoint on port 8889 (see deploy/otel/collector-config.yaml).
+// No /metrics endpoint is needed on the application itself.
 func Setup(ctx context.Context, serviceName, otelEndpoint string) (func(context.Context) error, error) {
 	if otelEndpoint == "" {
 		slog.Info("otel disabled: OTEL_EXPORTER_OTLP_ENDPOINT not set")

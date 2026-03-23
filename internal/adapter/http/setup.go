@@ -14,6 +14,7 @@ import (
 	apigen "github.com/kirillinakin/pingcast/internal/api/gen"
 	"github.com/kirillinakin/pingcast/internal/app"
 	"github.com/kirillinakin/pingcast/internal/domain"
+	"github.com/kirillinakin/pingcast/internal/observability"
 	"github.com/kirillinakin/pingcast/internal/port"
 	"github.com/kirillinakin/pingcast/internal/web"
 )
@@ -69,6 +70,7 @@ func SetupApp(
 		Format: "${time} ${status} ${method} ${path} ${latency}\n",
 	}))
 	app.Use(recover.New())
+	app.Use(observability.NewFiberTracing())
 
 	// CSRF protection for HTML form submissions.
 	// JSON API endpoints are exempt (they use Authorization header, not cookies).

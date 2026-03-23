@@ -5,6 +5,7 @@ import (
 	sha256Hash "crypto/sha256"
 	"encoding/json"
 	hexEncoding "encoding/hex"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -118,7 +119,11 @@ func (s *Server) ListMonitors(c *fiber.Ctx) error {
 	result := make([]apigen.MonitorWithUptime, 0, len(rows))
 	for _, r := range rows {
 		uptimeF := float32(r.Uptime)
-		result = append(result, s.domainMonitorToAPIWithUptime(&r.Monitor, &uptimeF))
+		item, err := s.domainMonitorToAPIWithUptime(&r.Monitor, &uptimeF)
+		if err != nil {
+			return c.Status(500).JSON(apigen.ErrorResponse{Error: new(err.Error())})
+		}
+		result = append(result, item)
 	}
 
 	return c.JSON(result)
@@ -164,7 +169,11 @@ func (s *Server) CreateMonitor(c *fiber.Ctx) error {
 		s.events.PublishMonitorChanged(c.UserContext(), domain.ActionCreate, mon.ID, mon)
 	}
 
-	return c.Status(201).JSON(s.domainMonitorToAPI(mon))
+	resp, err := s.domainMonitorToAPI(mon)
+	if err != nil {
+		return c.Status(500).JSON(apigen.ErrorResponse{Error: new(err.Error())})
+	}
+	return c.Status(201).JSON(resp)
 }
 
 // ListMonitorTypes returns available monitor types and their config schemas.
@@ -189,11 +198,15 @@ func (s *Server) GetMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 		apiIncidents = append(apiIncidents, domainIncidentToAPI(&inc))
 	}
 
-	return c.JSON(s.domainMonitorToAPIDetail(
+	resp, err := s.domainMonitorToAPIDetail(
 		&detail.Monitor,
 		detail.Uptime24h, detail.Uptime7d, detail.Uptime30d,
 		nil, apiIncidents,
-	))
+	)
+	if err != nil {
+		return c.Status(500).JSON(apigen.ErrorResponse{Error: new(err.Error())})
+	}
+	return c.JSON(resp)
 }
 
 func (s *Server) UpdateMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
@@ -231,7 +244,11 @@ func (s *Server) UpdateMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 		s.events.PublishMonitorChanged(c.UserContext(), domain.ActionUpdate, updated.ID, updated)
 	}
 
-	return c.JSON(s.domainMonitorToAPI(updated))
+	resp, err := s.domainMonitorToAPI(updated)
+	if err != nil {
+		return c.Status(500).JSON(apigen.ErrorResponse{Error: new(err.Error())})
+	}
+	return c.JSON(resp)
 }
 
 func (s *Server) DeleteMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
@@ -271,7 +288,11 @@ func (s *Server) ToggleMonitorPause(c *fiber.Ctx, id openapi_types.UUID) error {
 		}
 	}
 
-	return c.JSON(s.domainMonitorToAPI(updated))
+	resp, err := s.domainMonitorToAPI(updated)
+	if err != nil {
+		return c.Status(500).JSON(apigen.ErrorResponse{Error: new(err.Error())})
+	}
+	return c.JSON(resp)
 }
 
 func (s *Server) GetStatusPage(c *fiber.Ctx, slug string) error {
@@ -334,15 +355,18 @@ func domainUserToAPI(u *domain.User) *apigen.User {
 	}
 }
 
-func (s *Server) domainMonitorToAPI(m *domain.Monitor) apigen.Monitor {
+func (s *Server) domainMonitorToAPI(m *domain.Monitor) (apigen.Monitor, error) {
 	status := apigen.MonitorCurrentStatus(m.CurrentStatus)
 	intervalSeconds := m.IntervalSeconds
 	alertAfter := m.AlertAfterFailures
-	target, _ := s.monitoring.Registry().Target(m.Type, m.CheckConfig)
+	target, err := s.monitoring.Registry().Target(m.Type, m.CheckConfig)
+	if err != nil {
+		return apigen.Monitor{}, fmt.Errorf("resolve target for monitor %s: %w", m.ID, err)
+	}
 	monType := string(m.Type)
 	checkConfig, err := m.ParseCheckConfig()
 	if err != nil {
-		slog.Error("failed to parse check config", "monitor_id", m.ID, "error", err)
+		return apigen.Monitor{}, fmt.Errorf("parse config for monitor %s: %w", m.ID, err)
 	}
 	return apigen.Monitor{
 		Id:                 (*openapi_types.UUID)(&m.ID),
@@ -356,19 +380,22 @@ func (s *Server) domainMonitorToAPI(m *domain.Monitor) apigen.Monitor {
 		IsPublic:           &m.IsPublic,
 		CurrentStatus:      &status,
 		CreatedAt:          &m.CreatedAt,
-	}
+	}, nil
 }
 
-func (s *Server) domainMonitorToAPIWithUptime(m *domain.Monitor, uptime *float32) apigen.MonitorWithUptime {
+func (s *Server) domainMonitorToAPIWithUptime(m *domain.Monitor, uptime *float32) (apigen.MonitorWithUptime, error) {
+	target, err := s.monitoring.Registry().Target(m.Type, m.CheckConfig)
+	if err != nil {
+		return apigen.MonitorWithUptime{}, fmt.Errorf("resolve target for monitor %s: %w", m.ID, err)
+	}
+	checkConfig, err := m.ParseCheckConfig()
+	if err != nil {
+		return apigen.MonitorWithUptime{}, fmt.Errorf("parse config for monitor %s: %w", m.ID, err)
+	}
 	status := apigen.MonitorWithUptimeCurrentStatus(m.CurrentStatus)
 	intervalSeconds := m.IntervalSeconds
 	alertAfter := m.AlertAfterFailures
-	target, _ := s.monitoring.Registry().Target(m.Type, m.CheckConfig)
 	monType := string(m.Type)
-	checkConfig, err := m.ParseCheckConfig()
-	if err != nil {
-		slog.Error("failed to parse check config", "monitor_id", m.ID, "error", err)
-	}
 	return apigen.MonitorWithUptime{
 		Id:                 (*openapi_types.UUID)(&m.ID),
 		Name:               &m.Name,
@@ -382,19 +409,22 @@ func (s *Server) domainMonitorToAPIWithUptime(m *domain.Monitor, uptime *float32
 		CurrentStatus:      &status,
 		CreatedAt:          &m.CreatedAt,
 		Uptime24h:          uptime,
-	}
+	}, nil
 }
 
-func (s *Server) domainMonitorToAPIDetail(m *domain.Monitor, u24h, u7d, u30d float64, chartData []apigen.ChartPoint, incidents []apigen.Incident) apigen.MonitorDetail {
+func (s *Server) domainMonitorToAPIDetail(m *domain.Monitor, u24h, u7d, u30d float64, chartData []apigen.ChartPoint, incidents []apigen.Incident) (apigen.MonitorDetail, error) {
+	target, err := s.monitoring.Registry().Target(m.Type, m.CheckConfig)
+	if err != nil {
+		return apigen.MonitorDetail{}, fmt.Errorf("resolve target for monitor %s: %w", m.ID, err)
+	}
+	checkConfig, err := m.ParseCheckConfig()
+	if err != nil {
+		return apigen.MonitorDetail{}, fmt.Errorf("parse config for monitor %s: %w", m.ID, err)
+	}
 	status := apigen.MonitorDetailCurrentStatus(m.CurrentStatus)
 	intervalSeconds := m.IntervalSeconds
 	alertAfter := m.AlertAfterFailures
-	target, _ := s.monitoring.Registry().Target(m.Type, m.CheckConfig)
 	monType := string(m.Type)
-	checkConfig, err := m.ParseCheckConfig()
-	if err != nil {
-		slog.Error("failed to parse check config", "monitor_id", m.ID, "error", err)
-	}
 	u24 := float32(u24h)
 	u7 := float32(u7d)
 	u30 := float32(u30d)
@@ -415,7 +445,7 @@ func (s *Server) domainMonitorToAPIDetail(m *domain.Monitor, u24h, u7d, u30d flo
 		Uptime30d:          &u30,
 		ChartData:          &chartData,
 		Incidents:          &incidents,
-	}
+	}, nil
 }
 
 func domainIncidentToAPI(i *domain.Incident) apigen.Incident {

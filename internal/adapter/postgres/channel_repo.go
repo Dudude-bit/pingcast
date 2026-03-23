@@ -44,19 +44,19 @@ func (r *ChannelRepo) encryptConfig(config json.RawMessage) (json.RawMessage, er
 	return json.Marshal(encrypted)
 }
 
-func (r *ChannelRepo) decryptConfig(config json.RawMessage) json.RawMessage {
+func (r *ChannelRepo) decryptConfig(config json.RawMessage) (json.RawMessage, error) {
 	if r.enc == nil || len(config) == 0 {
-		return config
+		return config, nil
 	}
 	var encrypted string
 	if err := json.Unmarshal(config, &encrypted); err != nil {
-		return config
+		return nil, fmt.Errorf("channel config is not encrypted (expected JSON string): %w", err)
 	}
 	decrypted, err := r.enc.Decrypt(encrypted)
 	if err != nil {
-		return config
+		return nil, fmt.Errorf("decrypt channel config: %w", err)
 	}
-	return json.RawMessage(decrypted)
+	return json.RawMessage(decrypted), nil
 }
 
 func (r *ChannelRepo) Create(ctx context.Context, ch *domain.NotificationChannel) (*domain.NotificationChannel, error) {
@@ -74,7 +74,11 @@ func (r *ChannelRepo) Create(ctx context.Context, ch *domain.NotificationChannel
 		return nil, fmt.Errorf("create channel: %w", err)
 	}
 	result := toDomainChannel(row)
-	result.Config = r.decryptConfig(result.Config)
+	decrypted, err := r.decryptConfig(result.Config)
+	if err != nil {
+		return nil, err
+	}
+	result.Config = decrypted
 	return result, nil
 }
 
@@ -84,7 +88,11 @@ func (r *ChannelRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Notifi
 		return nil, fmt.Errorf("get channel: %w", err)
 	}
 	result := toDomainChannel(row)
-	result.Config = r.decryptConfig(result.Config)
+	decrypted, err := r.decryptConfig(result.Config)
+	if err != nil {
+		return nil, err
+	}
+	result.Config = decrypted
 	return result, nil
 }
 
@@ -95,7 +103,11 @@ func (r *ChannelRepo) ListByUserID(ctx context.Context, userID uuid.UUID) ([]dom
 	}
 	channels := toDomainChannels(rows)
 	for i := range channels {
-		channels[i].Config = r.decryptConfig(channels[i].Config)
+		decrypted, err := r.decryptConfig(channels[i].Config)
+		if err != nil {
+			return nil, err
+		}
+		channels[i].Config = decrypted
 	}
 	return channels, nil
 }
@@ -107,7 +119,11 @@ func (r *ChannelRepo) ListForMonitor(ctx context.Context, monitorID uuid.UUID) (
 	}
 	channels := toDomainChannels(rows)
 	for i := range channels {
-		channels[i].Config = r.decryptConfig(channels[i].Config)
+		decrypted, err := r.decryptConfig(channels[i].Config)
+		if err != nil {
+			return nil, err
+		}
+		channels[i].Config = decrypted
 	}
 	return channels, nil
 }

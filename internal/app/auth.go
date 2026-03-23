@@ -128,6 +128,10 @@ func (s *AuthService) GetUserByEmail(ctx context.Context, email string) (*domain
 	return user, nil
 }
 
+// createSession generates a new crypto-random session ID and stores it in Redis.
+// Session fixation is not a risk here: each login creates a fresh 256-bit random
+// token, so an attacker cannot predict or reuse a session ID. Multiple concurrent
+// sessions (e.g. different devices) are intentional and expire via Redis TTL.
 func (s *AuthService) createSession(ctx context.Context, userID uuid.UUID) (string, error) {
 	token, err := generateToken()
 	if err != nil {

@@ -20,11 +20,28 @@ services:
       nats:
         condition: service_started
 
-  checker:
+  scheduler:
     build:
       context: .
       args:
-        SERVICE: checker
+        SERVICE: scheduler
+    environment:
+      DATABASE_URL: postgres://pingcast:pingcast@db:5432/pingcast?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      NATS_URL: nats://nats:4222
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
+
+  worker:
+    build:
+      context: .
+      args:
+        SERVICE: worker
     environment:
       DATABASE_URL: postgres://pingcast:pingcast@db:5432/pingcast?sslmode=disable
       REDIS_URL: redis://redis:6379

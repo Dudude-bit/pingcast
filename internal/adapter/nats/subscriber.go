@@ -39,8 +39,8 @@ func (s *MonitorSubscriber) Subscribe(ctx context.Context, handler func(ctx cont
 	cons, err := consumer.Consume(func(msg jetstream.Msg) {
 		var m monitorChangedMessage
 		if err := json.Unmarshal(msg.Data(), &m); err != nil {
-			slog.Error("unmarshal monitor changed event", "error", err)
-			_ = msg.Nak()
+			slog.Error("unmarshal monitor changed event — discarding malformed message", "error", err)
+			_ = msg.Ack() // Ack (discard): malformed JSON will never succeed on retry
 			return
 		}
 
@@ -90,8 +90,8 @@ func (s *AlertSubscriber) Subscribe(ctx context.Context, handler func(ctx contex
 	cons, err := consumer.Consume(func(msg jetstream.Msg) {
 		var event domain.AlertEvent
 		if err := json.Unmarshal(msg.Data(), &event); err != nil {
-			slog.Error("unmarshal alert event", "error", err)
-			_ = msg.Nak()
+			slog.Error("unmarshal alert event — discarding malformed message", "error", err)
+			_ = msg.Ack() // Ack (discard): malformed JSON will never succeed on retry
 			return
 		}
 

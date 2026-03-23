@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,12 +13,13 @@ import (
 )
 
 // LeaderScheduler is a scheduler that only runs on the leader instance.
-// Uses port.DistributedMutex for leader election.
+// Uses port.DistributedMutex for leader election with fencing via Extend().
 type LeaderScheduler struct {
 	mutex     port.DistributedMutex
 	publisher port.CheckPublisher
 	monitors  map[uuid.UUID]*scheduledMonitor
 	mu        sync.Mutex
+	isLeader  atomic.Bool
 	ctx       context.Context
 	cancel    context.CancelFunc
 }
@@ -38,14 +40,12 @@ func NewLeaderScheduler(mutex port.DistributedMutex, publisher port.CheckPublish
 	}
 }
 
-// Add adds or updates a monitor in the schedule.
 func (s *LeaderScheduler) Add(m *domain.Monitor) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.monitors[m.ID] = &scheduledMonitor{monitor: m}
 }
 
-// Remove removes a monitor from the schedule.
 func (s *LeaderScheduler) Remove(id uuid.UUID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -57,8 +57,6 @@ func (s *LeaderScheduler) Run(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
-	isLeader := false
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -66,26 +64,33 @@ func (s *LeaderScheduler) Run(ctx context.Context) {
 		case <-s.ctx.Done():
 			return
 		case <-ticker.C:
-			if !isLeader {
-				// Try to acquire leadership
-				if err := s.mutex.Lock(); err != nil {
-					continue // another instance holds the lock
-				}
-				slog.Info("became scheduler leader")
-				isLeader = true
-			} else {
-				// Refresh lock (fencing) — extend TTL
-				ok, err := s.mutex.Extend()
-				if err != nil || !ok {
-					slog.Warn("failed to refresh leader lock, stepping down", "error", err)
-					isLeader = false
-					continue
-				}
+			if !s.isLeader.Load() {
+				s.tryAcquireLeadership()
+				continue
+			}
+
+			// Fencing: extend lock BEFORE dispatching.
+			// If extend fails, step down immediately — do NOT dispatch.
+			ok, err := s.mutex.Extend()
+			if err != nil || !ok {
+				slog.Warn("lost leader lock, stepping down", "error", err)
+				s.isLeader.Store(false)
+				continue
 			}
 
 			s.dispatchDueChecks(ctx)
 		}
 	}
+}
+
+func (s *LeaderScheduler) tryAcquireLeadership() {
+	// Lock() may block with retries. Redsync default: ~8s total.
+	// This is acceptable — non-leader ticks are idle anyway.
+	if err := s.mutex.Lock(); err != nil {
+		return
+	}
+	slog.Info("became scheduler leader")
+	s.isLeader.Store(true)
 }
 
 func (s *LeaderScheduler) dispatchDueChecks(ctx context.Context) {
@@ -113,8 +118,13 @@ func (s *LeaderScheduler) dispatchDueChecks(ctx context.Context) {
 	}
 }
 
-// Stop stops the scheduler and releases the lock.
+// Stop stops the scheduler. Releases the lock only if currently leader.
 func (s *LeaderScheduler) Stop() {
 	s.cancel()
-	s.mutex.Unlock()
+	if s.isLeader.Load() {
+		if _, err := s.mutex.Unlock(); err != nil {
+			slog.Warn("failed to release leader lock on shutdown", "error", err)
+		}
+		s.isLeader.Store(false)
+	}
 }

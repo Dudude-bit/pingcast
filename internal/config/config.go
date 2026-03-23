@@ -2,123 +2,68 @@ package config
 
 import (
 	"fmt"
-	"os"
-	"strconv"
+
+	"github.com/caarlos0/env/v11"
 )
 
 type APIConfig struct {
-	Port                      int
-	DatabaseURL               string
-	MaxDBConns                int
-	RedisURL                  string
-	NatsURL                   string
-	OTelEndpoint              string
-	LemonSqueezyWebhookSecret string
-	BaseURL                   string
-	EncryptionKey             string
-	EncryptionKeyOld          string
+	Port                      int    `env:"PORT"                        envDefault:"8080"`
+	DatabaseURL               string `env:"DATABASE_URL,required"`
+	MaxDBConns                int    `env:"MAX_DB_CONNS"                envDefault:"10"`
+	RedisURL                  string `env:"REDIS_URL"                   envDefault:"redis://localhost:6379"`
+	NatsURL                   string `env:"NATS_URL"                    envDefault:"nats://localhost:4222"`
+	OTelEndpoint              string `env:"OTEL_EXPORTER_OTLP_ENDPOINT"`
+	LemonSqueezyWebhookSecret string `env:"LEMONSQUEEZY_WEBHOOK_SECRET"`
+	BaseURL                   string `env:"BASE_URL"                    envDefault:"http://localhost:8080"`
+	EncryptionKey             string `env:"ENCRYPTION_KEY"`
+	EncryptionKeyOld          string `env:"ENCRYPTION_KEY_OLD"`
 }
 
 type CheckerConfig struct {
-	DatabaseURL        string
-	MaxDBConns         int
-	RedisURL           string
-	NatsURL            string
-	OTelEndpoint       string
-	WorkerPoolSize     int
-	HostConcurrency    int
-	RetentionDays      int
-	DefaultTimeoutSecs int
+	DatabaseURL        string `env:"DATABASE_URL,required"`
+	MaxDBConns         int    `env:"MAX_DB_CONNS"            envDefault:"15"`
+	RedisURL           string `env:"REDIS_URL"               envDefault:"redis://localhost:6379"`
+	NatsURL            string `env:"NATS_URL"                envDefault:"nats://localhost:4222"`
+	OTelEndpoint       string `env:"OTEL_EXPORTER_OTLP_ENDPOINT"`
+	WorkerPoolSize     int    `env:"WORKER_POOL_SIZE"        envDefault:"100"`
+	HostConcurrency    int    `env:"HOST_CONCURRENCY"        envDefault:"3"`
+	RetentionDays      int    `env:"RETENTION_DAYS"          envDefault:"90"`
+	DefaultTimeoutSecs int    `env:"DEFAULT_TIMEOUT_SECS"    envDefault:"10"`
 }
 
 type NotifierConfig struct {
-	DatabaseURL   string
-	MaxDBConns    int
-	RedisURL      string
-	NatsURL       string
-	TelegramToken string
-	SMTPHost      string
-	SMTPPort      int
-	SMTPUser      string
-	SMTPPass      string
-	SMTPFrom      string
+	DatabaseURL   string `env:"DATABASE_URL,required"`
+	MaxDBConns    int    `env:"MAX_DB_CONNS"    envDefault:"5"`
+	RedisURL      string `env:"REDIS_URL"       envDefault:"redis://localhost:6379"`
+	NatsURL       string `env:"NATS_URL"        envDefault:"nats://localhost:4222"`
+	TelegramToken string `env:"TELEGRAM_BOT_TOKEN"`
+	SMTPHost      string `env:"SMTP_HOST"`
+	SMTPPort      int    `env:"SMTP_PORT"       envDefault:"587"`
+	SMTPUser      string `env:"SMTP_USER"`
+	SMTPPass      string `env:"SMTP_PASS"`
+	SMTPFrom      string `env:"SMTP_FROM"       envDefault:"noreply@pingcast.io"`
 }
 
 func LoadAPI() (*APIConfig, error) {
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		return nil, fmt.Errorf("DATABASE_URL is required")
+	cfg := &APIConfig{}
+	if err := env.Parse(cfg); err != nil {
+		return nil, fmt.Errorf("parse api config: %w", err)
 	}
-
-	port, _ := strconv.Atoi(getEnv("PORT", "8080"))
-	maxDBConns, _ := strconv.Atoi(getEnv("MAX_DB_CONNS", "10"))
-
-	return &APIConfig{
-		Port:                      port,
-		DatabaseURL:               dbURL,
-		MaxDBConns:                maxDBConns,
-		RedisURL:                  getEnv("REDIS_URL", "redis://localhost:6379"),
-		NatsURL:                   getEnv("NATS_URL", "nats://localhost:4222"),
-		OTelEndpoint:              os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
-		LemonSqueezyWebhookSecret: os.Getenv("LEMONSQUEEZY_WEBHOOK_SECRET"),
-		BaseURL:                   getEnv("BASE_URL", "http://localhost:8080"),
-		EncryptionKey:             os.Getenv("ENCRYPTION_KEY"),
-		EncryptionKeyOld:          os.Getenv("ENCRYPTION_KEY_OLD"),
-	}, nil
+	return cfg, nil
 }
 
 func LoadChecker() (*CheckerConfig, error) {
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		return nil, fmt.Errorf("DATABASE_URL is required")
+	cfg := &CheckerConfig{}
+	if err := env.Parse(cfg); err != nil {
+		return nil, fmt.Errorf("parse checker config: %w", err)
 	}
-
-	maxDBConns, _ := strconv.Atoi(getEnv("MAX_DB_CONNS", "15"))
-	workerPoolSize, _ := strconv.Atoi(getEnv("WORKER_POOL_SIZE", "100"))
-	hostConcurrency, _ := strconv.Atoi(getEnv("HOST_CONCURRENCY", "3"))
-	retentionDays, _ := strconv.Atoi(getEnv("RETENTION_DAYS", "90"))
-	defaultTimeout, _ := strconv.Atoi(getEnv("DEFAULT_TIMEOUT_SECS", "10"))
-
-	return &CheckerConfig{
-		DatabaseURL:        dbURL,
-		MaxDBConns:         maxDBConns,
-		RedisURL:           getEnv("REDIS_URL", "redis://localhost:6379"),
-		NatsURL:            getEnv("NATS_URL", "nats://localhost:4222"),
-		OTelEndpoint:       os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
-		WorkerPoolSize:     workerPoolSize,
-		HostConcurrency:    hostConcurrency,
-		RetentionDays:      retentionDays,
-		DefaultTimeoutSecs: defaultTimeout,
-	}, nil
+	return cfg, nil
 }
 
 func LoadNotifier() (*NotifierConfig, error) {
-	smtpPort, _ := strconv.Atoi(getEnv("SMTP_PORT", "587"))
-
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		return nil, fmt.Errorf("DATABASE_URL is required")
+	cfg := &NotifierConfig{}
+	if err := env.Parse(cfg); err != nil {
+		return nil, fmt.Errorf("parse notifier config: %w", err)
 	}
-
-	maxDBConns, _ := strconv.Atoi(getEnv("MAX_DB_CONNS", "5"))
-
-	return &NotifierConfig{
-		DatabaseURL:   dbURL,
-		MaxDBConns:    maxDBConns,
-		RedisURL:      getEnv("REDIS_URL", "redis://localhost:6379"),
-		NatsURL:       getEnv("NATS_URL", "nats://localhost:4222"),
-		TelegramToken: os.Getenv("TELEGRAM_BOT_TOKEN"),
-		SMTPHost:      os.Getenv("SMTP_HOST"),
-		SMTPPort:      smtpPort,
-		SMTPUser:      os.Getenv("SMTP_USER"),
-		SMTPPass:      os.Getenv("SMTP_PASS"),
-		SMTPFrom:      getEnv("SMTP_FROM", "noreply@pingcast.io"),
-	}, nil
-}
-
-func getEnv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
+	return cfg, nil
 }

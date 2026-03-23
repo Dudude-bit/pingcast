@@ -51,16 +51,13 @@ func (r *MonitorRepo) decryptConfig(config json.RawMessage) (json.RawMessage, er
 	if r.enc == nil || len(config) == 0 {
 		return config, nil
 	}
-	// Try to unmarshal as a JSON string (encrypted value)
 	var encrypted string
 	if err := json.Unmarshal(config, &encrypted); err != nil {
-		// Not a string — likely unencrypted JSON object, return as-is
-		return config, nil
+		return nil, fmt.Errorf("monitor config is not encrypted (expected JSON string): %w", err)
 	}
 	decrypted, err := r.enc.Decrypt(encrypted)
 	if err != nil {
-		// Decryption failed — might be unencrypted data, return as-is
-		return config, nil
+		return nil, fmt.Errorf("decrypt monitor config: %w", err)
 	}
 	return json.RawMessage(decrypted), nil
 }
@@ -77,7 +74,11 @@ func (r *MonitorRepo) Create(ctx context.Context, m *domain.Monitor) (*domain.Mo
 		return nil, err
 	}
 	out := monitorFromCreateRow(row)
-	out.CheckConfig, _ = r.decryptConfig(out.CheckConfig)
+	decrypted, err := r.decryptConfig(out.CheckConfig)
+	if err != nil {
+		return nil, err
+	}
+	out.CheckConfig = decrypted
 	return &out, nil
 }
 
@@ -87,7 +88,11 @@ func (r *MonitorRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Monito
 		return nil, err
 	}
 	out := monitorFromGetByIDRow(row)
-	out.CheckConfig, _ = r.decryptConfig(out.CheckConfig)
+	decrypted, err := r.decryptConfig(out.CheckConfig)
+	if err != nil {
+		return nil, err
+	}
+	out.CheckConfig = decrypted
 	return &out, nil
 }
 
@@ -99,7 +104,9 @@ func (r *MonitorRepo) ListByUserID(ctx context.Context, userID uuid.UUID) ([]dom
 	out := make([]domain.Monitor, len(rows))
 	for i, row := range rows {
 		out[i] = monitorFromListByUserIDRow(row)
-		out[i].CheckConfig, _ = r.decryptConfig(out[i].CheckConfig)
+		if out[i].CheckConfig, err = r.decryptConfig(out[i].CheckConfig); err != nil {
+			return nil, err
+		}
 	}
 	return out, nil
 }
@@ -112,7 +119,9 @@ func (r *MonitorRepo) ListPublicBySlug(ctx context.Context, slug string) ([]doma
 	out := make([]domain.Monitor, len(rows))
 	for i, row := range rows {
 		out[i] = monitorFromListPublicRow(row)
-		out[i].CheckConfig, _ = r.decryptConfig(out[i].CheckConfig)
+		if out[i].CheckConfig, err = r.decryptConfig(out[i].CheckConfig); err != nil {
+			return nil, err
+		}
 	}
 	return out, nil
 }
@@ -125,7 +134,9 @@ func (r *MonitorRepo) ListActive(ctx context.Context) ([]domain.Monitor, error) 
 	out := make([]domain.Monitor, len(rows))
 	for i, row := range rows {
 		out[i] = monitorFromListActiveRow(row)
-		out[i].CheckConfig, _ = r.decryptConfig(out[i].CheckConfig)
+		if out[i].CheckConfig, err = r.decryptConfig(out[i].CheckConfig); err != nil {
+			return nil, err
+		}
 	}
 	return out, nil
 }

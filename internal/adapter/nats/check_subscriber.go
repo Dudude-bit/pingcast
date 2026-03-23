@@ -65,8 +65,8 @@ func (s *CheckSubscriber) pullLoop(ctx context.Context, handler func(ctx context
 		for msg := range msgs.Messages() {
 			var task checkTaskMessage
 			if err := json.Unmarshal(msg.Data(), &task); err != nil {
-				slog.Error("unmarshal check task", "error", err)
-				_ = msg.Nak()
+				slog.Error("unmarshal check task — discarding malformed message", "error", err)
+				_ = msg.Ack() // Ack (discard): malformed JSON will never succeed on retry
 				continue
 			}
 

@@ -45,7 +45,8 @@ jobs:
       - name: Build all services
         run: |
           go build -o /tmp/api ./cmd/api/
-          go build -o /tmp/checker ./cmd/checker/
+          go build -o /tmp/scheduler ./cmd/scheduler/
+          go build -o /tmp/worker ./cmd/worker/
           go build -o /tmp/notifier ./cmd/notifier/
 
       - name: Vet
