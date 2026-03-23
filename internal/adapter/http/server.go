@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	apigen "github.com/kirillinakin/pingcast/internal/api/gen"
 	"github.com/kirillinakin/pingcast/internal/app"
+	redisadapter "github.com/kirillinakin/pingcast/internal/adapter/redis"
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/port"
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -19,7 +20,7 @@ type Server struct {
 	monitoring  *app.MonitoringService
 	alerts      *app.AlertService
 	events      port.MonitorEventPublisher
-	rateLimiter *RateLimiter
+	rateLimiter *redisadapter.RateLimiter
 }
 
 func NewServer(
@@ -27,7 +28,7 @@ func NewServer(
 	monitoring *app.MonitoringService,
 	alerts *app.AlertService,
 	events port.MonitorEventPublisher,
-	rateLimiter *RateLimiter,
+	rateLimiter *redisadapter.RateLimiter,
 ) *Server {
 	return &Server{
 		auth:        auth,
@@ -66,17 +67,20 @@ func (s *Server) Login(c *fiber.Ctx) error {
 		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid request body")})
 	}
 
-	if !s.rateLimiter.Allow(string(req.Email)) {
+	allowed, err := s.rateLimiter.Allow(c.UserContext(), string(req.Email))
+	if err != nil {
+		return c.Status(503).JSON(apigen.ErrorResponse{Error: new("service temporarily unavailable")})
+	}
+	if !allowed {
 		return c.Status(429).JSON(apigen.ErrorResponse{Error: new("too many login attempts")})
 	}
 
 	user, sessionID, err := s.auth.Login(c.UserContext(), string(req.Email), req.Password)
 	if err != nil {
-		s.rateLimiter.Record(string(req.Email))
 		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("invalid email or password")})
 	}
 
-	s.rateLimiter.Reset(string(req.Email))
+	_ = s.rateLimiter.Reset(c.UserContext(), string(req.Email))
 	setSessionCookie(c, sessionID)
 
 	return c.JSON(apigen.AuthResponse{

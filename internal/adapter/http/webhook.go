@@ -39,6 +39,15 @@ type lemonSqueezyWebhook struct {
 }
 
 func (h *WebhookHandler) HandleLemonSqueezy(c *fiber.Ctx) error {
+	if h.lemonSqueezySecret == "" {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"error": fiber.Map{
+				"code":    "WEBHOOK_DISABLED",
+				"message": "webhook processing disabled: secret not configured",
+			},
+		})
+	}
+
 	body := c.Body()
 	sig := c.Get("X-Signature")
 
@@ -83,9 +92,6 @@ func (h *WebhookHandler) HandleLemonSqueezy(c *fiber.Ctx) error {
 }
 
 func (h *WebhookHandler) verifySignature(payload []byte, signature string) bool {
-	if h.lemonSqueezySecret == "" {
-		return true
-	}
 	mac := hmac.New(sha256.New, []byte(h.lemonSqueezySecret))
 	mac.Write(payload)
 	expected := hex.EncodeToString(mac.Sum(nil))

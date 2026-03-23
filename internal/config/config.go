@@ -9,6 +9,7 @@ import (
 type APIConfig struct {
 	Port                       int
 	DatabaseURL                string
+	RedisURL                   string
 	NatsURL                    string
 	LemonSqueezyWebhookSecret string
 	BaseURL                    string
@@ -16,11 +17,13 @@ type APIConfig struct {
 
 type CheckerConfig struct {
 	DatabaseURL string
+	RedisURL    string
 	NatsURL     string
 }
 
 type NotifierConfig struct {
 	DatabaseURL   string
+	RedisURL      string
 	NatsURL       string
 	TelegramToken string
 	SMTPHost      string
@@ -41,6 +44,7 @@ func LoadAPI() (*APIConfig, error) {
 	return &APIConfig{
 		Port:                       port,
 		DatabaseURL:                dbURL,
+		RedisURL:                   getEnv("REDIS_URL", "redis://localhost:6379"),
 		NatsURL:                    getEnv("NATS_URL", "nats://localhost:4222"),
 		LemonSqueezyWebhookSecret: os.Getenv("LEMONSQUEEZY_WEBHOOK_SECRET"),
 		BaseURL:                    getEnv("BASE_URL", "http://localhost:8080"),
@@ -55,6 +59,7 @@ func LoadChecker() (*CheckerConfig, error) {
 
 	return &CheckerConfig{
 		DatabaseURL: dbURL,
+		RedisURL:    getEnv("REDIS_URL", "redis://localhost:6379"),
 		NatsURL:     getEnv("NATS_URL", "nats://localhost:4222"),
 	}, nil
 }
@@ -69,6 +74,7 @@ func LoadNotifier() (*NotifierConfig, error) {
 
 	return &NotifierConfig{
 		DatabaseURL:   dbURL,
+		RedisURL:      getEnv("REDIS_URL", "redis://localhost:6379"),
 		NatsURL:       getEnv("NATS_URL", "nats://localhost:4222"),
 		TelegramToken: os.Getenv("TELEGRAM_BOT_TOKEN"),
 		SMTPHost:      os.Getenv("SMTP_HOST"),

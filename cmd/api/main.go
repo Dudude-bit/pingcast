@@ -16,6 +16,7 @@ import (
 	httpadapter "github.com/kirillinakin/pingcast/internal/adapter/http"
 	natsadapter "github.com/kirillinakin/pingcast/internal/adapter/nats"
 	"github.com/kirillinakin/pingcast/internal/adapter/postgres"
+	redisadapter "github.com/kirillinakin/pingcast/internal/adapter/redis"
 	smtpadapter "github.com/kirillinakin/pingcast/internal/adapter/smtp"
 	"github.com/kirillinakin/pingcast/internal/adapter/telegram"
 	"github.com/kirillinakin/pingcast/internal/adapter/webhook"
@@ -52,6 +53,14 @@ func main() {
 	}
 
 	queries := sqlcgen.New(pool)
+
+	// Redis
+	rdb, err := redisadapter.Connect(ctx, cfg.RedisURL)
+	if err != nil {
+		slog.Error("failed to connect to redis", "error", err)
+		os.Exit(1)
+	}
+	defer rdb.Close()
 
 	// NATS
 	nc, err := natsadapter.Connect(cfg.NatsURL)
@@ -102,7 +111,7 @@ func main() {
 	alertSvc := app.NewAlertService(channelRepo, monitorRepo, channelReg)
 
 	// HTTP handlers
-	rateLimiter := httpadapter.NewRateLimiter(5, 15*time.Minute)
+	rateLimiter := redisadapter.NewRateLimiter(rdb, "login", 5, 15*time.Minute)
 	server := httpadapter.NewServer(authSvc, monitoringSvc, alertSvc, monitorPub, rateLimiter)
 	pageHandler := httpadapter.NewPageHandler(authSvc, monitoringSvc, alertSvc, rateLimiter)
 	webhookHandler := httpadapter.NewWebhookHandler(authSvc, alertSvc, cfg.LemonSqueezyWebhookSecret)

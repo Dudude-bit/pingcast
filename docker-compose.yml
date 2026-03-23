@@ -8,11 +8,14 @@ services:
       - "8080:8080"
     environment:
       DATABASE_URL: postgres://pingcast:pingcast@db:5432/pingcast?sslmode=disable
+      REDIS_URL: redis://redis:6379
       NATS_URL: nats://nats:4222
       PORT: "8080"
       BASE_URL: http://localhost:8080
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       nats:
         condition: service_started
@@ -24,9 +27,12 @@ services:
         SERVICE: checker
     environment:
       DATABASE_URL: postgres://pingcast:pingcast@db:5432/pingcast?sslmode=disable
+      REDIS_URL: redis://redis:6379
       NATS_URL: nats://nats:4222
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       nats:
         condition: service_started
@@ -38,10 +44,13 @@ services:
         SERVICE: notifier
     environment:
       DATABASE_URL: postgres://pingcast:pingcast@db:5432/pingcast?sslmode=disable
+      REDIS_URL: redis://redis:6379
       NATS_URL: nats://nats:4222
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       nats:
         condition: service_started
@@ -54,6 +63,18 @@ services:
       - "8222:8222"
     volumes:
       - nats-data:/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   db:
     image: postgres:16-alpine
@@ -73,4 +94,5 @@ services:
 
 volumes:
   pgdata:
+  redisdata:
   nats-data:

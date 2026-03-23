@@ -14,17 +14,18 @@ import (
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/port"
 	"github.com/kirillinakin/pingcast/internal/web"
+	redisadapter "github.com/kirillinakin/pingcast/internal/adapter/redis"
 )
 
 type PageHandler struct {
 	auth        *app.AuthService
 	monitoring  *app.MonitoringService
 	alerts      *app.AlertService
-	rateLimiter *RateLimiter
+	rateLimiter *redisadapter.RateLimiter
 	templates   map[string]*template.Template
 }
 
-func NewPageHandler(auth *app.AuthService, monitoring *app.MonitoringService, alerts *app.AlertService, rateLimiter *RateLimiter) *PageHandler {
+func NewPageHandler(auth *app.AuthService, monitoring *app.MonitoringService, alerts *app.AlertService, rateLimiter *redisadapter.RateLimiter) *PageHandler {
 	tmplFS, _ := fs.Sub(web.FS, "templates")
 
 	// Parse each page template paired with layout.
@@ -84,17 +85,22 @@ func (h *PageHandler) LoginSubmit(c *fiber.Ctx) error {
 	email := c.FormValue("email")
 	password := c.FormValue("password")
 
-	if !h.rateLimiter.Allow(email) {
+	allowed, err := h.rateLimiter.Allow(c.UserContext(), email)
+	if err != nil {
+		return h.render(c, "login.html", fiber.Map{"Error": "Service temporarily unavailable. Try again later."})
+	}
+	if !allowed {
 		return h.render(c, "login.html", fiber.Map{"Error": "Too many login attempts. Try again later."})
 	}
 
 	_, sessionID, err := h.auth.Login(c.UserContext(), email, password)
 	if err != nil {
-		h.rateLimiter.Record(email)
 		return h.render(c, "login.html", fiber.Map{"Error": "Invalid email or password."})
 	}
 
-	h.rateLimiter.Reset(email)
+	if err := h.rateLimiter.Reset(c.UserContext(), email); err != nil {
+		// Non-blocking: login succeeded, just log
+	}
 	setSessionCookie(c, sessionID)
 	return c.Redirect("/dashboard")
 }
