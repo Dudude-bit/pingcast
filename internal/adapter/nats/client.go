@@ -34,7 +34,7 @@ func SetupStreams(ctx context.Context, js jetstream.JetStream) error {
 		Subjects:  []string{"monitors.changed"},
 		Retention: jetstream.WorkQueuePolicy,
 		Storage:   jetstream.FileStorage,
-		MaxAge:    24 * time.Hour,
+		MaxAge:    72 * time.Hour,
 	})
 	if err != nil {
 		return fmt.Errorf("create MONITORS stream: %w", err)
@@ -45,10 +45,22 @@ func SetupStreams(ctx context.Context, js jetstream.JetStream) error {
 		Subjects:  []string{"alerts.>"},
 		Retention: jetstream.WorkQueuePolicy,
 		Storage:   jetstream.FileStorage,
-		MaxAge:    24 * time.Hour,
+		MaxAge:    72 * time.Hour,
 	})
 	if err != nil {
 		return fmt.Errorf("create ALERTS stream: %w", err)
+	}
+
+	// CHECKS stream: scheduler publishes check tasks, workers consume
+	_, err = js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
+		Name:      "CHECKS",
+		Subjects:  []string{"checks.run"},
+		Retention: jetstream.WorkQueuePolicy,
+		Storage:   jetstream.MemoryStorage,
+		MaxAge:    1 * time.Hour,
+	})
+	if err != nil {
+		return fmt.Errorf("create CHECKS stream: %w", err)
 	}
 
 	return nil

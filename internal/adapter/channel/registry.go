@@ -3,6 +3,7 @@ package channel
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/port"
@@ -13,6 +14,7 @@ var _ port.ChannelRegistry = (*Registry)(nil)
 type registryEntry struct {
 	label   string
 	factory port.ChannelSenderFactory
+	cb      *CircuitBreaker
 }
 
 type Registry struct {
@@ -24,7 +26,24 @@ func NewRegistry() *Registry {
 }
 
 func (r *Registry) Register(t domain.ChannelType, label string, f port.ChannelSenderFactory) {
-	r.entries[t] = registryEntry{label: label, factory: f}
+	r.entries[t] = registryEntry{
+		label:   label,
+		factory: f,
+		cb:      NewCircuitBreaker(5, 60*time.Second),
+	}
+}
+
+// CreateSenderWithRetry creates a sender wrapped with retry + circuit breaker.
+func (r *Registry) CreateSenderWithRetry(t domain.ChannelType, config json.RawMessage) (port.AlertSender, error) {
+	entry, ok := r.entries[t]
+	if !ok {
+		return nil, fmt.Errorf("unknown channel type: %s", t)
+	}
+	inner, err := entry.factory.CreateSender(config)
+	if err != nil {
+		return nil, err
+	}
+	return NewRetryingSender(inner, entry.cb), nil
 }
 
 func (r *Registry) Get(t domain.ChannelType) (port.ChannelSenderFactory, error) {

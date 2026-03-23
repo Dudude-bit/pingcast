@@ -171,7 +171,23 @@ func main() {
 	<-ctx.Done()
 	slog.Info("checker shutting down")
 
+	// Graceful shutdown with 30s timeout
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+
 	monitorSub.Stop()
 	scheduler.Stop()
-	workerPool.Stop()
+
+	// Wait for in-flight checks to complete
+	done := make(chan struct{})
+	go func() {
+		workerPool.Stop()
+		close(done)
+	}()
+	select {
+	case <-done:
+		slog.Info("checker shutdown complete")
+	case <-shutdownCtx.Done():
+		slog.Warn("checker shutdown timed out, force stopping")
+	}
 }

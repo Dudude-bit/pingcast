@@ -134,5 +134,11 @@ func main() {
 
 	<-ctx.Done()
 	slog.Info("api shutting down")
-	fiberApp.Shutdown()
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+
+	if err := fiberApp.ShutdownWithContext(shutdownCtx); err != nil {
+		slog.Error("api shutdown error", "error", err)
+	}
 }

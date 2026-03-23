@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
 
@@ -97,5 +98,20 @@ func main() {
 	slog.Info("notifier started")
 	<-ctx.Done()
 	slog.Info("notifier shutting down")
-	alertSub.Stop()
+
+	// Graceful shutdown — drain in-flight alert deliveries
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+
+	done := make(chan struct{})
+	go func() {
+		alertSub.Stop()
+		close(done)
+	}()
+	select {
+	case <-done:
+		slog.Info("notifier shutdown complete")
+	case <-shutdownCtx.Done():
+		slog.Warn("notifier shutdown timed out, force stopping")
+	}
 }

@@ -55,15 +55,9 @@ func (s *AlertService) Handle(ctx context.Context, event *domain.AlertEvent) err
 		if !ch.IsEnabled {
 			continue
 		}
-		factory, err := s.registry.Get(ch.Type)
+		sender, err := s.registry.CreateSenderWithRetry(ch.Type, ch.Config)
 		if err != nil {
-			slog.Error("unknown channel type", "type", ch.Type, "channel_id", ch.ID)
-			failed++
-			continue
-		}
-		sender, err := factory.CreateSender(ch.Config)
-		if err != nil {
-			slog.Error("failed to create sender", "channel_id", ch.ID, "error", err)
+			slog.Error("failed to create sender", "channel_id", ch.ID, "type", ch.Type, "error", err)
 			failed++
 			continue
 		}

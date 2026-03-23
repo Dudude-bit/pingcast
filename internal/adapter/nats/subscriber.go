@@ -78,9 +78,10 @@ func NewAlertSubscriber(js jetstream.JetStream) *AlertSubscriber {
 
 func (s *AlertSubscriber) Subscribe(ctx context.Context, handler func(ctx context.Context, event *domain.AlertEvent) error) error {
 	consumer, err := s.js.CreateOrUpdateConsumer(ctx, "ALERTS", jetstream.ConsumerConfig{
-		Durable:   "notifier-alerts",
-		AckPolicy: jetstream.AckExplicitPolicy,
-		BackOff:   []time.Duration{2 * time.Second, 5 * time.Second, 10 * time.Second},
+		Durable:    "notifier-alerts",
+		AckPolicy:  jetstream.AckExplicitPolicy,
+		MaxDeliver: 10,
+		BackOff:    []time.Duration{2 * time.Second, 5 * time.Second, 10 * time.Second, 30 * time.Second, 60 * time.Second},
 	})
 	if err != nil {
 		return fmt.Errorf("create consumer notifier-alerts: %w", err)
