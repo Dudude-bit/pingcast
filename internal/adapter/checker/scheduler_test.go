@@ -3,6 +3,7 @@ package checker_test
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -182,29 +183,31 @@ func TestLeaderScheduler_PausedMonitorsNotDispatched(t *testing.T) {
 		IsPaused:        true,
 	})
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	go ls.Run(ctx)
 
-	// Wait enough time for at least one dispatch cycle.
-	time.Sleep(3 * time.Second)
+	// Poll until active monitor is published (instead of fixed sleep).
+	deadline := time.After(5 * time.Second)
+	for {
+		published := pub.get()
+		hasActive := slices.Contains(published, activeID)
+		if hasActive {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for active monitor to be dispatched")
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+
 	cancel()
 	ls.Stop()
 
+	// Verify paused monitor was never dispatched.
 	published := pub.get()
-	for _, id := range published {
-		if id == pausedID {
-			t.Errorf("paused monitor %v should not be dispatched", pausedID)
-		}
-	}
-
-	hasActive := false
-	for _, id := range published {
-		if id == activeID {
-			hasActive = true
-			break
-		}
-	}
-	if !hasActive {
-		t.Error("active monitor was never dispatched")
+	if slices.Contains(published, pausedID) {
+		t.Errorf("paused monitor %v should not be dispatched", pausedID)
 	}
 }

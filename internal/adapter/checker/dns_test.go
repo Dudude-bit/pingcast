@@ -24,8 +24,9 @@ func dnsMonitor(hostname string, expectedIP *string) *domain.Monitor {
 }
 
 func TestDNSChecker_ValidDomain(t *testing.T) {
+	// Use localhost — always resolvable, no network dependency.
 	c := checker.NewDNSChecker()
-	result := c.Check(context.Background(), dnsMonitor("google.com", nil))
+	result := c.Check(context.Background(), dnsMonitor("localhost", nil))
 
 	if result.Status != domain.StatusUp {
 		t.Errorf("status = %q, want %q", result.Status, domain.StatusUp)
@@ -37,7 +38,8 @@ func TestDNSChecker_ValidDomain(t *testing.T) {
 
 func TestDNSChecker_InvalidDomain(t *testing.T) {
 	c := checker.NewDNSChecker()
-	result := c.Check(context.Background(), dnsMonitor("this-domain-does-not-exist-at-all.invalid", nil))
+	// .invalid TLD is reserved by RFC 2606 — guaranteed to not resolve.
+	result := c.Check(context.Background(), dnsMonitor("this-will-never-exist.invalid", nil))
 
 	if result.Status != domain.StatusDown {
 		t.Errorf("status = %q, want %q", result.Status, domain.StatusDown)
@@ -48,26 +50,28 @@ func TestDNSChecker_InvalidDomain(t *testing.T) {
 }
 
 func TestDNSChecker_ExpectedIPMatch(t *testing.T) {
-	// localhost should resolve to 127.0.0.1
 	expected := "127.0.0.1"
 	c := checker.NewDNSChecker()
 	result := c.Check(context.Background(), dnsMonitor("localhost", &expected))
 
 	if result.Status != domain.StatusUp {
-		t.Errorf("status = %q, want %q (expected IP should match)", result.Status, domain.StatusUp)
+		t.Errorf("status = %q, want %q (localhost should resolve to 127.0.0.1)", result.Status, domain.StatusUp)
 	}
 }
 
 func TestDNSChecker_ExpectedIPMismatch(t *testing.T) {
-	wrongIP := "192.0.2.1" // TEST-NET, will not match google.com
+	wrongIP := "192.0.2.1" // TEST-NET-1, will not match localhost
 	c := checker.NewDNSChecker()
-	result := c.Check(context.Background(), dnsMonitor("google.com", &wrongIP))
+	result := c.Check(context.Background(), dnsMonitor("localhost", &wrongIP))
 
 	if result.Status != domain.StatusDown {
-		t.Errorf("status = %q, want %q (expected IP should not match)", result.Status, domain.StatusDown)
+		t.Errorf("status = %q, want %q", result.Status, domain.StatusDown)
 	}
-	if result.ErrorMessage == nil || *result.ErrorMessage == "" {
+	if result.ErrorMessage == nil {
 		t.Error("expected error message for IP mismatch")
+	}
+	if result.ErrorMessage != nil && !contains(*result.ErrorMessage, "expected IP") {
+		t.Errorf("error should mention expected IP, got: %s", *result.ErrorMessage)
 	}
 }
 
@@ -85,4 +89,17 @@ func TestDNSChecker_InvalidConfig(t *testing.T) {
 	if result.ErrorMessage == nil || *result.ErrorMessage == "" {
 		t.Error("expected error message for invalid config")
 	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsStr(s, substr))
+}
+
+func containsStr(s, sub string) bool {
+	for i := 0; i <= len(s)-len(sub); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
 }
