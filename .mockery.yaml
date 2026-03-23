@@ -14,6 +14,7 @@ packages:
       ChannelRegistry: {}
       ChannelRepo: {}
       ChannelSenderFactory: {}
+      CheckPublisher: {}
       CheckResultRepo: {}
       CheckerRegistry: {}
       DistributedMutex: {}

@@ -26,6 +26,11 @@ type DistributedMutex interface {
 	Extend() (bool, error)
 }
 
+// CheckPublisher publishes check tasks for workers to execute.
+type CheckPublisher interface {
+	Publish(ctx context.Context, monitorID uuid.UUID) error
+}
+
 // APIKeyRepo provides API key CRUD and authentication lookup.
 type APIKeyRepo interface {
 	Create(ctx context.Context, key *domain.APIKey) (*domain.APIKey, error)

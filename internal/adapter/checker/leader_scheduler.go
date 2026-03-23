@@ -11,16 +11,11 @@ import (
 	"github.com/kirillinakin/pingcast/internal/port"
 )
 
-// CheckPublisher is the interface for publishing check tasks.
-type CheckPublisher interface {
-	Publish(ctx context.Context, monitorID uuid.UUID) error
-}
-
 // LeaderScheduler is a scheduler that only runs on the leader instance.
 // Uses port.DistributedMutex for leader election.
 type LeaderScheduler struct {
 	mutex     port.DistributedMutex
-	publisher CheckPublisher
+	publisher port.CheckPublisher
 	monitors  map[uuid.UUID]*scheduledMonitor
 	mu        sync.Mutex
 	ctx       context.Context
@@ -32,7 +27,7 @@ type scheduledMonitor struct {
 	lastTick time.Time
 }
 
-func NewLeaderScheduler(mutex port.DistributedMutex, publisher CheckPublisher) *LeaderScheduler {
+func NewLeaderScheduler(mutex port.DistributedMutex, publisher port.CheckPublisher) *LeaderScheduler {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &LeaderScheduler{
 		mutex:     mutex,

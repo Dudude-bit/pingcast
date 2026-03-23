@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/mock"
+
 	"github.com/kirillinakin/pingcast/internal/adapter/checker"
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/mocks"
@@ -134,35 +136,25 @@ func TestScheduler_Count(t *testing.T) {
 
 // --- LeaderScheduler tests (paused monitors) ---
 
-// stubPublisher implements checker.CheckPublisher for testing.
-// Kept as hand-written stub because it collects published IDs for polling assertions
-// — mockery mocks don't support .get() to retrieve captured args.
-type stubPublisher struct {
-	mu        sync.Mutex
-	published []uuid.UUID
-}
-
-func (p *stubPublisher) Publish(_ context.Context, id uuid.UUID) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.published = append(p.published, id)
-	return nil
-}
-
-func (p *stubPublisher) get() []uuid.UUID {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	out := make([]uuid.UUID, len(p.published))
-	copy(out, p.published)
-	return out
-}
-
 func TestLeaderScheduler_PausedMonitorsNotDispatched(t *testing.T) {
-	pub := &stubPublisher{}
+	var mu sync.Mutex
+	var published []uuid.UUID
+
+	pub := mocks.NewMockCheckPublisher(t)
+	pub.EXPECT().Publish(mock.Anything, mock.Anything).RunAndReturn(
+		func(_ context.Context, id uuid.UUID) error {
+			mu.Lock()
+			defer mu.Unlock()
+			published = append(published, id)
+			return nil
+		},
+	).Maybe()
+
 	mutex := mocks.NewMockDistributedMutex(t)
 	mutex.EXPECT().Lock().Return(nil).Maybe()
 	mutex.EXPECT().Extend().Return(true, nil).Maybe()
 	mutex.EXPECT().Unlock().Return(true, nil).Maybe()
+
 	ls := checker.NewLeaderScheduler(mutex, pub)
 
 	activeID := uuid.New()
@@ -187,11 +179,12 @@ func TestLeaderScheduler_PausedMonitorsNotDispatched(t *testing.T) {
 	defer cancel()
 	go ls.Run(ctx)
 
-	// Poll until active monitor is published (instead of fixed sleep).
+	// Poll until active monitor is published.
 	deadline := time.After(5 * time.Second)
 	for {
-		published := pub.get()
+		mu.Lock()
 		hasActive := slices.Contains(published, activeID)
+		mu.Unlock()
 		if hasActive {
 			break
 		}
@@ -206,7 +199,8 @@ func TestLeaderScheduler_PausedMonitorsNotDispatched(t *testing.T) {
 	ls.Stop()
 
 	// Verify paused monitor was never dispatched.
-	published := pub.get()
+	mu.Lock()
+	defer mu.Unlock()
 	if slices.Contains(published, pausedID) {
 		t.Errorf("paused monitor %v should not be dispatched", pausedID)
 	}
