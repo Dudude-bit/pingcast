@@ -83,7 +83,7 @@ func main() {
 
 	// Postgres repos
 	userRepo := postgres.NewUserRepo(queries)
-	sessionRepo := postgres.NewSessionRepo(queries)
+	sessionRepo := redisadapter.NewSessionRepo(rdb)
 	monitorRepo := postgres.NewMonitorRepo(queries)
 	checkResultRepo := postgres.NewCheckResultRepo(queries)
 	incidentRepo := postgres.NewIncidentRepo(queries)

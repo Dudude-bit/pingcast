@@ -14,6 +14,7 @@ import (
 	"github.com/kirillinakin/pingcast/internal/adapter/checker"
 	natsadapter "github.com/kirillinakin/pingcast/internal/adapter/nats"
 	"github.com/kirillinakin/pingcast/internal/adapter/postgres"
+	redisadapter "github.com/kirillinakin/pingcast/internal/adapter/redis"
 	"github.com/kirillinakin/pingcast/internal/app"
 	"github.com/kirillinakin/pingcast/internal/config"
 	"github.com/kirillinakin/pingcast/internal/database"
@@ -43,6 +44,14 @@ func main() {
 
 	queries := sqlcgen.New(pool)
 
+	// Redis
+	rdb, err := redisadapter.Connect(ctx, cfg.RedisURL)
+	if err != nil {
+		slog.Error("failed to connect to redis", "error", err)
+		os.Exit(1)
+	}
+	defer rdb.Close()
+
 	// NATS
 	nc, err := natsadapter.Connect(cfg.NatsURL)
 	if err != nil {
@@ -67,7 +76,6 @@ func main() {
 	monitorRepo := postgres.NewMonitorRepo(queries)
 	checkResultRepo := postgres.NewCheckResultRepo(queries)
 	incidentRepo := postgres.NewIncidentRepo(queries)
-	sessionRepo := postgres.NewSessionRepo(queries)
 
 	// NATS publisher
 	alertPub := natsadapter.NewAlertPublisher(js)
@@ -121,7 +129,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Data retention cleanup (daily)
+	// Data retention cleanup (daily, with distributed lock)
 	go func() {
 		ticker := time.NewTicker(24 * time.Hour)
 		defer ticker.Stop()
@@ -130,6 +138,16 @@ func main() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+				acquired, err := redisadapter.TryLock(ctx, rdb, "cleanup:retention", 1*time.Hour)
+				if err != nil {
+					slog.Error("failed to acquire cleanup lock", "error", err)
+					continue
+				}
+				if !acquired {
+					slog.Debug("cleanup lock held by another instance, skipping")
+					continue
+				}
+
 				cutoff := time.Now().Add(-90 * 24 * time.Hour)
 				deleted, err := checkResultRepo.DeleteOlderThan(ctx, cutoff)
 				if err != nil {
@@ -137,11 +155,9 @@ func main() {
 				} else if deleted > 0 {
 					slog.Info("retention cleanup", "deleted_rows", deleted)
 				}
-				sessDeleted, err := sessionRepo.DeleteExpired(ctx)
-				if err != nil {
-					slog.Error("session cleanup failed", "error", err)
-				} else if sessDeleted > 0 {
-					slog.Info("session cleanup", "deleted", sessDeleted)
+
+				if err := redisadapter.Unlock(ctx, rdb, "cleanup:retention"); err != nil {
+					slog.Error("failed to release cleanup lock", "error", err)
 				}
 			}
 		}
