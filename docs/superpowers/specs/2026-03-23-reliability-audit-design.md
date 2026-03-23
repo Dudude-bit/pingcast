@@ -6,7 +6,7 @@
 
 ## Summary
 
-Preventive reliability audit of PingCast identified 29 issues across 4 components (NATS messaging, Notifier, Checker, API). Issues range from critical (silent message loss, race conditions, hex-arch violations) to medium (missing validation, logging improvements). All fixes are organized into 5 PRs (Component 4 split into two for safer review). Issues 1.5, 1.6, and 2.9 address hex-arch compliance — decoupling domain models from events, moving orchestration to the app layer, and cleaning up port interfaces. Issues 1.1 and 1.1a were merged into a single issue (publish errors + ordering are handled in app layer after 1.6).
+Preventive reliability audit of PingCast identified 28 issues across 4 components (NATS messaging, Notifier, Checker, API). Issues range from critical (silent message loss, race conditions, hex-arch violations) to medium (missing validation, logging improvements). All fixes are organized into 5 PRs (Component 4 split into two for safer review). Issues 1.5, 1.6, and 2.9 address hex-arch compliance — decoupling domain models from events, moving orchestration to the app layer, and cleaning up port interfaces. Issues 1.1 and 1.1a were merged into a single issue (publish errors + ordering are handled in app layer after 1.6).
 
 ---
 
@@ -342,27 +342,9 @@ Return 400 with description on invalid values.
 
 **Files:** `internal/adapter/http/pages.go` (lines 229-240)
 
-### 4.9. Crypto Error Reporting for Key Rotation
+### ~~4.9. Crypto Error Reporting for Key Rotation~~ — REMOVED
 
-**Problem:** When both encryption keys fail, only primary key error is returned. Confuses debugging during key rotation.
-
-**Fix:** Restructure the Decrypt method to capture both errors in the outer scope, then return a combined error:
-```go
-var oldErr error
-plaintext, primaryErr := e.decryptWith(e.primary, data)
-if primaryErr == nil {
-    return plaintext, nil
-}
-if e.old != nil {
-    plaintext, oldErr = e.decryptWith(e.old, data)
-    if oldErr == nil {
-        return plaintext, nil
-    }
-}
-return nil, fmt.Errorf("decrypt failed: primary: %w; old key: %v", primaryErr, oldErr)
-```
-
-**Files:** `internal/crypto/crypto.go` (lines 63-84)
+Originally proposed to report both primary and old key errors on decrypt failure. After code review: both errors are identical (`cipher: message authentication failed` from AES-GCM), so combining them adds no diagnostic value. The current message "decrypt: cipher: message authentication failed" is sufficient — it means neither key matched. Not worth the code change.
 
 ---
 
@@ -372,7 +354,7 @@ return nil, fmt.Errorf("decrypt failed: primary: %w; old key: %v", primaryErr, o
 2. **PR 2: Notifier** (issues 2.1-2.9) — depends on NATS fixes; includes port rename `CreateSenderWithRetry` → `CreateSender`
 3. **PR 3: Checker** (issues 3.1-3.4) — depends on NATS context fix (1.2) and event DTO (1.5)
 4. **PR 4a: API Race Conditions** (issues 4.1, 4.3, 4.6) — high-risk DB changes, needs careful testing
-5. **PR 4b: API Defensive Coding** (issues 4.2, 4.4, 4.5, 4.7, 4.8, 4.9) — lower-risk, safety improvements
+5. **PR 4b: API Defensive Coding** (issues 4.2, 4.4, 4.5, 4.7, 4.8) — lower-risk, safety improvements
 
 PRs 3, 4a, and 4b can be developed in parallel after PR 1 is merged.
 
