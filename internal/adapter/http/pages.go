@@ -11,9 +11,9 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
-	redisadapter "github.com/kirillinakin/pingcast/internal/adapter/redis"
 	"github.com/kirillinakin/pingcast/internal/app"
 	"github.com/kirillinakin/pingcast/internal/domain"
+	"github.com/kirillinakin/pingcast/internal/port"
 	"github.com/kirillinakin/pingcast/internal/web"
 )
 
@@ -21,11 +21,11 @@ type PageHandler struct {
 	auth        *app.AuthService
 	monitoring  *app.MonitoringService
 	alerts      *app.AlertService
-	rateLimiter *redisadapter.RateLimiter
+	rateLimiter port.RateLimiter
 	templates   map[string]*template.Template
 }
 
-func NewPageHandler(auth *app.AuthService, monitoring *app.MonitoringService, alerts *app.AlertService, rateLimiter *redisadapter.RateLimiter) *PageHandler {
+func NewPageHandler(auth *app.AuthService, monitoring *app.MonitoringService, alerts *app.AlertService, rateLimiter port.RateLimiter) *PageHandler {
 	tmplFS, _ := fs.Sub(web.FS, "templates")
 
 	// Parse each page template paired with layout.

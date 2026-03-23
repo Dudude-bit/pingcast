@@ -6,8 +6,12 @@ import (
 	"time"
 
 	"github.com/go-redis/redis_rate/v10"
+	"github.com/kirillinakin/pingcast/internal/port"
 	goredis "github.com/redis/go-redis/v9"
 )
+
+// Compile-time interface check.
+var _ port.RateLimiter = (*RateLimiter)(nil)
 
 // RateLimiter uses go-redis/redis_rate for distributed sliding window rate limiting.
 type RateLimiter struct {

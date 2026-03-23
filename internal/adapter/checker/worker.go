@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"sync"
 
-	redisadapter "github.com/kirillinakin/pingcast/internal/adapter/redis"
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/port"
 )
@@ -14,7 +13,7 @@ type CheckHandler func(ctx context.Context, monitor *domain.Monitor)
 
 type WorkerPool struct {
 	registry    port.CheckerRegistry
-	hostLimiter *redisadapter.HostLimiter
+	hostLimiter port.HostLimiter
 	jobs        chan *domain.Monitor
 	handler     CheckHandler
 	wg          sync.WaitGroup
@@ -22,7 +21,7 @@ type WorkerPool struct {
 	cancel      context.CancelFunc
 }
 
-func NewWorkerPool(ctx context.Context, workers int, registry port.CheckerRegistry, hostLimiter *redisadapter.HostLimiter, handler CheckHandler) *WorkerPool {
+func NewWorkerPool(ctx context.Context, workers int, registry port.CheckerRegistry, hostLimiter port.HostLimiter, handler CheckHandler) *WorkerPool {
 	poolCtx, cancel := context.WithCancel(ctx)
 
 	wp := &WorkerPool{

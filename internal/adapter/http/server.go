@@ -7,7 +7,6 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
-	redisadapter "github.com/kirillinakin/pingcast/internal/adapter/redis"
 	apigen "github.com/kirillinakin/pingcast/internal/api/gen"
 	"github.com/kirillinakin/pingcast/internal/app"
 	"github.com/kirillinakin/pingcast/internal/domain"
@@ -21,7 +20,7 @@ type Server struct {
 	monitoring  *app.MonitoringService
 	alerts      *app.AlertService
 	events      port.MonitorEventPublisher
-	rateLimiter *redisadapter.RateLimiter
+	rateLimiter port.RateLimiter
 }
 
 func NewServer(
@@ -29,7 +28,7 @@ func NewServer(
 	monitoring *app.MonitoringService,
 	alerts *app.AlertService,
 	events port.MonitorEventPublisher,
-	rateLimiter *redisadapter.RateLimiter,
+	rateLimiter port.RateLimiter,
 ) *Server {
 	return &Server{
 		auth:        auth,

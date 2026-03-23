@@ -5,8 +5,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kirillinakin/pingcast/internal/port"
 	goredis "github.com/redis/go-redis/v9"
 )
+
+// Compile-time interface check.
+var _ port.HostLimiter = (*HostLimiter)(nil)
 
 // Lua script for atomic semaphore acquire: INCR, check limit, DECR if over.
 var acquireScript = goredis.NewScript(`
