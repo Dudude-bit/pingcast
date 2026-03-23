@@ -26,7 +26,8 @@ INSERT INTO check_results (id, monitor_id, status, status_code, response_time_ms
 SELECT id, monitor_id, status, status_code, response_time_ms, error_message, checked_at
 FROM check_results_old;
 
--- Step 5: Recreate indexes on partitioned table (per-partition automatically)
+-- Step 5: Drop old indexes that followed the renamed table, then recreate
+DROP INDEX IF EXISTS idx_check_results_monitor_checked;
 CREATE INDEX idx_check_results_monitor_checked ON check_results (monitor_id, checked_at DESC);
 
 -- Step 6: Drop old table
