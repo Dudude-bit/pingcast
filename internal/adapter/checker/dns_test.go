@@ -3,6 +3,7 @@ package checker_test
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/kirillinakin/pingcast/internal/adapter/checker"
@@ -70,7 +71,7 @@ func TestDNSChecker_ExpectedIPMismatch(t *testing.T) {
 	if result.ErrorMessage == nil {
 		t.Error("expected error message for IP mismatch")
 	}
-	if result.ErrorMessage != nil && !contains(*result.ErrorMessage, "expected IP") {
+	if result.ErrorMessage != nil && !strings.Contains(*result.ErrorMessage, "expected IP") {
 		t.Errorf("error should mention expected IP, got: %s", *result.ErrorMessage)
 	}
 }
@@ -91,15 +92,3 @@ func TestDNSChecker_InvalidConfig(t *testing.T) {
 	}
 }
 
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsStr(s, substr))
-}
-
-func containsStr(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
-}
