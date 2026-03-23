@@ -6,7 +6,7 @@
 
 ## Summary
 
-Preventive reliability audit of PingCast identified 28 issues across 4 components (NATS messaging, Notifier, Checker, API). Issues range from critical (silent message loss, race conditions) to medium (missing validation, logging improvements). All fixes are organized into 5 PRs (Component 4 split into two for safer review).
+Preventive reliability audit of PingCast identified 31 issues across 4 components (NATS messaging, Notifier, Checker, API). Issues range from critical (silent message loss, race conditions, hex-arch violations) to medium (missing validation, logging improvements). All fixes are organized into 5 PRs (Component 4 split into two for safer review). Three additional issues (1.5, 1.6, 2.9) address hex-arch compliance — decoupling domain models from events, moving orchestration to the app layer, and cleaning up port interfaces.
 
 ---
 
@@ -63,6 +63,62 @@ handler(msgCtx, &event)
 - MONITORS stream (FileStorage): 1 GB
 - ALERTS stream (FileStorage): 1 GB
 - CHECKS stream (MemoryStorage): 100 MB (lower limit — RAM is more expensive than disk)
+
+**Files:** `internal/adapter/nats/client.go` (lines 31-67)
+
+### 1.5. Event DTO Layer — Decouple Events from Domain Models
+
+**Problem:** `MonitorEventPublisher.PublishMonitorChanged()` accepts `*domain.Monitor` directly. The full domain model is serialized to JSON and travels through NATS. This creates tight coupling between publishers and subscribers — any change to `domain.Monitor` fields breaks deserialization on the other side. Event schema versioning is impossible.
+
+**Fix:** Introduce event DTOs in `internal/port/eventbus.go`:
+```go
+// MonitorChangedEvent is the event envelope — decoupled from domain.Monitor.
+type MonitorChangedEvent struct {
+    Action    domain.MonitorAction `json:"action"`
+    MonitorID uuid.UUID            `json:"monitor_id"`
+    // Only fields that subscribers actually need:
+    Name           string              `json:"name,omitempty"`
+    Type           domain.MonitorType  `json:"type,omitempty"`
+    CheckConfig    json.RawMessage     `json:"check_config,omitempty"`
+    IntervalSeconds int               `json:"interval_seconds,omitempty"`
+    AlertAfterFailures int            `json:"alert_after_failures,omitempty"`
+    IsPaused       bool               `json:"is_paused"`
+}
+```
+
+Update port interface:
+```go
+type MonitorEventPublisher interface {
+    PublishMonitorChanged(ctx context.Context, event MonitorChangedEvent) error
+}
+
+type MonitorEventSubscriber interface {
+    Subscribe(ctx context.Context, handler func(ctx context.Context, event MonitorChangedEvent) error) error
+    Stop()
+}
+```
+
+The mapping `domain.Monitor → MonitorChangedEvent` happens at the call site (app layer), not inside the adapter. This allows event schema evolution without touching domain models.
+
+**Files:** `internal/port/eventbus.go`, `internal/adapter/nats/subscriber.go`, `internal/adapter/nats/publisher.go`, `internal/app/monitoring.go`
+
+### 1.6. Move Publish to App Layer
+
+**Problem:** `PublishMonitorChanged()` is called in HTTP handlers (`server.go` lines 169, 244, 261, 285, 287). Publishing an event when a monitor changes is **business logic** ("notify the system about a state change"), not HTTP adapter concern. This violates hex-arch: the adapter makes orchestration decisions (publish after DB write, handle publish errors, decide event payload).
+
+**Fix:** Move event publishing into `MonitoringService` methods. Each method that mutates a monitor publishes the corresponding event:
+- `CreateMonitor()` → publishes `ActionCreate` event after successful DB write
+- `UpdateMonitor()` → publishes `ActionUpdate` event
+- `DeleteMonitor()` → publishes `ActionDelete` event (after DB delete, per 1.1a)
+- `TogglePause()` → publishes `ActionPause` or `ActionResume`
+
+This requires injecting `MonitorEventPublisher` into `MonitoringService` (it already has `AlertEventPublisher`). The HTTP handler becomes a thin adapter — it parses input, calls the service, maps the response.
+
+Error handling: if publish fails after DB write, `MonitoringService` returns a wrapped error (e.g., `ErrEventPublishFailed`). The HTTP adapter maps it to 500. This keeps error classification in the app layer.
+
+Remove `events port.MonitorEventPublisher` from `Server` struct — it no longer belongs there.
+
+**Files:** `internal/app/monitoring.go`, `internal/adapter/http/server.go`, `cmd/api/main.go` (wiring)
 
 **Files:** `internal/adapter/nats/client.go` (lines 31-67)
 
@@ -133,6 +189,24 @@ handler(msgCtx, &event)
 **Fix:** Add `reason` label to `RecordAlertSent()`: `timeout`, `auth_error`, `rate_limited`, `network_error`, `unknown`. Determine from error type / HTTP status code.
 
 **Files:** `internal/app/alert.go`, metrics interface
+
+### 2.9. Rename `CreateSenderWithRetry` → `CreateSender` in Port
+
+**Problem:** The port interface `ChannelRegistry` exposes `CreateSenderWithRetry()` — leaking the retry/circuit-breaker infrastructure detail into the domain contract. The app layer shouldn't know (or care) that the sender wraps retries.
+
+**Fix:** Rename to `CreateSender()` in `port/channel.go`:
+```go
+type ChannelRegistry interface {
+    Get(channelType domain.ChannelType) (ChannelSenderFactory, error)
+    CreateSender(channelType domain.ChannelType, config json.RawMessage) (AlertSender, error)
+    Types() []ChannelTypeInfo
+    ValidateConfig(channelType domain.ChannelType, config json.RawMessage) error
+}
+```
+
+Update all call sites in `internal/app/alert.go`. The adapter implementation in `registry.go` continues to wrap with retry+CB internally — that's invisible to the port consumer.
+
+**Files:** `internal/port/channel.go`, `internal/app/alert.go`, `internal/adapter/channel/registry.go`
 
 ---
 
@@ -299,13 +373,15 @@ return nil, fmt.Errorf("decrypt failed: primary: %w; old key: %v", primaryErr, o
 
 ## Implementation Order
 
-1. **PR 1: NATS Messaging** (issues 1.1-1.4) — foundation for all inter-service communication
-2. **PR 2: Notifier** (issues 2.1-2.8) — depends on NATS fixes being in place
-3. **PR 3: Checker** (issues 3.1-3.4) — depends on NATS context fix (1.2)
+1. **PR 1: NATS Messaging + Event Architecture** (issues 1.1-1.6) — foundation: event DTO layer, publish moved to app layer, error handling, stream limits
+2. **PR 2: Notifier** (issues 2.1-2.9) — depends on NATS fixes; includes port rename `CreateSenderWithRetry` → `CreateSender`
+3. **PR 3: Checker** (issues 3.1-3.4) — depends on NATS context fix (1.2) and event DTO (1.5)
 4. **PR 4a: API Race Conditions** (issues 4.1, 4.3, 4.6) — high-risk DB changes, needs careful testing
 5. **PR 4b: API Defensive Coding** (issues 4.2, 4.4, 4.5, 4.7, 4.8, 4.9) — lower-risk, safety improvements
 
 PRs 3, 4a, and 4b can be developed in parallel after PR 1 is merged.
+
+Note: PR 1 is now the largest PR due to issues 1.5 and 1.6 (event DTO + publish relocation). These changes touch port interfaces, app layer, HTTP adapter, and NATS adapter. Consider splitting into PR 1a (event DTO + publish relocation) and PR 1b (error handling + stream limits) if the diff is too large for review.
 
 ## Shared Utility
 
