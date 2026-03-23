@@ -42,6 +42,15 @@ type CheckResultsDefault struct {
 	CheckedAt      time.Time   `json:"checked_at"`
 }
 
+type FailedAlert struct {
+	ID               uuid.UUID   `json:"id"`
+	Event            []byte      `json:"event"`
+	Error            string      `json:"error"`
+	FailedChannelIds []uuid.UUID `json:"failed_channel_ids"`
+	Attempts         int32       `json:"attempts"`
+	CreatedAt        time.Time   `json:"created_at"`
+}
+
 type Incident struct {
 	ID         int64              `json:"id"`
 	MonitorID  uuid.UUID          `json:"monitor_id"`

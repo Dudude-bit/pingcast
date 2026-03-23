@@ -129,27 +129,6 @@ func (q *Queries) GetLatestCheckResults(ctx context.Context, arg GetLatestCheckR
 	return items, nil
 }
 
-const getUptimePercent = `-- name: GetUptimePercent :one
-SELECT
-    CASE WHEN COUNT(*) = 0 THEN 100.0
-    ELSE (COUNT(*) FILTER (WHERE status = 'up'))::FLOAT / COUNT(*)::FLOAT * 100
-    END AS uptime_percent
-FROM check_results
-WHERE monitor_id = $1 AND checked_at >= $2
-`
-
-type GetUptimePercentParams struct {
-	MonitorID uuid.UUID `json:"monitor_id"`
-	CheckedAt time.Time `json:"checked_at"`
-}
-
-func (q *Queries) GetUptimePercent(ctx context.Context, arg GetUptimePercentParams) (interface{}, error) {
-	row := q.db.QueryRow(ctx, getUptimePercent, arg.MonitorID, arg.CheckedAt)
-	var uptime_percent interface{}
-	err := row.Scan(&uptime_percent)
-	return uptime_percent, err
-}
-
 const insertCheckResult = `-- name: InsertCheckResult :one
 INSERT INTO check_results (monitor_id, status, status_code, response_time_ms, error_message, checked_at)
 VALUES ($1, $2, $3, $4, $5, $6)

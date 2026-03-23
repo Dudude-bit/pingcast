@@ -32,13 +32,5 @@ WHERE monitor_id = $1 AND checked_at >= $2
 GROUP BY bucket
 ORDER BY bucket;
 
--- name: GetUptimePercent :one
-SELECT
-    CASE WHEN COUNT(*) = 0 THEN 100.0
-    ELSE (COUNT(*) FILTER (WHERE status = 'up'))::FLOAT / COUNT(*)::FLOAT * 100
-    END AS uptime_percent
-FROM check_results
-WHERE monitor_id = $1 AND checked_at >= $2;
-
 -- name: DeleteCheckResultsOlderThan :execrows
 DELETE FROM check_results WHERE checked_at < $1;

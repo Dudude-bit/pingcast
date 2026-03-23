@@ -39,7 +39,6 @@ type MonitorRepo interface {
 
 type CheckResultRepo interface {
 	Insert(ctx context.Context, cr *domain.CheckResult) error
-	GetUptime(ctx context.Context, monitorID uuid.UUID, since time.Time) (float64, error)
 	ConsecutiveFailures(ctx context.Context, monitorID uuid.UUID) (int, error)
 	DeleteOlderThan(ctx context.Context, cutoff time.Time) (int64, error)
 }
