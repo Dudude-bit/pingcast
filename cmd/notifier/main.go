@@ -44,8 +44,8 @@ func main() {
 	defer pool.Close()
 
 	queries := sqlcgen.New(pool)
-	channelRepo := postgres.NewChannelRepo(queries)
-	monitorRepo := postgres.NewMonitorRepo(queries)
+	channelRepo := postgres.NewChannelRepo(pool, queries)
+	monitorRepo := postgres.NewMonitorRepo(pool, queries)
 
 	// NATS
 	nc, err := natsadapter.Connect(cfg.NatsURL)

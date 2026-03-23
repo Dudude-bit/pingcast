@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kirillinakin/pingcast/internal/crypto"
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/port"
@@ -15,16 +16,21 @@ import (
 var _ port.ChannelRepo = (*ChannelRepo)(nil)
 
 type ChannelRepo struct {
-	q   *gen.Queries
-	enc *crypto.Encryptor
+	pool *pgxpool.Pool
+	q    *gen.Queries
+	enc  *crypto.Encryptor
 }
 
-func NewChannelRepo(q *gen.Queries) *ChannelRepo {
-	return &ChannelRepo{q: q}
+func NewChannelRepo(pool *pgxpool.Pool, q *gen.Queries) *ChannelRepo {
+	return &ChannelRepo{pool: pool, q: q}
 }
 
-func NewChannelRepoWithEncryption(q *gen.Queries, enc *crypto.Encryptor) *ChannelRepo {
-	return &ChannelRepo{q: q, enc: enc}
+func NewChannelRepoWithEncryption(pool *pgxpool.Pool, q *gen.Queries, enc *crypto.Encryptor) *ChannelRepo {
+	return &ChannelRepo{pool: pool, q: q, enc: enc}
+}
+
+func (r *ChannelRepo) queries(ctx context.Context) *gen.Queries {
+	return QueriesFromCtx(ctx, r.q, r.pool)
 }
 
 func (r *ChannelRepo) encryptConfig(config json.RawMessage) (json.RawMessage, error) {
@@ -58,7 +64,7 @@ func (r *ChannelRepo) Create(ctx context.Context, ch *domain.NotificationChannel
 	if err != nil {
 		return nil, err
 	}
-	row, err := r.q.CreateChannel(ctx, gen.CreateChannelParams{
+	row, err := r.queries(ctx).CreateChannel(ctx, gen.CreateChannelParams{
 		UserID: ch.UserID,
 		Name:   ch.Name,
 		Type:   string(ch.Type),
@@ -73,7 +79,7 @@ func (r *ChannelRepo) Create(ctx context.Context, ch *domain.NotificationChannel
 }
 
 func (r *ChannelRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.NotificationChannel, error) {
-	row, err := r.q.GetChannelByID(ctx, id)
+	row, err := r.queries(ctx).GetChannelByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("get channel: %w", err)
 	}
@@ -83,7 +89,7 @@ func (r *ChannelRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Notifi
 }
 
 func (r *ChannelRepo) ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.NotificationChannel, error) {
-	rows, err := r.q.ListChannelsByUserID(ctx, userID)
+	rows, err := r.queries(ctx).ListChannelsByUserID(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list channels: %w", err)
 	}
@@ -95,7 +101,7 @@ func (r *ChannelRepo) ListByUserID(ctx context.Context, userID uuid.UUID) ([]dom
 }
 
 func (r *ChannelRepo) ListForMonitor(ctx context.Context, monitorID uuid.UUID) ([]domain.NotificationChannel, error) {
-	rows, err := r.q.ListChannelsForMonitor(ctx, monitorID)
+	rows, err := r.queries(ctx).ListChannelsForMonitor(ctx, monitorID)
 	if err != nil {
 		return nil, fmt.Errorf("list channels for monitor: %w", err)
 	}
@@ -111,7 +117,7 @@ func (r *ChannelRepo) Update(ctx context.Context, ch *domain.NotificationChannel
 	if err != nil {
 		return err
 	}
-	return r.q.UpdateChannel(ctx, gen.UpdateChannelParams{
+	return r.queries(ctx).UpdateChannel(ctx, gen.UpdateChannelParams{
 		ID:        ch.ID,
 		Name:      ch.Name,
 		Config:    encConfig,
@@ -121,17 +127,17 @@ func (r *ChannelRepo) Update(ctx context.Context, ch *domain.NotificationChannel
 }
 
 func (r *ChannelRepo) Delete(ctx context.Context, id, userID uuid.UUID) error {
-	return r.q.DeleteChannel(ctx, gen.DeleteChannelParams{ID: id, UserID: userID})
+	return r.queries(ctx).DeleteChannel(ctx, gen.DeleteChannelParams{ID: id, UserID: userID})
 }
 
 func (r *ChannelRepo) BindToMonitor(ctx context.Context, monitorID, channelID uuid.UUID) error {
-	return r.q.BindChannelToMonitor(ctx, gen.BindChannelToMonitorParams{
+	return r.queries(ctx).BindChannelToMonitor(ctx, gen.BindChannelToMonitorParams{
 		MonitorID: monitorID, ChannelID: channelID,
 	})
 }
 
 func (r *ChannelRepo) UnbindFromMonitor(ctx context.Context, monitorID, channelID uuid.UUID) error {
-	return r.q.UnbindChannelFromMonitor(ctx, gen.UnbindChannelFromMonitorParams{
+	return r.queries(ctx).UnbindChannelFromMonitor(ctx, gen.UnbindChannelFromMonitorParams{
 		MonitorID: monitorID, ChannelID: channelID,
 	})
 }

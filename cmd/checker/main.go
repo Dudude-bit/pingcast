@@ -76,7 +76,7 @@ func main() {
 
 	// Postgres repos
 	userRepo := postgres.NewUserRepo(queries)
-	monitorRepo := postgres.NewMonitorRepo(queries)
+	monitorRepo := postgres.NewMonitorRepo(pool, queries)
 	checkResultRepo := postgres.NewCheckResultRepo(queries)
 	incidentRepo := postgres.NewIncidentRepo(queries)
 	uptimeRepo := postgres.NewUptimeRepo(queries)
@@ -92,7 +92,7 @@ func main() {
 	registry.Register(domain.MonitorDNS, "DNS", checker.NewDNSChecker())
 
 	// App service (registry injected via port)
-	monitoringSvc := app.NewMonitoringService(monitorRepo, checkResultRepo, incidentRepo, userRepo, uptimeRepo, nil, alertPub, registry)
+	monitoringSvc := app.NewMonitoringService(monitorRepo, nil, checkResultRepo, incidentRepo, userRepo, uptimeRepo, nil, alertPub, registry)
 
 	// --- NATS Work Queue Architecture ---
 	// Leader-elected scheduler publishes check tasks to NATS.

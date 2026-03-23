@@ -111,16 +111,16 @@ func main() {
 	var monitorRepo *postgres.MonitorRepo
 	var channelRepo *postgres.ChannelRepo
 	if enc != nil {
-		monitorRepo = postgres.NewMonitorRepoWithEncryption(queries, enc)
-		channelRepo = postgres.NewChannelRepoWithEncryption(queries, enc)
+		monitorRepo = postgres.NewMonitorRepoWithEncryption(pool, queries, enc)
+		channelRepo = postgres.NewChannelRepoWithEncryption(pool, queries, enc)
 	} else {
-		monitorRepo = postgres.NewMonitorRepo(queries)
-		channelRepo = postgres.NewChannelRepo(queries)
+		monitorRepo = postgres.NewMonitorRepo(pool, queries)
+		channelRepo = postgres.NewChannelRepo(pool, queries)
 	}
 	checkResultRepo := postgres.NewCheckResultRepo(queries)
 	incidentRepo := postgres.NewIncidentRepo(queries)
 	uptimeRepo := postgres.NewUptimeRepo(queries)
-	uow := postgres.NewUnitOfWork(pool, enc)
+	txm := postgres.NewTxManager(pool)
 
 	// NATS publishers
 	monitorPub := natsadapter.NewMonitorPublisher(js)
@@ -144,7 +144,7 @@ func main() {
 
 	// App services
 	authSvc := app.NewAuthService(userRepo, sessionRepo)
-	monitoringSvc := app.NewMonitoringService(monitorRepo, checkResultRepo, incidentRepo, userRepo, uptimeRepo, uow, alertPub, registry)
+	monitoringSvc := app.NewMonitoringService(monitorRepo, channelRepo, checkResultRepo, incidentRepo, userRepo, uptimeRepo, txm, alertPub, registry)
 	alertSvc := app.NewAlertService(channelRepo, monitorRepo, channelReg)
 
 	// HTTP handlers

@@ -2,15 +2,8 @@ package port
 
 import "context"
 
-// UnitOfWork creates transactional scopes.
-type UnitOfWork interface {
-	Begin(ctx context.Context) (UnitOfWorkTx, error)
-}
-
-// UnitOfWorkTx provides repos scoped to a single transaction.
-type UnitOfWorkTx interface {
-	Monitors() MonitorRepo
-	Channels() ChannelRepo
-	Commit(ctx context.Context) error
-	Rollback(ctx context.Context) error
+// TxManager manages database transactions.
+// App layer calls Do() without knowing about pgx, sql, or any DB driver.
+type TxManager interface {
+	Do(ctx context.Context, fn func(ctx context.Context) error) error
 }

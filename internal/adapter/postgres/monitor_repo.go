@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kirillinakin/pingcast/internal/crypto"
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/port"
@@ -16,16 +17,22 @@ import (
 var _ port.MonitorRepo = (*MonitorRepo)(nil)
 
 type MonitorRepo struct {
-	q   *gen.Queries
-	enc *crypto.Encryptor // nil = no encryption
+	pool *pgxpool.Pool
+	q    *gen.Queries
+	enc  *crypto.Encryptor // nil = no encryption
 }
 
-func NewMonitorRepo(q *gen.Queries) *MonitorRepo {
-	return &MonitorRepo{q: q}
+func NewMonitorRepo(pool *pgxpool.Pool, q *gen.Queries) *MonitorRepo {
+	return &MonitorRepo{pool: pool, q: q}
 }
 
-func NewMonitorRepoWithEncryption(q *gen.Queries, enc *crypto.Encryptor) *MonitorRepo {
-	return &MonitorRepo{q: q, enc: enc}
+func NewMonitorRepoWithEncryption(pool *pgxpool.Pool, q *gen.Queries, enc *crypto.Encryptor) *MonitorRepo {
+	return &MonitorRepo{pool: pool, q: q, enc: enc}
+}
+
+// queries returns sqlc Queries scoped to the active transaction (if any).
+func (r *MonitorRepo) queries(ctx context.Context) *gen.Queries {
+	return QueriesFromCtx(ctx, r.q, r.pool)
 }
 
 func (r *MonitorRepo) encryptConfig(config json.RawMessage) (json.RawMessage, error) {
@@ -65,7 +72,7 @@ func (r *MonitorRepo) Create(ctx context.Context, m *domain.Monitor) (*domain.Mo
 	}
 	mCopy := *m
 	mCopy.CheckConfig = encConfig
-	row, err := r.q.CreateMonitor(ctx, monitorToCreateParams(&mCopy))
+	row, err := r.queries(ctx).CreateMonitor(ctx, monitorToCreateParams(&mCopy))
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +82,7 @@ func (r *MonitorRepo) Create(ctx context.Context, m *domain.Monitor) (*domain.Mo
 }
 
 func (r *MonitorRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Monitor, error) {
-	row, err := r.q.GetMonitorByID(ctx, id)
+	row, err := r.queries(ctx).GetMonitorByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +92,7 @@ func (r *MonitorRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Monito
 }
 
 func (r *MonitorRepo) ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.Monitor, error) {
-	rows, err := r.q.ListMonitorsByUserID(ctx, userID)
+	rows, err := r.queries(ctx).ListMonitorsByUserID(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +105,7 @@ func (r *MonitorRepo) ListByUserID(ctx context.Context, userID uuid.UUID) ([]dom
 }
 
 func (r *MonitorRepo) ListPublicBySlug(ctx context.Context, slug string) ([]domain.Monitor, error) {
-	rows, err := r.q.ListPublicMonitorsByUserSlug(ctx, slug)
+	rows, err := r.queries(ctx).ListPublicMonitorsByUserSlug(ctx, slug)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +118,7 @@ func (r *MonitorRepo) ListPublicBySlug(ctx context.Context, slug string) ([]doma
 }
 
 func (r *MonitorRepo) ListActive(ctx context.Context) ([]domain.Monitor, error) {
-	rows, err := r.q.ListActiveMonitors(ctx)
+	rows, err := r.queries(ctx).ListActiveMonitors(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +131,7 @@ func (r *MonitorRepo) ListActive(ctx context.Context) ([]domain.Monitor, error) 
 }
 
 func (r *MonitorRepo) CountByUserID(ctx context.Context, userID uuid.UUID) (int, error) {
-	n, err := r.q.CountMonitorsByUserID(ctx, userID)
+	n, err := r.queries(ctx).CountMonitorsByUserID(ctx, userID)
 	if err != nil {
 		return 0, err
 	}
@@ -138,18 +145,18 @@ func (r *MonitorRepo) Update(ctx context.Context, m *domain.Monitor) error {
 	}
 	mCopy := *m
 	mCopy.CheckConfig = encConfig
-	return r.q.UpdateMonitor(ctx, monitorToUpdateParams(&mCopy))
+	return r.queries(ctx).UpdateMonitor(ctx, monitorToUpdateParams(&mCopy))
 }
 
 func (r *MonitorRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status domain.MonitorStatus) error {
-	return r.q.UpdateMonitorStatus(ctx, gen.UpdateMonitorStatusParams{
+	return r.queries(ctx).UpdateMonitorStatus(ctx, gen.UpdateMonitorStatusParams{
 		ID:            id,
 		CurrentStatus: string(status),
 	})
 }
 
 func (r *MonitorRepo) Delete(ctx context.Context, id, userID uuid.UUID) error {
-	return r.q.DeleteMonitor(ctx, gen.DeleteMonitorParams{
+	return r.queries(ctx).DeleteMonitor(ctx, gen.DeleteMonitorParams{
 		ID:     id,
 		UserID: userID,
 	})

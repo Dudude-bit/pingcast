@@ -15,32 +15,35 @@ import (
 
 type MonitoringService struct {
 	monitors     port.MonitorRepo
+	channels     port.ChannelRepo
 	checkResults port.CheckResultRepo
 	incidents    port.IncidentRepo
 	users        port.UserRepo
 	uptime       port.UptimeRepo
-	uow          port.UnitOfWork
+	txm          port.TxManager
 	alerts       port.AlertEventPublisher
 	registry     port.CheckerRegistry
 }
 
 func NewMonitoringService(
 	monitors port.MonitorRepo,
+	channels port.ChannelRepo,
 	checkResults port.CheckResultRepo,
 	incidents port.IncidentRepo,
 	users port.UserRepo,
 	uptime port.UptimeRepo,
-	uow port.UnitOfWork,
+	txm port.TxManager,
 	alerts port.AlertEventPublisher,
 	registry port.CheckerRegistry,
 ) *MonitoringService {
 	return &MonitoringService{
 		monitors:     monitors,
+		channels:     channels,
 		checkResults: checkResults,
 		incidents:    incidents,
 		users:        users,
 		uptime:       uptime,
-		uow:          uow,
+		txm:          txm,
 		alerts:       alerts,
 		registry:     registry,
 	}
@@ -110,28 +113,26 @@ func (s *MonitoringService) CreateMonitor(ctx context.Context, user *domain.User
 		return s.monitors.Create(ctx, mon)
 	}
 
-	// Transactional: create monitor + bind channels atomically
-	tx, err := s.uow.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("begin transaction: %w", err)
-	}
-	defer tx.Rollback(ctx)
-
-	created, err := tx.Monitors().Create(ctx, mon)
-	if err != nil {
-		return nil, fmt.Errorf("create monitor: %w", err)
-	}
-
-	for _, cid := range input.ChannelIDs {
-		if err := tx.Channels().BindToMonitor(ctx, created.ID, cid); err != nil {
-			return nil, fmt.Errorf("bind channel %s: %w", cid, err)
+	// Transactional: create monitor + bind channels atomically via go-trm.
+	// The txm.Do() auto-commits on nil, auto-rollbacks on error.
+	// ctx carries the active tx — repos extract it transparently.
+	var created *domain.Monitor
+	err = s.txm.Do(ctx, func(txCtx context.Context) error {
+		var err error
+		created, err = s.monitors.Create(txCtx, mon)
+		if err != nil {
+			return fmt.Errorf("create monitor: %w", err)
 		}
+		for _, cid := range input.ChannelIDs {
+			if err := s.channels.BindToMonitor(txCtx, created.ID, cid); err != nil {
+				return fmt.Errorf("bind channel %s: %w", cid, err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("commit transaction: %w", err)
-	}
-
 	return created, nil
 }
 
