@@ -1,10 +1,12 @@
 package httpadapter
 
 import (
+	"errors"
 	"io/fs"
 	"net/http"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/gofiber/fiber/v2/middleware/csrf"
 	"github.com/gofiber/fiber/v2/middleware/filesystem"
 	"github.com/gofiber/fiber/v2/middleware/logger"
@@ -26,11 +28,39 @@ func SetupApp(
 ) *fiber.App {
 	app := fiber.New(fiber.Config{
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
+			// Domain errors → structured JSON response
+			var domErr *domain.DomainError
+			if errors.As(err, &domErr) {
+				code := fiber.StatusInternalServerError
+				switch {
+				case errors.Is(domErr, domain.ErrNotFound):
+					code = fiber.StatusNotFound
+				case errors.Is(domErr, domain.ErrForbidden):
+					code = fiber.StatusForbidden
+				case errors.Is(domErr, domain.ErrValidation):
+					code = fiber.StatusUnprocessableEntity
+				case errors.Is(domErr, domain.ErrConflict):
+					code = fiber.StatusConflict
+				}
+				return c.Status(code).JSON(fiber.Map{
+					"error": fiber.Map{
+						"code":    domErr.Code,
+						"message": domErr.Message,
+					},
+				})
+			}
+
+			// Fiber errors
 			code := fiber.StatusInternalServerError
 			if e, ok := err.(*fiber.Error); ok {
 				code = e.Code
 			}
-			return c.Status(code).JSON(fiber.Map{"error": err.Error()})
+			return c.Status(code).JSON(fiber.Map{
+				"error": fiber.Map{
+					"code":    "INTERNAL_ERROR",
+					"message": err.Error(),
+				},
+			})
 		},
 	})
 
