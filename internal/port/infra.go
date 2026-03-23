@@ -26,8 +26,11 @@ type DistributedMutex interface {
 	Extend() (bool, error)
 }
 
-// APIKeyRepo provides API key lookup for authentication.
+// APIKeyRepo provides API key CRUD and authentication lookup.
 type APIKeyRepo interface {
+	Create(ctx context.Context, key *domain.APIKey) (*domain.APIKey, error)
 	GetByHash(ctx context.Context, keyHash string) (*domain.APIKey, error)
+	ListByUser(ctx context.Context, userID uuid.UUID) ([]domain.APIKey, error)
+	Delete(ctx context.Context, id, userID uuid.UUID) error
 	Touch(ctx context.Context, id uuid.UUID) error
 }
