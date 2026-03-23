@@ -14,320 +14,12 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/mock"
+
 	"github.com/kirillinakin/pingcast/internal/app"
 	"github.com/kirillinakin/pingcast/internal/domain"
-	"github.com/kirillinakin/pingcast/internal/port"
+	"github.com/kirillinakin/pingcast/internal/mocks"
 )
-
-// ---------------------------------------------------------------------------
-// Mocks
-// ---------------------------------------------------------------------------
-
-// stubUserRepo implements port.UserRepo with controllable behavior.
-type stubUserRepo struct {
-	users         map[string]*domain.User // keyed by email
-	passwordHash  map[string]string       // keyed by email
-	usersByID     map[uuid.UUID]*domain.User
-	usersBySlug   map[string]*domain.User
-	createErr     error
-	getByEmailErr error
-}
-
-func newStubUserRepo() *stubUserRepo {
-	return &stubUserRepo{
-		users:        make(map[string]*domain.User),
-		passwordHash: make(map[string]string),
-		usersByID:    make(map[uuid.UUID]*domain.User),
-		usersBySlug:  make(map[string]*domain.User),
-	}
-}
-
-func (r *stubUserRepo) addUser(email, slug, password string) *domain.User {
-	hash, _ := app.HashPassword(password)
-	id := uuid.New()
-	u := &domain.User{
-		ID:        id,
-		Email:     email,
-		Slug:      slug,
-		Plan:      domain.PlanFree,
-		CreatedAt: time.Now(),
-	}
-	r.users[email] = u
-	r.passwordHash[email] = hash
-	r.usersByID[id] = u
-	r.usersBySlug[slug] = u
-	return u
-}
-
-func (r *stubUserRepo) Create(_ context.Context, email, slug, passwordHash string) (*domain.User, error) {
-	if r.createErr != nil {
-		return nil, r.createErr
-	}
-	id := uuid.New()
-	u := &domain.User{ID: id, Email: email, Slug: slug, Plan: domain.PlanFree, CreatedAt: time.Now()}
-	r.users[email] = u
-	r.passwordHash[email] = passwordHash
-	r.usersByID[id] = u
-	r.usersBySlug[slug] = u
-	return u, nil
-}
-
-func (r *stubUserRepo) GetByID(_ context.Context, id uuid.UUID) (*domain.User, error) {
-	u, ok := r.usersByID[id]
-	if !ok {
-		return nil, errors.New("user not found")
-	}
-	return u, nil
-}
-
-func (r *stubUserRepo) GetByEmail(_ context.Context, email string) (*domain.User, string, error) {
-	if r.getByEmailErr != nil {
-		return nil, "", r.getByEmailErr
-	}
-	u, ok := r.users[email]
-	if !ok {
-		return nil, "", errors.New("user not found")
-	}
-	return u, r.passwordHash[email], nil
-}
-
-func (r *stubUserRepo) GetBySlug(_ context.Context, slug string) (*domain.User, error) {
-	u, ok := r.usersBySlug[slug]
-	if !ok {
-		return nil, errors.New("not found")
-	}
-	return u, nil
-}
-
-func (r *stubUserRepo) UpdatePlan(_ context.Context, _ uuid.UUID, _ domain.Plan) error { return nil }
-func (r *stubUserRepo) UpdateLemonSqueezy(_ context.Context, _ uuid.UUID, _, _ string) error {
-	return nil
-}
-
-// stubSessionRepo implements port.SessionRepo with in-memory sessions.
-type stubSessionRepo struct {
-	sessions map[string]uuid.UUID
-}
-
-func newStubSessionRepo() *stubSessionRepo {
-	return &stubSessionRepo{sessions: make(map[string]uuid.UUID)}
-}
-
-func (r *stubSessionRepo) Create(_ context.Context, sessionID string, userID uuid.UUID, _ time.Time) error {
-	r.sessions[sessionID] = userID
-	return nil
-}
-
-func (r *stubSessionRepo) GetUserID(_ context.Context, sessionID string) (uuid.UUID, error) {
-	uid, ok := r.sessions[sessionID]
-	if !ok {
-		return uuid.Nil, errors.New("session not found")
-	}
-	return uid, nil
-}
-
-func (r *stubSessionRepo) Touch(_ context.Context, _ string, _ time.Time) error { return nil }
-func (r *stubSessionRepo) Delete(_ context.Context, sessionID string) error {
-	delete(r.sessions, sessionID)
-	return nil
-}
-func (r *stubSessionRepo) DeleteExpired(_ context.Context) (int64, error) { return 0, nil }
-
-// stubRateLimiter implements port.RateLimiter.
-type stubRateLimiter struct {
-	calls   int
-	limit   int // deny after this many calls (0 = never deny)
-	failErr error
-}
-
-func (r *stubRateLimiter) Allow(_ context.Context, _ string) (bool, error) {
-	if r.failErr != nil {
-		return false, r.failErr
-	}
-	r.calls++
-	if r.limit > 0 && r.calls > r.limit {
-		return false, nil
-	}
-	return true, nil
-}
-
-func (r *stubRateLimiter) Reset(_ context.Context, _ string) error {
-	r.calls = 0
-	return nil
-}
-
-// stubMonitorRepo implements port.MonitorRepo (minimal).
-type stubMonitorRepo struct{}
-
-func (r *stubMonitorRepo) Create(_ context.Context, m *domain.Monitor) (*domain.Monitor, error) {
-	m.ID = uuid.New()
-	m.CreatedAt = time.Now()
-	return m, nil
-}
-func (r *stubMonitorRepo) GetByID(_ context.Context, _ uuid.UUID) (*domain.Monitor, error) {
-	return nil, errors.New("not found")
-}
-func (r *stubMonitorRepo) ListByUserID(_ context.Context, _ uuid.UUID) ([]domain.Monitor, error) {
-	return nil, nil
-}
-func (r *stubMonitorRepo) ListPublicBySlug(_ context.Context, _ string) ([]domain.Monitor, error) {
-	return nil, nil
-}
-func (r *stubMonitorRepo) ListActive(_ context.Context) ([]domain.Monitor, error) { return nil, nil }
-func (r *stubMonitorRepo) CountByUserID(_ context.Context, _ uuid.UUID) (int, error) {
-	return 0, nil
-}
-func (r *stubMonitorRepo) Update(_ context.Context, _ *domain.Monitor) error    { return nil }
-func (r *stubMonitorRepo) UpdateStatus(_ context.Context, _ uuid.UUID, _ domain.MonitorStatus) error {
-	return nil
-}
-func (r *stubMonitorRepo) Delete(_ context.Context, _, _ uuid.UUID) error { return nil }
-
-// stubCheckResultRepo implements port.CheckResultRepo (minimal).
-type stubCheckResultRepo struct{}
-
-func (r *stubCheckResultRepo) Insert(_ context.Context, _ *domain.CheckResult) error { return nil }
-func (r *stubCheckResultRepo) ConsecutiveFailures(_ context.Context, _ uuid.UUID) (int, error) {
-	return 0, nil
-}
-func (r *stubCheckResultRepo) DeleteOlderThan(_ context.Context, _ time.Time) (int64, error) {
-	return 0, nil
-}
-
-// stubIncidentRepo implements port.IncidentRepo (minimal).
-type stubIncidentRepo struct{}
-
-func (r *stubIncidentRepo) Create(_ context.Context, _ uuid.UUID, _ string) (*domain.Incident, error) {
-	return &domain.Incident{}, nil
-}
-func (r *stubIncidentRepo) Resolve(_ context.Context, _ int64, _ time.Time) error { return nil }
-func (r *stubIncidentRepo) GetOpen(_ context.Context, _ uuid.UUID) (*domain.Incident, error) {
-	return nil, errors.New("no open")
-}
-func (r *stubIncidentRepo) IsInCooldown(_ context.Context, _ uuid.UUID) (bool, error) {
-	return false, nil
-}
-func (r *stubIncidentRepo) ListByMonitorID(_ context.Context, _ uuid.UUID, _ int) ([]domain.Incident, error) {
-	return nil, nil
-}
-
-// stubUptimeRepo implements port.UptimeRepo (minimal).
-type stubUptimeRepo struct{}
-
-func (r *stubUptimeRepo) RecordCheck(_ context.Context, _ uuid.UUID, _ time.Time, _ bool) error {
-	return nil
-}
-func (r *stubUptimeRepo) GetUptime(_ context.Context, _ uuid.UUID, _ time.Time) (float64, error) {
-	return 99.9, nil
-}
-func (r *stubUptimeRepo) GetUptimeBatch(_ context.Context, _ []uuid.UUID, _ time.Time) (map[uuid.UUID]float64, error) {
-	return map[uuid.UUID]float64{}, nil
-}
-
-// stubCheckerRegistry implements port.CheckerRegistry (minimal).
-type stubCheckerRegistry struct{}
-
-func (r *stubCheckerRegistry) Get(_ domain.MonitorType) (port.MonitorChecker, error) {
-	return nil, errors.New("not implemented")
-}
-func (r *stubCheckerRegistry) Types() []port.MonitorTypeInfo { return nil }
-func (r *stubCheckerRegistry) ValidateConfig(_ domain.MonitorType, _ json.RawMessage) error {
-	return nil
-}
-func (r *stubCheckerRegistry) Target(_ domain.MonitorType, _ json.RawMessage) (string, error) {
-	return "", nil
-}
-func (r *stubCheckerRegistry) Host(_ domain.MonitorType, _ json.RawMessage) (string, error) {
-	return "", nil
-}
-
-// stubChannelRepo implements port.ChannelRepo (minimal).
-type stubChannelRepo struct{}
-
-func (r *stubChannelRepo) Create(_ context.Context, ch *domain.NotificationChannel) (*domain.NotificationChannel, error) {
-	ch.ID = uuid.New()
-	return ch, nil
-}
-func (r *stubChannelRepo) GetByID(_ context.Context, _ uuid.UUID) (*domain.NotificationChannel, error) {
-	return nil, errors.New("not found")
-}
-func (r *stubChannelRepo) ListByUserID(_ context.Context, _ uuid.UUID) ([]domain.NotificationChannel, error) {
-	return nil, nil
-}
-func (r *stubChannelRepo) ListForMonitor(_ context.Context, _ uuid.UUID) ([]domain.NotificationChannel, error) {
-	return nil, nil
-}
-func (r *stubChannelRepo) Update(_ context.Context, _ *domain.NotificationChannel) error { return nil }
-func (r *stubChannelRepo) Delete(_ context.Context, _, _ uuid.UUID) error                { return nil }
-func (r *stubChannelRepo) BindToMonitor(_ context.Context, _, _ uuid.UUID) error          { return nil }
-func (r *stubChannelRepo) UnbindFromMonitor(_ context.Context, _, _ uuid.UUID) error      { return nil }
-
-// stubChannelRegistry implements port.ChannelRegistry (minimal).
-type stubChannelRegistry struct{}
-
-func (r *stubChannelRegistry) Get(_ domain.ChannelType) (port.ChannelSenderFactory, error) {
-	return nil, errors.New("not implemented")
-}
-func (r *stubChannelRegistry) CreateSenderWithRetry(_ domain.ChannelType, _ json.RawMessage) (port.AlertSender, error) {
-	return nil, errors.New("not implemented")
-}
-func (r *stubChannelRegistry) Types() []port.ChannelTypeInfo { return nil }
-func (r *stubChannelRegistry) ValidateConfig(_ domain.ChannelType, _ json.RawMessage) error {
-	return nil
-}
-
-// stubFailedAlertRepo implements port.FailedAlertRepo (minimal).
-type stubFailedAlertRepo struct{}
-
-func (r *stubFailedAlertRepo) Create(_ context.Context, _ json.RawMessage, _ string, _ []uuid.UUID) error {
-	return nil
-}
-
-// stubTxManager implements port.TxManager by running fn directly.
-type stubTxManager struct{}
-
-func (r *stubTxManager) Do(_ context.Context, fn func(context.Context) error) error {
-	return fn(context.Background())
-}
-
-// stubAPIKeyRepo implements port.APIKeyRepo (minimal).
-type stubAPIKeyRepo struct{}
-
-func (r *stubAPIKeyRepo) Create(_ context.Context, k *domain.APIKey) (*domain.APIKey, error) {
-	return k, nil
-}
-func (r *stubAPIKeyRepo) GetByHash(_ context.Context, _ string) (*domain.APIKey, error) {
-	return nil, errors.New("not found")
-}
-func (r *stubAPIKeyRepo) ListByUser(_ context.Context, _ uuid.UUID) ([]domain.APIKey, error) {
-	return nil, nil
-}
-func (r *stubAPIKeyRepo) Delete(_ context.Context, _, _ uuid.UUID) error { return nil }
-func (r *stubAPIKeyRepo) Touch(_ context.Context, _ uuid.UUID) error     { return nil }
-
-// stubAlertPublisher implements port.AlertEventPublisher.
-type stubAlertPublisher struct{}
-
-func (p *stubAlertPublisher) PublishAlert(_ context.Context, _ *domain.AlertEvent) error { return nil }
-
-// stubMonitorEventPublisher implements port.MonitorEventPublisher.
-type stubMonitorEventPublisher struct{}
-
-func (p *stubMonitorEventPublisher) PublishMonitorChanged(_ context.Context, _ domain.MonitorAction, _ uuid.UUID, _ *domain.Monitor) error {
-	return nil
-}
-
-// stubMetrics implements port.Metrics (all no-ops).
-type stubMetrics struct{}
-
-func (m *stubMetrics) RecordCheck(_ context.Context, _, _ string, _ time.Duration) {}
-func (m *stubMetrics) RecordAlertSent(_ context.Context, _ string, _ bool)         {}
-func (m *stubMetrics) RecordAlertAllFailed(_ context.Context)                      {}
-func (m *stubMetrics) RecordAlertDeadLettered(_ context.Context)                   {}
-func (m *stubMetrics) MonitorCreated(_ context.Context)                            {}
-func (m *stubMetrics) MonitorDeleted(_ context.Context)                            {}
-func (m *stubMetrics) IncidentOpened(_ context.Context)                            {}
-func (m *stubMetrics) IncidentResolved(_ context.Context)                          {}
 
 // ---------------------------------------------------------------------------
 // Test fixture builder
@@ -335,31 +27,31 @@ func (m *stubMetrics) IncidentResolved(_ context.Context)                       
 
 type testEnv struct {
 	app         *fiber.App
-	userRepo    *stubUserRepo
-	sessionRepo *stubSessionRepo
-	rateLimiter *stubRateLimiter
-	apiKeyRepo  *stubAPIKeyRepo
+	userRepo    *mocks.MockUserRepo
+	sessionRepo *mocks.MockSessionRepo
+	rateLimiter *mocks.MockRateLimiter
+	apiKeyRepo  *mocks.MockAPIKeyRepo
 }
 
 func setupTestApp(t *testing.T) *testEnv {
 	t.Helper()
 
-	userRepo := newStubUserRepo()
-	sessionRepo := newStubSessionRepo()
-	rateLimiter := &stubRateLimiter{}
-	apiKeyRepo := &stubAPIKeyRepo{}
-	monitorRepo := &stubMonitorRepo{}
-	channelRepo := &stubChannelRepo{}
-	checkResultRepo := &stubCheckResultRepo{}
-	incidentRepo := &stubIncidentRepo{}
-	uptimeRepo := &stubUptimeRepo{}
-	checkerRegistry := &stubCheckerRegistry{}
-	channelRegistry := &stubChannelRegistry{}
-	failedAlertRepo := &stubFailedAlertRepo{}
-	txManager := &stubTxManager{}
-	alertPub := &stubAlertPublisher{}
-	metrics := &stubMetrics{}
-	eventPub := &stubMonitorEventPublisher{}
+	userRepo := mocks.NewMockUserRepo(t)
+	sessionRepo := mocks.NewMockSessionRepo(t)
+	rateLimiter := mocks.NewMockRateLimiter(t)
+	apiKeyRepo := mocks.NewMockAPIKeyRepo(t)
+	monitorRepo := mocks.NewMockMonitorRepo(t)
+	channelRepo := mocks.NewMockChannelRepo(t)
+	checkResultRepo := mocks.NewMockCheckResultRepo(t)
+	incidentRepo := mocks.NewMockIncidentRepo(t)
+	uptimeRepo := mocks.NewMockUptimeRepo(t)
+	checkerRegistry := mocks.NewMockCheckerRegistry(t)
+	channelRegistry := mocks.NewMockChannelRegistry(t)
+	failedAlertRepo := mocks.NewMockFailedAlertRepo(t)
+	txManager := mocks.NewMockTxManager(t)
+	alertPub := mocks.NewMockAlertEventPublisher(t)
+	metrics := mocks.NewMockMetrics(t)
+	eventPub := mocks.NewMockMonitorEventPublisher(t)
 
 	authService := app.NewAuthService(userRepo, sessionRepo)
 	monitoringService := app.NewMonitoringService(
@@ -372,9 +64,6 @@ func setupTestApp(t *testing.T) *testEnv {
 	server := NewServer(authService, monitoringService, alertService, eventPub, rateLimiter, apiKeyRepo)
 	webhookHandler := NewWebhookHandler(authService, alertService, "test-secret")
 
-	// HealthChecker must be non-nil because SetupApp registers its methods as route handlers.
-	// Fields can be nil since these routes are not exercised via the full app in these tests
-	// (healthz tests use a dedicated Fiber app with inline handler).
 	healthChecker := &HealthChecker{}
 	fiberApp := SetupApp(authService, pageHandler, server, webhookHandler, apiKeyRepo, healthChecker)
 
@@ -387,22 +76,23 @@ func setupTestApp(t *testing.T) *testEnv {
 	}
 }
 
-// createSessionForUser registers a fake session and returns the cookie header value.
+// createSessionForUser sets up mock expectations so that the given sessionID
+// is recognised by the session repo, and returns the cookie header value.
 func (te *testEnv) createSessionForUser(t *testing.T, user *domain.User) string {
 	t.Helper()
 	sessionID := uuid.New().String()
-	te.sessionRepo.sessions[sessionID] = user.ID
+
+	// The auth middleware calls GetUserID and then GetByID + Touch.
+	te.sessionRepo.EXPECT().GetUserID(mock.Anything, sessionID).Return(user.ID, nil).Maybe()
+	te.userRepo.EXPECT().GetByID(mock.Anything, user.ID).Return(user, nil).Maybe()
+	te.sessionRepo.EXPECT().Touch(mock.Anything, sessionID, mock.Anything).Return(nil).Maybe()
+
 	return fmt.Sprintf("session_id=%s", sessionID)
 }
 
 // ---------------------------------------------------------------------------
 // 1. TestHealthz_AllHealthy
 // ---------------------------------------------------------------------------
-
-// stubHealthDB / Redis / NATS for the HealthChecker.
-// We test the /healthz endpoint directly with a minimal Fiber app since it
-// requires *pgxpool.Pool, *goredis.Client, and *nats.Conn which are hard to
-// construct without real connections. We build a focused Fiber app instead.
 
 type healthDep struct {
 	pgErr     error
@@ -413,7 +103,6 @@ type healthDep struct {
 func newHealthApp(h healthDep) *fiber.App {
 	a := fiber.New()
 
-	// Simulate the healthz endpoint behavior without real clients.
 	a.Get("/healthz", func(c *fiber.Ctx) error {
 		checks := map[string]string{}
 		healthy := true
@@ -523,6 +212,9 @@ func TestHealthz_PostgresDown(t *testing.T) {
 func TestRegisterPage_GET(t *testing.T) {
 	te := setupTestApp(t)
 
+	// The GET /register page may call session repo to check auth state.
+	te.sessionRepo.EXPECT().GetUserID(mock.Anything, mock.Anything).Return(uuid.Nil, errors.New("no session")).Maybe()
+
 	req := httptest.NewRequest(http.MethodGet, "/register", nil)
 	resp, err := te.app.Test(req, -1)
 	if err != nil {
@@ -557,6 +249,9 @@ func TestRegisterPage_GET(t *testing.T) {
 func TestLoginPage_GET(t *testing.T) {
 	te := setupTestApp(t)
 
+	// The GET /login page may call session repo to check auth state.
+	te.sessionRepo.EXPECT().GetUserID(mock.Anything, mock.Anything).Return(uuid.Nil, errors.New("no session")).Maybe()
+
 	req := httptest.NewRequest(http.MethodGet, "/login", nil)
 	resp, err := te.app.Test(req, -1)
 	if err != nil {
@@ -588,8 +283,25 @@ func TestLoginPage_GET(t *testing.T) {
 func TestLoginSubmit_InvalidCredentials(t *testing.T) {
 	te := setupTestApp(t)
 
-	// Add a user so the email exists but password is wrong.
-	te.userRepo.addUser("test@example.com", "test-user", "correct-password-123")
+	// Set up a user with a known bcrypt hash.
+	hash, _ := app.HashPassword("correct-password-123")
+	userID := uuid.New()
+	user := &domain.User{
+		ID:        userID,
+		Email:     "test@example.com",
+		Slug:      "test-user",
+		Plan:      domain.PlanFree,
+		CreatedAt: time.Now(),
+	}
+
+	// GET /login to obtain CSRF token — no session cookie sent.
+	te.sessionRepo.EXPECT().GetUserID(mock.Anything, mock.Anything).Return(uuid.Nil, errors.New("no session")).Maybe()
+
+	// Login POST calls GetByEmail; returns user with hash so bcrypt check happens.
+	te.userRepo.EXPECT().GetByEmail(mock.Anything, "test@example.com").Return(user, hash, nil).Maybe()
+
+	// Rate limiter allows the request.
+	te.rateLimiter.EXPECT().Allow(mock.Anything, mock.Anything).Return(true, nil).Maybe()
 
 	// First GET to /login to obtain a CSRF token from the rendered HTML.
 	csrfToken, csrfCookie := getCSRFToken(t, te.app, "/login")
@@ -625,10 +337,35 @@ func TestLoginSubmit_InvalidCredentials(t *testing.T) {
 func TestLoginSubmit_RateLimited(t *testing.T) {
 	te := setupTestApp(t)
 
-	// Set rate limiter to deny after 5 calls.
-	te.rateLimiter.limit = 5
+	// Set up a user with a known bcrypt hash.
+	hash, _ := app.HashPassword("some-password-123")
+	userID := uuid.New()
+	user := &domain.User{
+		ID:        userID,
+		Email:     "limited@example.com",
+		Slug:      "limited",
+		Plan:      domain.PlanFree,
+		CreatedAt: time.Now(),
+	}
 
-	te.userRepo.addUser("limited@example.com", "limited", "some-password-123")
+	// No session cookie for these requests.
+	te.sessionRepo.EXPECT().GetUserID(mock.Anything, mock.Anything).Return(uuid.Nil, errors.New("no session")).Maybe()
+
+	// GetByEmail will be called for each login attempt.
+	te.userRepo.EXPECT().GetByEmail(mock.Anything, "limited@example.com").Return(user, hash, nil).Maybe()
+
+	// Rate limiter: allow first 5 calls, then deny.
+	callCount := 0
+	te.rateLimiter.EXPECT().Allow(mock.Anything, mock.Anything).RunAndReturn(
+		func(_ context.Context, _ string) (bool, error) {
+			callCount++
+			if callCount > 5 {
+				return false, nil
+			}
+			return true, nil
+		},
+	).Maybe()
+	te.rateLimiter.EXPECT().Reset(mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	// Exhaust rate limit with 5 calls.
 	for i := range 5 {
@@ -674,6 +411,9 @@ func TestLoginSubmit_RateLimited(t *testing.T) {
 func TestDashboard_Unauthenticated(t *testing.T) {
 	te := setupTestApp(t)
 
+	// No valid session — middleware should redirect to /login.
+	te.sessionRepo.EXPECT().GetUserID(mock.Anything, mock.Anything).Return(uuid.Nil, errors.New("session not found")).Maybe()
+
 	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
 	resp, err := te.app.Test(req, -1)
 	if err != nil {
@@ -699,6 +439,11 @@ func TestDashboard_Unauthenticated(t *testing.T) {
 func TestCSRF_MissingToken(t *testing.T) {
 	te := setupTestApp(t)
 
+	// No session.
+	te.sessionRepo.EXPECT().GetUserID(mock.Anything, mock.Anything).Return(uuid.Nil, errors.New("no session")).Maybe()
+	// Rate limiter may be called before CSRF check, or not — depends on middleware order.
+	te.rateLimiter.EXPECT().Allow(mock.Anything, mock.Anything).Return(true, nil).Maybe()
+
 	// POST /login without _csrf field.
 	formData := "email=test@example.com&password=whatever"
 	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(formData))
@@ -721,6 +466,12 @@ func TestCSRF_MissingToken(t *testing.T) {
 
 func TestAPIAuth_InvalidAPIKey(t *testing.T) {
 	te := setupTestApp(t)
+
+	// No session.
+	te.sessionRepo.EXPECT().GetUserID(mock.Anything, mock.Anything).Return(uuid.Nil, errors.New("no session")).Maybe()
+
+	// API key lookup returns not found.
+	te.apiKeyRepo.EXPECT().GetByHash(mock.Anything, mock.Anything).Return(nil, errors.New("not found")).Maybe()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/monitors", nil)
 	req.Header.Set("Authorization", "Bearer pc_live_invalidkey1234567890abcdef1234567890abcdef1234567890abcdef")
@@ -872,7 +623,6 @@ func extractInputValue(html, name string) string {
 	}
 
 	// Search backwards and forwards for the enclosing <input> tag to find value="..."
-	// Find start of the <input tag
 	start := strings.LastIndex(html[:idx], "<input")
 	if start < 0 {
 		start = strings.LastIndex(html[:idx], "<Input")

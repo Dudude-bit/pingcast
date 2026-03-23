@@ -1,0 +1,31 @@
+dir: internal/mocks
+pkgname: mocks
+filename: mocks.go
+template: testify
+template-data:
+  unroll-variadic: true
+packages:
+  github.com/kirillinakin/pingcast/internal/port:
+    interfaces:
+      APIKeyRepo: {}
+      AlertEventPublisher: {}
+      AlertEventSubscriber: {}
+      AlertSender: {}
+      ChannelRegistry: {}
+      ChannelRepo: {}
+      ChannelSenderFactory: {}
+      CheckResultRepo: {}
+      CheckerRegistry: {}
+      DistributedMutex: {}
+      FailedAlertRepo: {}
+      HostLimiter: {}
+      IncidentRepo: {}
+      Metrics: {}
+      MonitorEventPublisher: {}
+      MonitorEventSubscriber: {}
+      MonitorRepo: {}
+      RateLimiter: {}
+      SessionRepo: {}
+      TxManager: {}
+      UptimeRepo: {}
+      UserRepo: {}

@@ -5,101 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/kirillinakin/pingcast/internal/app"
 	"github.com/kirillinakin/pingcast/internal/domain"
+	"github.com/kirillinakin/pingcast/internal/mocks"
 	"github.com/kirillinakin/pingcast/internal/port"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
-
-// --- Mocks ---
-
-// mockChannelRepo implements port.ChannelRepo.
-type mockChannelRepo struct {
-	listForMonitorFn func(ctx context.Context, monitorID uuid.UUID) ([]domain.NotificationChannel, error)
-	listByUserIDFn   func(ctx context.Context, userID uuid.UUID) ([]domain.NotificationChannel, error)
-}
-
-func (m *mockChannelRepo) ListForMonitor(ctx context.Context, monitorID uuid.UUID) ([]domain.NotificationChannel, error) {
-	return m.listForMonitorFn(ctx, monitorID)
-}
-
-func (m *mockChannelRepo) ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.NotificationChannel, error) {
-	if m.listByUserIDFn != nil {
-		return m.listByUserIDFn(ctx, userID)
-	}
-	return nil, nil
-}
-
-func (m *mockChannelRepo) Create(_ context.Context, _ *domain.NotificationChannel) (*domain.NotificationChannel, error) {
-	panic("not implemented")
-}
-func (m *mockChannelRepo) GetByID(_ context.Context, _ uuid.UUID) (*domain.NotificationChannel, error) {
-	panic("not implemented")
-}
-func (m *mockChannelRepo) Update(_ context.Context, _ *domain.NotificationChannel) error {
-	panic("not implemented")
-}
-func (m *mockChannelRepo) Delete(_ context.Context, _, _ uuid.UUID) error {
-	panic("not implemented")
-}
-func (m *mockChannelRepo) BindToMonitor(_ context.Context, _, _ uuid.UUID) error {
-	panic("not implemented")
-}
-func (m *mockChannelRepo) UnbindFromMonitor(_ context.Context, _, _ uuid.UUID) error {
-	panic("not implemented")
-}
-
-// mockChannelRegistry implements port.ChannelRegistry.
-type mockChannelRegistry struct {
-	createSenderWithRetryFn func(channelType domain.ChannelType, config json.RawMessage) (port.AlertSender, error)
-}
-
-func (m *mockChannelRegistry) CreateSenderWithRetry(channelType domain.ChannelType, config json.RawMessage) (port.AlertSender, error) {
-	return m.createSenderWithRetryFn(channelType, config)
-}
-
-func (m *mockChannelRegistry) Get(_ domain.ChannelType) (port.ChannelSenderFactory, error) {
-	panic("not implemented")
-}
-func (m *mockChannelRegistry) Types() []port.ChannelTypeInfo { panic("not implemented") }
-func (m *mockChannelRegistry) ValidateConfig(_ domain.ChannelType, _ json.RawMessage) error {
-	panic("not implemented")
-}
-
-// mockAlertSender implements port.AlertSender.
-type mockAlertSender struct {
-	sendFn func(ctx context.Context, event *domain.AlertEvent) error
-}
-
-func (m *mockAlertSender) Send(ctx context.Context, event *domain.AlertEvent) error {
-	return m.sendFn(ctx, event)
-}
-
-// mockFailedAlertRepo implements port.FailedAlertRepo.
-type mockFailedAlertRepo struct {
-	createFn func(ctx context.Context, event json.RawMessage, errMsg string, failedChannelIDs []uuid.UUID) error
-}
-
-func (m *mockFailedAlertRepo) Create(ctx context.Context, event json.RawMessage, errMsg string, failedChannelIDs []uuid.UUID) error {
-	if m.createFn != nil {
-		return m.createFn(ctx, event, errMsg, failedChannelIDs)
-	}
-	return nil
-}
-
-// mockMetrics implements port.Metrics as no-ops.
-type mockMetrics struct{}
-
-func (m *mockMetrics) RecordCheck(context.Context, string, string, time.Duration) {}
-func (m *mockMetrics) RecordAlertSent(context.Context, string, bool)                         {}
-func (m *mockMetrics) RecordAlertAllFailed(context.Context)                                  {}
-func (m *mockMetrics) RecordAlertDeadLettered(context.Context)                               {}
-func (m *mockMetrics) MonitorCreated(context.Context)                                        {}
-func (m *mockMetrics) MonitorDeleted(context.Context)                                        {}
-func (m *mockMetrics) IncidentOpened(context.Context)                                        {}
-func (m *mockMetrics) IncidentResolved(context.Context)                                      {}
 
 // --- Helpers ---
 
@@ -131,205 +46,221 @@ func newChannel(chType domain.ChannelType, enabled bool) domain.NotificationChan
 func TestHandle_AllChannelsSucceed(t *testing.T) {
 	ch1 := newChannel(domain.ChannelTelegram, true)
 	ch2 := newChannel(domain.ChannelEmail, true)
+	event := newTestEvent()
 
-	sendCount := 0
-	sender := &mockAlertSender{sendFn: func(_ context.Context, _ *domain.AlertEvent) error {
-		sendCount++
-		return nil
-	}}
+	channelRepo := mocks.NewMockChannelRepo(t)
+	channelRepo.EXPECT().
+		ListForMonitor(mock.Anything, event.MonitorID).
+		Return([]domain.NotificationChannel{ch1, ch2}, nil).
+		Once()
 
-	dlqCalled := false
-	svc := app.NewAlertService(
-		&mockChannelRepo{
-			listForMonitorFn: func(_ context.Context, _ uuid.UUID) ([]domain.NotificationChannel, error) {
-				return []domain.NotificationChannel{ch1, ch2}, nil
-			},
-		},
-		nil, // monitors not used by Handle
-		&mockChannelRegistry{
-			createSenderWithRetryFn: func(_ domain.ChannelType, _ json.RawMessage) (port.AlertSender, error) {
-				return sender, nil
-			},
-		},
-		&mockFailedAlertRepo{
-			createFn: func(_ context.Context, _ json.RawMessage, _ string, _ []uuid.UUID) error {
-				dlqCalled = true
-				return nil
-			},
-		},
-		&mockMetrics{},
-	)
+	sender := mocks.NewMockAlertSender(t)
+	sender.EXPECT().
+		Send(mock.Anything, event).
+		Return(nil).
+		Times(2)
 
-	err := svc.Handle(context.Background(), newTestEvent())
-	if err != nil {
-		t.Fatalf("expected nil error, got %v", err)
-	}
-	if sendCount != 2 {
-		t.Fatalf("expected 2 sends, got %d", sendCount)
-	}
-	if dlqCalled {
-		t.Fatal("DLQ should not be written when all channels succeed")
-	}
+	registry := mocks.NewMockChannelRegistry(t)
+	registry.EXPECT().
+		CreateSenderWithRetry(mock.Anything, mock.Anything).
+		Return(sender, nil).
+		Times(2)
+
+	failedAlerts := mocks.NewMockFailedAlertRepo(t)
+
+	metrics := mocks.NewMockMetrics(t)
+	metrics.EXPECT().
+		RecordAlertSent(mock.Anything, mock.Anything, true).
+		Return().
+		Times(2)
+
+	svc := app.NewAlertService(channelRepo, nil, registry, failedAlerts, metrics)
+
+	err := svc.Handle(context.Background(), event)
+	require.NoError(t, err)
 }
 
 func TestHandle_AllChannelsFail(t *testing.T) {
 	ch1 := newChannel(domain.ChannelTelegram, true)
 	ch2 := newChannel(domain.ChannelWebhook, true)
+	event := newTestEvent()
 
-	sender := &mockAlertSender{sendFn: func(_ context.Context, _ *domain.AlertEvent) error {
-		return errors.New("send failed")
-	}}
+	channelRepo := mocks.NewMockChannelRepo(t)
+	channelRepo.EXPECT().
+		ListForMonitor(mock.Anything, event.MonitorID).
+		Return([]domain.NotificationChannel{ch1, ch2}, nil).
+		Once()
 
-	svc := app.NewAlertService(
-		&mockChannelRepo{
-			listForMonitorFn: func(_ context.Context, _ uuid.UUID) ([]domain.NotificationChannel, error) {
-				return []domain.NotificationChannel{ch1, ch2}, nil
-			},
-		},
-		nil,
-		&mockChannelRegistry{
-			createSenderWithRetryFn: func(_ domain.ChannelType, _ json.RawMessage) (port.AlertSender, error) {
-				return sender, nil
-			},
-		},
-		&mockFailedAlertRepo{},
-		&mockMetrics{},
-	)
+	sender := mocks.NewMockAlertSender(t)
+	sender.EXPECT().
+		Send(mock.Anything, event).
+		Return(errors.New("send failed")).
+		Times(2)
 
-	err := svc.Handle(context.Background(), newTestEvent())
-	if err == nil {
-		t.Fatal("expected error when all channels fail, got nil")
-	}
+	registry := mocks.NewMockChannelRegistry(t)
+	registry.EXPECT().
+		CreateSenderWithRetry(mock.Anything, mock.Anything).
+		Return(sender, nil).
+		Times(2)
+
+	failedAlerts := mocks.NewMockFailedAlertRepo(t)
+
+	metrics := mocks.NewMockMetrics(t)
+	metrics.EXPECT().
+		RecordAlertSent(mock.Anything, mock.Anything, false).
+		Return().
+		Times(2)
+	metrics.EXPECT().
+		RecordAlertAllFailed(mock.Anything).
+		Return().
+		Once()
+
+	svc := app.NewAlertService(channelRepo, nil, registry, failedAlerts, metrics)
+
+	err := svc.Handle(context.Background(), event)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "all 2 channels failed")
 }
 
 func TestHandle_PartialFailure(t *testing.T) {
 	ch1 := newChannel(domain.ChannelTelegram, true)
 	ch2 := newChannel(domain.ChannelEmail, true)
 	ch3 := newChannel(domain.ChannelWebhook, true)
+	event := newTestEvent()
 
-	failID := ch2.ID // second channel will fail
+	channelRepo := mocks.NewMockChannelRepo(t)
+	channelRepo.EXPECT().
+		ListForMonitor(mock.Anything, event.MonitorID).
+		Return([]domain.NotificationChannel{ch1, ch2, ch3}, nil).
+		Once()
+
+	// Three separate senders: first succeeds, second fails, third succeeds.
+	sender1 := mocks.NewMockAlertSender(t)
+	sender1.EXPECT().Send(mock.Anything, event).Return(nil).Once()
+
+	sender2 := mocks.NewMockAlertSender(t)
+	sender2.EXPECT().Send(mock.Anything, event).Return(errors.New("email down")).Once()
+
+	sender3 := mocks.NewMockAlertSender(t)
+	sender3.EXPECT().Send(mock.Anything, event).Return(nil).Once()
 
 	callIndex := 0
-	senders := []*mockAlertSender{
-		{sendFn: func(_ context.Context, _ *domain.AlertEvent) error { return nil }},
-		{sendFn: func(_ context.Context, _ *domain.AlertEvent) error { return errors.New("email down") }},
-		{sendFn: func(_ context.Context, _ *domain.AlertEvent) error { return nil }},
-	}
+	senders := []port.AlertSender{sender1, sender2, sender3}
 
-	var dlqFailedIDs []uuid.UUID
-	dlqCalled := false
+	registry := mocks.NewMockChannelRegistry(t)
+	registry.EXPECT().
+		CreateSenderWithRetry(mock.Anything, mock.Anything).
+		RunAndReturn(func(_ domain.ChannelType, _ json.RawMessage) (port.AlertSender, error) {
+			s := senders[callIndex]
+			callIndex++
+			return s, nil
+		}).
+		Times(3)
 
-	svc := app.NewAlertService(
-		&mockChannelRepo{
-			listForMonitorFn: func(_ context.Context, _ uuid.UUID) ([]domain.NotificationChannel, error) {
-				return []domain.NotificationChannel{ch1, ch2, ch3}, nil
-			},
-		},
-		nil,
-		&mockChannelRegistry{
-			createSenderWithRetryFn: func(_ domain.ChannelType, _ json.RawMessage) (port.AlertSender, error) {
-				s := senders[callIndex]
-				callIndex++
-				return s, nil
-			},
-		},
-		&mockFailedAlertRepo{
-			createFn: func(_ context.Context, _ json.RawMessage, _ string, failedChannelIDs []uuid.UUID) error {
-				dlqCalled = true
-				dlqFailedIDs = failedChannelIDs
-				return nil
-			},
-		},
-		&mockMetrics{},
-	)
+	failedAlerts := mocks.NewMockFailedAlertRepo(t)
+	failedAlerts.EXPECT().
+		Create(mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(ids []uuid.UUID) bool {
+			return len(ids) == 1 && ids[0] == ch2.ID
+		})).
+		Return(nil).
+		Once()
 
-	err := svc.Handle(context.Background(), newTestEvent())
-	if err != nil {
-		t.Fatalf("partial failure should return nil (Ack), got %v", err)
-	}
-	if !dlqCalled {
-		t.Fatal("expected DLQ write on partial failure")
-	}
-	if len(dlqFailedIDs) != 1 {
-		t.Fatalf("expected 1 failed channel ID in DLQ, got %d", len(dlqFailedIDs))
-	}
-	if dlqFailedIDs[0] != failID {
-		t.Fatalf("expected failed channel ID %s, got %s", failID, dlqFailedIDs[0])
-	}
+	metrics := mocks.NewMockMetrics(t)
+	metrics.EXPECT().
+		RecordAlertSent(mock.Anything, mock.Anything, true).
+		Return().
+		Times(2)
+	metrics.EXPECT().
+		RecordAlertSent(mock.Anything, mock.Anything, false).
+		Return().
+		Once()
+	metrics.EXPECT().
+		RecordAlertDeadLettered(mock.Anything).
+		Return().
+		Once()
+
+	svc := app.NewAlertService(channelRepo, nil, registry, failedAlerts, metrics)
+
+	err := svc.Handle(context.Background(), event)
+	require.NoError(t, err, "partial failure should return nil (Ack)")
 }
 
 func TestHandle_NoChannels(t *testing.T) {
-	svc := app.NewAlertService(
-		&mockChannelRepo{
-			listForMonitorFn: func(_ context.Context, _ uuid.UUID) ([]domain.NotificationChannel, error) {
-				return nil, nil
-			},
-			listByUserIDFn: func(_ context.Context, _ uuid.UUID) ([]domain.NotificationChannel, error) {
-				return nil, nil
-			},
-		},
-		nil,
-		&mockChannelRegistry{},
-		&mockFailedAlertRepo{},
-		&mockMetrics{},
-	)
+	event := newTestEvent()
 
-	err := svc.Handle(context.Background(), newTestEvent())
-	if err != nil {
-		t.Fatalf("no channels should return nil, got %v", err)
-	}
+	channelRepo := mocks.NewMockChannelRepo(t)
+	channelRepo.EXPECT().
+		ListForMonitor(mock.Anything, event.MonitorID).
+		Return(nil, nil).
+		Once()
+	channelRepo.EXPECT().
+		ListByUserID(mock.Anything, event.UserID).
+		Return(nil, nil).
+		Once()
+
+	registry := mocks.NewMockChannelRegistry(t)
+	failedAlerts := mocks.NewMockFailedAlertRepo(t)
+	metrics := mocks.NewMockMetrics(t)
+
+	svc := app.NewAlertService(channelRepo, nil, registry, failedAlerts, metrics)
+
+	err := svc.Handle(context.Background(), event)
+	require.NoError(t, err)
 }
 
 func TestHandle_ChannelListError(t *testing.T) {
-	svc := app.NewAlertService(
-		&mockChannelRepo{
-			listForMonitorFn: func(_ context.Context, _ uuid.UUID) ([]domain.NotificationChannel, error) {
-				return nil, errors.New("db connection lost")
-			},
-		},
-		nil,
-		&mockChannelRegistry{},
-		&mockFailedAlertRepo{},
-		&mockMetrics{},
-	)
+	event := newTestEvent()
 
-	err := svc.Handle(context.Background(), newTestEvent())
-	if err == nil {
-		t.Fatal("expected error when ListForMonitor fails, got nil")
-	}
+	channelRepo := mocks.NewMockChannelRepo(t)
+	channelRepo.EXPECT().
+		ListForMonitor(mock.Anything, event.MonitorID).
+		Return(nil, errors.New("db connection lost")).
+		Once()
+
+	registry := mocks.NewMockChannelRegistry(t)
+	failedAlerts := mocks.NewMockFailedAlertRepo(t)
+	metrics := mocks.NewMockMetrics(t)
+
+	svc := app.NewAlertService(channelRepo, nil, registry, failedAlerts, metrics)
+
+	err := svc.Handle(context.Background(), event)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "list channels for monitor")
 }
 
 func TestHandle_DisabledChannelsSkipped(t *testing.T) {
 	chEnabled := newChannel(domain.ChannelTelegram, true)
 	chDisabled := newChannel(domain.ChannelEmail, false)
+	event := newTestEvent()
 
-	sendCount := 0
-	sender := &mockAlertSender{sendFn: func(_ context.Context, _ *domain.AlertEvent) error {
-		sendCount++
-		return nil
-	}}
+	channelRepo := mocks.NewMockChannelRepo(t)
+	channelRepo.EXPECT().
+		ListForMonitor(mock.Anything, event.MonitorID).
+		Return([]domain.NotificationChannel{chEnabled, chDisabled}, nil).
+		Once()
 
-	svc := app.NewAlertService(
-		&mockChannelRepo{
-			listForMonitorFn: func(_ context.Context, _ uuid.UUID) ([]domain.NotificationChannel, error) {
-				return []domain.NotificationChannel{chEnabled, chDisabled}, nil
-			},
-		},
-		nil,
-		&mockChannelRegistry{
-			createSenderWithRetryFn: func(_ domain.ChannelType, _ json.RawMessage) (port.AlertSender, error) {
-				return sender, nil
-			},
-		},
-		&mockFailedAlertRepo{},
-		&mockMetrics{},
-	)
+	sender := mocks.NewMockAlertSender(t)
+	sender.EXPECT().
+		Send(mock.Anything, event).
+		Return(nil).
+		Once()
 
-	err := svc.Handle(context.Background(), newTestEvent())
-	if err != nil {
-		t.Fatalf("expected nil error, got %v", err)
-	}
-	if sendCount != 1 {
-		t.Fatalf("expected 1 send (disabled channel skipped), got %d", sendCount)
-	}
+	registry := mocks.NewMockChannelRegistry(t)
+	registry.EXPECT().
+		CreateSenderWithRetry(mock.Anything, mock.Anything).
+		Return(sender, nil).
+		Once()
+
+	failedAlerts := mocks.NewMockFailedAlertRepo(t)
+
+	metrics := mocks.NewMockMetrics(t)
+	metrics.EXPECT().
+		RecordAlertSent(mock.Anything, mock.Anything, true).
+		Return().
+		Once()
+
+	svc := app.NewAlertService(channelRepo, nil, registry, failedAlerts, metrics)
+
+	err := svc.Handle(context.Background(), event)
+	require.NoError(t, err)
 }
