@@ -9,6 +9,7 @@ import (
 type APIConfig struct {
 	Port                       int
 	DatabaseURL                string
+	MaxDBConns                 int
 	RedisURL                   string
 	NatsURL                    string
 	LemonSqueezyWebhookSecret string
@@ -19,12 +20,14 @@ type APIConfig struct {
 
 type CheckerConfig struct {
 	DatabaseURL string
+	MaxDBConns  int
 	RedisURL    string
 	NatsURL     string
 }
 
 type NotifierConfig struct {
 	DatabaseURL   string
+	MaxDBConns    int
 	RedisURL      string
 	NatsURL       string
 	TelegramToken string
@@ -42,10 +45,12 @@ func LoadAPI() (*APIConfig, error) {
 	}
 
 	port, _ := strconv.Atoi(getEnv("PORT", "8080"))
+	maxDBConns, _ := strconv.Atoi(getEnv("MAX_DB_CONNS", "10"))
 
 	return &APIConfig{
 		Port:                       port,
 		DatabaseURL:                dbURL,
+		MaxDBConns:                 maxDBConns,
 		RedisURL:                   getEnv("REDIS_URL", "redis://localhost:6379"),
 		NatsURL:                    getEnv("NATS_URL", "nats://localhost:4222"),
 		LemonSqueezyWebhookSecret: os.Getenv("LEMONSQUEEZY_WEBHOOK_SECRET"),
@@ -61,8 +66,11 @@ func LoadChecker() (*CheckerConfig, error) {
 		return nil, fmt.Errorf("DATABASE_URL is required")
 	}
 
+	maxDBConns, _ := strconv.Atoi(getEnv("MAX_DB_CONNS", "15"))
+
 	return &CheckerConfig{
 		DatabaseURL: dbURL,
+		MaxDBConns:  maxDBConns,
 		RedisURL:    getEnv("REDIS_URL", "redis://localhost:6379"),
 		NatsURL:     getEnv("NATS_URL", "nats://localhost:4222"),
 	}, nil
@@ -76,8 +84,11 @@ func LoadNotifier() (*NotifierConfig, error) {
 		return nil, fmt.Errorf("DATABASE_URL is required")
 	}
 
+	maxDBConns, _ := strconv.Atoi(getEnv("MAX_DB_CONNS", "5"))
+
 	return &NotifierConfig{
 		DatabaseURL:   dbURL,
+		MaxDBConns:    maxDBConns,
 		RedisURL:      getEnv("REDIS_URL", "redis://localhost:6379"),
 		NatsURL:       getEnv("NATS_URL", "nats://localhost:4222"),
 		TelegramToken: os.Getenv("TELEGRAM_BOT_TOKEN"),

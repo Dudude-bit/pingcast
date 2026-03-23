@@ -44,6 +44,12 @@ type CheckResultRepo interface {
 	DeleteOlderThan(ctx context.Context, cutoff time.Time) (int64, error)
 }
 
+type UptimeRepo interface {
+	RecordCheck(ctx context.Context, monitorID uuid.UUID, checkedAt time.Time, success bool) error
+	GetUptime(ctx context.Context, monitorID uuid.UUID, since time.Time) (float64, error)
+	GetUptimeBatch(ctx context.Context, monitorIDs []uuid.UUID, since time.Time) (map[uuid.UUID]float64, error)
+}
+
 type IncidentRepo interface {
 	Create(ctx context.Context, monitorID uuid.UUID, cause string) (*domain.Incident, error)
 	Resolve(ctx context.Context, id int64, resolvedAt time.Time) error

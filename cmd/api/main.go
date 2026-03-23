@@ -40,7 +40,7 @@ func main() {
 	}
 
 	// PostgreSQL
-	pool, err := database.Connect(ctx, cfg.DatabaseURL)
+	pool, err := database.Connect(ctx, cfg.DatabaseURL, int32(cfg.MaxDBConns))
 	if err != nil {
 		slog.Error("failed to connect to database", "error", err)
 		os.Exit(1)
@@ -87,6 +87,7 @@ func main() {
 	monitorRepo := postgres.NewMonitorRepo(queries)
 	checkResultRepo := postgres.NewCheckResultRepo(queries)
 	incidentRepo := postgres.NewIncidentRepo(queries)
+	uptimeRepo := postgres.NewUptimeRepo(queries)
 
 	// NATS publishers
 	monitorPub := natsadapter.NewMonitorPublisher(js)
@@ -111,7 +112,7 @@ func main() {
 
 	// App services
 	authSvc := app.NewAuthService(userRepo, sessionRepo)
-	monitoringSvc := app.NewMonitoringService(monitorRepo, checkResultRepo, incidentRepo, userRepo, alertPub, registry)
+	monitoringSvc := app.NewMonitoringService(monitorRepo, checkResultRepo, incidentRepo, userRepo, uptimeRepo, alertPub, registry)
 	alertSvc := app.NewAlertService(channelRepo, monitorRepo, channelReg)
 
 	// HTTP handlers

@@ -35,7 +35,7 @@ func main() {
 	}
 
 	// PostgreSQL
-	pool, err := database.Connect(ctx, cfg.DatabaseURL)
+	pool, err := database.Connect(ctx, cfg.DatabaseURL, int32(cfg.MaxDBConns))
 	if err != nil {
 		slog.Error("failed to connect to database", "error", err)
 		os.Exit(1)
@@ -76,6 +76,7 @@ func main() {
 	monitorRepo := postgres.NewMonitorRepo(queries)
 	checkResultRepo := postgres.NewCheckResultRepo(queries)
 	incidentRepo := postgres.NewIncidentRepo(queries)
+	uptimeRepo := postgres.NewUptimeRepo(queries)
 
 	// NATS publisher
 	alertPub := natsadapter.NewAlertPublisher(js)
@@ -87,10 +88,13 @@ func main() {
 	registry.Register(domain.MonitorDNS, "DNS", checker.NewDNSChecker())
 
 	// App service (registry injected via port)
-	monitoringSvc := app.NewMonitoringService(monitorRepo, checkResultRepo, incidentRepo, userRepo, alertPub, registry)
+	monitoringSvc := app.NewMonitoringService(monitorRepo, checkResultRepo, incidentRepo, userRepo, uptimeRepo, alertPub, registry)
+
+	// Host limiter (Redis-based, distributed across replicas)
+	hostLimiter := redisadapter.NewHostLimiter(rdb, 3, 30*time.Second)
 
 	// Worker pool delegates to MonitoringService.RunCheck
-	workerPool := checker.NewWorkerPool(ctx, 100, registry, func(ctx context.Context, monitor *domain.Monitor) {
+	workerPool := checker.NewWorkerPool(ctx, 100, registry, hostLimiter, func(ctx context.Context, monitor *domain.Monitor) {
 		if err := monitoringSvc.RunCheck(ctx, monitor); err != nil {
 			slog.Error("failed to run check", "monitor_id", monitor.ID, "error", err)
 		}

@@ -7,13 +7,14 @@ import (
 
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/port"
+	redisadapter "github.com/kirillinakin/pingcast/internal/adapter/redis"
 )
 
 type CheckHandler func(ctx context.Context, monitor *domain.Monitor)
 
 type WorkerPool struct {
 	registry    port.CheckerRegistry
-	hostLimiter *HostLimiter
+	hostLimiter *redisadapter.HostLimiter
 	jobs        chan *domain.Monitor
 	handler     CheckHandler
 	wg          sync.WaitGroup
@@ -21,12 +22,12 @@ type WorkerPool struct {
 	cancel      context.CancelFunc
 }
 
-func NewWorkerPool(ctx context.Context, workers int, registry port.CheckerRegistry, handler CheckHandler) *WorkerPool {
+func NewWorkerPool(ctx context.Context, workers int, registry port.CheckerRegistry, hostLimiter *redisadapter.HostLimiter, handler CheckHandler) *WorkerPool {
 	poolCtx, cancel := context.WithCancel(ctx)
 
 	wp := &WorkerPool{
 		registry:    registry,
-		hostLimiter: NewHostLimiter(),
+		hostLimiter: hostLimiter,
 		jobs:        make(chan *domain.Monitor, workers*2),
 		handler:     handler,
 		ctx:         poolCtx,
@@ -65,14 +66,21 @@ func (wp *WorkerPool) worker() {
 			}
 
 			host := wp.registry.Host(m.Type, m.CheckConfig)
-			wp.hostLimiter.Acquire(host)
-			wp.handler(wp.ctx, m)
-			wp.hostLimiter.Release(host)
+			acquired, err := wp.hostLimiter.Acquire(wp.ctx, host)
+			if err != nil {
+				slog.Error("host limiter acquire failed", "host", host, "error", err)
+				continue
+			}
+			if !acquired {
+				slog.Warn("host limit reached, skipping check", "host", host, "monitor_id", m.ID)
+				continue
+			}
 
-			slog.Info("check dispatched",
-				"monitor_id", m.ID,
-				"type", m.Type,
-			)
+			wp.handler(wp.ctx, m)
+
+			if err := wp.hostLimiter.Release(wp.ctx, host); err != nil {
+				slog.Error("host limiter release failed", "host", host, "error", err)
+			}
 		}
 	}
 }

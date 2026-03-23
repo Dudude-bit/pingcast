@@ -16,8 +16,17 @@ import (
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
-func Connect(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
-	pool, err := pgxpool.New(ctx, databaseURL)
+// Connect creates a connection pool with configurable max connections.
+// Pass maxConns=0 to use the default (max(4, numCPU*2)).
+func Connect(ctx context.Context, databaseURL string, maxConns int32) (*pgxpool.Pool, error) {
+	config, err := pgxpool.ParseConfig(databaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse database url: %w", err)
+	}
+	if maxConns > 0 {
+		config.MaxConns = maxConns
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		return nil, fmt.Errorf("connect to database: %w", err)
 	}

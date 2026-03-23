@@ -18,6 +18,7 @@ type MonitoringService struct {
 	checkResults port.CheckResultRepo
 	incidents    port.IncidentRepo
 	users        port.UserRepo
+	uptime       port.UptimeRepo
 	alerts       port.AlertEventPublisher
 	registry     port.CheckerRegistry
 }
@@ -27,6 +28,7 @@ func NewMonitoringService(
 	checkResults port.CheckResultRepo,
 	incidents port.IncidentRepo,
 	users port.UserRepo,
+	uptime port.UptimeRepo,
 	alerts port.AlertEventPublisher,
 	registry port.CheckerRegistry,
 ) *MonitoringService {
@@ -35,6 +37,7 @@ func NewMonitoringService(
 		checkResults: checkResults,
 		incidents:    incidents,
 		users:        users,
+		uptime:       uptime,
 		alerts:       alerts,
 		registry:     registry,
 	}
@@ -176,6 +179,11 @@ func (s *MonitoringService) ProcessCheckResult(ctx context.Context, monitor *dom
 		return fmt.Errorf("insert check result: %w", err)
 	}
 
+	// Update hourly uptime aggregation
+	if err := s.uptime.RecordCheck(ctx, monitor.ID, result.CheckedAt, result.Status == domain.StatusUp); err != nil {
+		slog.Error("failed to record uptime check", "monitor_id", monitor.ID, "error", err)
+	}
+
 	current, err := s.monitors.GetByID(ctx, monitor.ID)
 	previousStatus := domain.StatusUnknown
 	if err == nil {
@@ -274,7 +282,7 @@ func (s *MonitoringService) ListMonitorsWithUptime(ctx context.Context, userID u
 
 	result := make([]MonitorWithUptime, 0, len(monitors))
 	for _, m := range monitors {
-		uptime, err := s.checkResults.GetUptime(ctx, m.ID, time.Now().Add(-24*time.Hour))
+		uptime, err := s.uptime.GetUptime(ctx, m.ID, time.Now().Add(-24*time.Hour))
 		if err != nil {
 			slog.Error("failed to get uptime", "monitor_id", m.ID, "error", err)
 		}
@@ -298,15 +306,15 @@ func (s *MonitoringService) GetMonitorDetail(ctx context.Context, monitorID uuid
 	}
 
 	now := time.Now()
-	u24, err := s.checkResults.GetUptime(ctx, monitorID, now.Add(-24*time.Hour))
+	u24, err := s.uptime.GetUptime(ctx, monitorID, now.Add(-24*time.Hour))
 	if err != nil {
 		slog.Error("failed to get 24h uptime", "monitor_id", monitorID, "error", err)
 	}
-	u7, err := s.checkResults.GetUptime(ctx, monitorID, now.Add(-7*24*time.Hour))
+	u7, err := s.uptime.GetUptime(ctx, monitorID, now.Add(-7*24*time.Hour))
 	if err != nil {
 		slog.Error("failed to get 7d uptime", "monitor_id", monitorID, "error", err)
 	}
-	u30, err := s.checkResults.GetUptime(ctx, monitorID, now.Add(-30*24*time.Hour))
+	u30, err := s.uptime.GetUptime(ctx, monitorID, now.Add(-30*24*time.Hour))
 	if err != nil {
 		slog.Error("failed to get 30d uptime", "monitor_id", monitorID, "error", err)
 	}
@@ -355,7 +363,7 @@ func (s *MonitoringService) GetStatusPage(ctx context.Context, slug string) (*St
 	var incidents []domain.Incident
 
 	for _, m := range monitors {
-		uptime, err := s.checkResults.GetUptime(ctx, m.ID, time.Now().Add(-90*24*time.Hour))
+		uptime, err := s.uptime.GetUptime(ctx, m.ID, time.Now().Add(-90*24*time.Hour))
 		if err != nil {
 			slog.Error("failed to get 90d uptime", "monitor_id", m.ID, "error", err)
 		}

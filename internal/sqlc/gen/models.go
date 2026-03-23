@@ -32,6 +32,16 @@ type CheckResult struct {
 	CheckedAt      time.Time   `json:"checked_at"`
 }
 
+type CheckResultsDefault struct {
+	ID             int64       `json:"id"`
+	MonitorID      uuid.UUID   `json:"monitor_id"`
+	Status         string      `json:"status"`
+	StatusCode     pgtype.Int4 `json:"status_code"`
+	ResponseTimeMs int32       `json:"response_time_ms"`
+	ErrorMessage   *string     `json:"error_message"`
+	CheckedAt      time.Time   `json:"checked_at"`
+}
+
 type Incident struct {
 	ID         int64              `json:"id"`
 	MonitorID  uuid.UUID          `json:"monitor_id"`
@@ -58,6 +68,13 @@ type Monitor struct {
 type MonitorChannel struct {
 	MonitorID uuid.UUID `json:"monitor_id"`
 	ChannelID uuid.UUID `json:"channel_id"`
+}
+
+type MonitorUptimeHourly struct {
+	MonitorID        uuid.UUID `json:"monitor_id"`
+	Hour             time.Time `json:"hour"`
+	TotalChecks      int32     `json:"total_checks"`
+	SuccessfulChecks int32     `json:"successful_checks"`
 }
 
 type NotificationChannel struct {

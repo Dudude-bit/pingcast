@@ -35,7 +35,7 @@ func main() {
 	}
 
 	// PostgreSQL (for channel lookup)
-	pool, err := database.Connect(ctx, cfg.DatabaseURL)
+	pool, err := database.Connect(ctx, cfg.DatabaseURL, int32(cfg.MaxDBConns))
 	if err != nil {
 		slog.Error("failed to connect to database", "error", err)
 		os.Exit(1)
