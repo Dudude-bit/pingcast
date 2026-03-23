@@ -34,13 +34,13 @@ Full codebase audit of PingCast revealed ~55 issues across security, error handl
 - **API registry** (schema + validation): always registers all channel types with validation-only factories. Used for `ValidateConfig` and `ConfigSchema` in channel CRUD. No credentials needed.
 - **Notifier registry** (sending): registers only channels with valid credentials (matching existing pattern in `cmd/notifier/main.go`). Log warning at startup for each disabled channel type. Validate that at least one notification channel is active.
 
-### 0.5 CSRF Protection
+### 0.3 CSRF Protection
 
 **Problem:** HTML form submissions (login, register, monitor/channel CRUD) protected only by session cookies. No CSRF tokens. `SameSite: Lax` partially mitigates but not fully.
 
-**Fix:** Add Fiber CSRF middleware for all POST/PUT/DELETE form submissions. CSRF token rendered in all HTML forms via `<input type="hidden">`. API JSON endpoints authenticated via API keys (see P0.7) are exempt from CSRF.
+**Fix:** Add Fiber CSRF middleware for all POST/PUT/DELETE form submissions. CSRF token rendered in all HTML forms via `<input type="hidden">`. API JSON endpoints authenticated via API keys (see P0.6) are exempt from CSRF.
 
-### 0.6 Sensitive Data Encryption at Rest
+### 0.4 Sensitive Data Encryption at Rest
 
 **Problem:** `CheckConfig` JSONB may contain webhook URLs with tokens, custom headers with API keys, SMTP credentials. Stored plain text in Postgres.
 
@@ -51,7 +51,18 @@ Full codebase audit of PingCast revealed ~55 issues across security, error handl
 - Only sensitive fields encrypted (not the entire JSONB) — allows Postgres to still index/query non-sensitive fields.
 - Key rotation: support `ENCRYPTION_KEY_OLD` for decryption during migration to new key.
 
-### 0.7 API Keys for JSON API
+### 0.5 Rate Limiter — Redis-Based
+
+**Problem:** Current in-memory rate limiter is per-process only (doesn't work across replicas). Entries for keys that stop being accessed remain indefinitely — no background cleanup. In a targeted attack scenario with many unique IPs, memory grows unbounded.
+
+**Fix:** Replace with Redis sliding window counter.
+- **Login/register:** 5 requests / 15 minutes per IP
+- **API CRUD (monitors, channels):** 60 requests / minute per user
+- **Public endpoints (status page):** 120 requests / minute per IP
+- Works across all API replicas
+- New adapter: `internal/adapter/redis/ratelimit.go`
+
+### 0.6 API Keys for JSON API
 
 **Problem:** JSON API uses session cookies for auth. External integrations (CI/CD, mobile apps, third-party dashboards) cannot use cookie-based auth. No programmatic access.
 
@@ -61,20 +72,9 @@ Full codebase audit of PingCast revealed ~55 issues across security, error handl
 - Auth middleware: `Authorization: Bearer <key>` → hash key → lookup in DB → set user context
 - Scopes: `monitors:read`, `monitors:write`, `channels:read`, `channels:write` — least privilege
 - UI: API key management page (create, list, revoke)
-- Rate limiting: per API key, same limits as per-user (P0.3)
+- Rate limiting: per API key, same limits as per-user (P0.5)
 
-### 0.3 Rate Limiter — Redis-Based
-
-**Problem:** Current in-memory rate limiter is per-process only (doesn't work across replicas) and has unbounded memory growth (`attempts` map never cleaned — old entries accumulate until process restart).
-
-**Fix:** Replace with Redis sliding window counter.
-- **Login/register:** 5 requests / 15 minutes per IP
-- **API CRUD (monitors, channels):** 60 requests / minute per user
-- **Public endpoints (status page):** 120 requests / minute per IP
-- Works across all API replicas
-- New adapter: `internal/adapter/redis/ratelimit.go`
-
-### 0.4 Redis Infrastructure
+### 0.7 Redis Infrastructure
 
 - Add Redis to `docker-compose.yml` with healthcheck
 - `REDIS_URL` env var in config for all services
@@ -112,11 +112,14 @@ Full codebase audit of PingCast revealed ~55 issues across security, error handl
 
 **Fix:** Extract to `Monitor.ParseCheckConfig() (map[string]any, error)` and `NotificationChannel.ParseConfig() (map[string]any, error)` on domain models. Return 500 on failure. Line 547 is channel config (different pattern) — gets its own method.
 
-### 1.4 GetUptime / ListByMonitorID (`internal/app/monitoring.go:271, 292-293`)
+### 1.4 GetUptime / ListByMonitorID (`internal/app/monitoring.go`)
 
-Dashboard shows 0% uptime instead of error when queries fail.
+Errors silently ignored in three methods:
+- `ListMonitorsWithUptime` (line 271) — dashboard shows 0% uptime
+- `GetMonitorDetail` (lines 292-293) — detail page shows 0% uptime and empty incidents
+- `GetStatusPage` (lines 337, 347) — public status page shows false data
 
-**Fix:** Return error up the stack. UI shows "unable to calculate" instead of false data.
+**Fix:** Return error up the stack in all three methods. UI shows "unable to calculate" instead of false data.
 
 ### 1.5 Checker Monitor Load (`cmd/checker/main.go:96`)
 
@@ -166,15 +169,18 @@ Dashboard shows 0% uptime instead of error when queries fail.
 ### 2.5 Missing Database Indexes (migration `009_add_missing_indexes.sql`)
 
 ```sql
+-- New indexes
 CREATE INDEX idx_check_results_monitor_created ON check_results (monitor_id, created_at DESC);
-CREATE INDEX idx_check_results_monitor_status ON check_results (monitor_id, status); -- for ConsecutiveFailures query
-CREATE INDEX idx_incidents_monitor_started ON incidents (monitor_id, started_at DESC);
-CREATE INDEX idx_sessions_expires_at ON sessions (expires_at);
-CREATE INDEX idx_monitor_channels_monitor ON monitor_channels (monitor_id);
 CREATE INDEX idx_monitor_channels_channel ON monitor_channels (channel_id);
+-- monitor_channels(monitor_id) NOT needed: covered by PK (monitor_id, channel_id)
+
+-- Replace existing (add DESC for ORDER BY optimization)
+DROP INDEX IF EXISTS idx_incidents_monitor_started;
+CREATE INDEX idx_incidents_monitor_started ON incidents (monitor_id, started_at DESC);
+-- sessions(expires_at) already exists in migration 005 — no action needed
 ```
 
-Note: verify all sqlc queries in `internal/sqlc/queries/check_results.sql` to ensure proposed indexes cover all access patterns.
+Note: `idx_check_results_monitor_status(monitor_id, status)` was considered but provides marginal value — `ConsecutiveFailures` query is driven by `(monitor_id, checked_at)` which already has an index. The `DeleteCheckResultsOlderThan` query on `checked_at` alone becomes irrelevant after P2.6 (partitioning → `DROP PARTITION`).
 
 ### 2.6 check_results Table Partitioning
 
@@ -182,11 +188,12 @@ Note: verify all sqlc queries in `internal/sqlc/queries/check_results.sql` to en
 
 **Fix:** Native Postgres time-based partitioning:
 - `check_results` becomes a partitioned table: `PARTITION BY RANGE (created_at)`
+- **PK change required:** current `id BIGSERIAL PRIMARY KEY` must become composite `PRIMARY KEY (id, created_at)` — Postgres requires partition key in PK. No other tables have FK references to `check_results.id` (verified), so this is safe.
 - Monthly partitions: `check_results_2026_03`, `check_results_2026_04`, etc.
 - Retention cleanup: `DROP TABLE check_results_2026_01` — instant, no locks, no VACUUM
 - Scheduled job creates next month's partition in advance (avoid runtime partition creation)
 - Existing indexes are per-partition (Postgres handles this automatically)
-- Migration: recreate `check_results` as partitioned table, migrate existing data
+- Migration: create new partitioned table, migrate existing data, swap names in a transaction
 
 Same approach for `incidents` if volume warrants it (likely much lower volume — partition only if needed).
 
@@ -226,7 +233,7 @@ With soft delete, DB-level `ON DELETE CASCADE` becomes dead code (soft delete is
 **Migration strategy (avoid hard dependency on Redis availability):**
 1. Deploy with dual-write: session created in both Postgres and Redis. Lookup reads from Redis, falls back to Postgres.
 2. Verify Redis is stable in production.
-3. Apply migration `013_drop_sessions_table.sql` to remove Postgres table.
+3. Apply migration `016_drop_sessions_table.sql` to remove Postgres table.
 
 This avoids a scenario where the migration runs but Redis is misconfigured, breaking all authentication with no rollback.
 
