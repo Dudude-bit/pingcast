@@ -110,6 +110,10 @@ func (s *AuthService) DowngradeToFree(ctx context.Context, userID uuid.UUID) err
 	return s.users.UpdatePlan(ctx, userID, domain.PlanFree)
 }
 
+func (s *AuthService) GetUserByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
+	return s.users.GetByID(ctx, id)
+}
+
 func (s *AuthService) GetUserByEmail(ctx context.Context, email string) (*domain.User, error) {
 	user, _, err := s.users.GetByEmail(ctx, email)
 	if err != nil {

@@ -98,6 +98,9 @@ func main() {
 	registry.Register(domain.MonitorTCP, "TCP", checker.NewTCPChecker(10*time.Second))
 	registry.Register(domain.MonitorDNS, "DNS", checker.NewDNSChecker())
 
+	// API keys
+	apiKeyRepo := postgres.NewAPIKeyRepo(queries)
+
 	// Channel registry (API: validation + schema only, no sending credentials needed)
 	channelRepo := postgres.NewChannelRepo(queries)
 	channelReg := channel.NewRegistry()
@@ -118,7 +121,7 @@ func main() {
 	webhookHandler := httpadapter.NewWebhookHandler(authSvc, alertSvc, cfg.LemonSqueezyWebhookSecret)
 
 	// Wire
-	fiberApp := httpadapter.SetupApp(authSvc, pageHandler, server, webhookHandler)
+	fiberApp := httpadapter.SetupApp(authSvc, pageHandler, server, webhookHandler, apiKeyRepo)
 
 	// Start
 	go func() {

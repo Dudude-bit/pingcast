@@ -1,7 +1,13 @@
 package httpadapter
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"log/slog"
+	"strings"
+
 	"github.com/gofiber/fiber/v2"
+	"github.com/kirillinakin/pingcast/internal/adapter/postgres"
 	"github.com/kirillinakin/pingcast/internal/app"
 	"github.com/kirillinakin/pingcast/internal/domain"
 )
@@ -9,9 +15,18 @@ import (
 const userCtxKey = "auth.user"
 
 // AuthMiddleware returns a Fiber handler that validates the session cookie
-// and stores *domain.User in Locals. Returns 401 JSON on failure.
-func AuthMiddleware(auth *app.AuthService) fiber.Handler {
+// or API key and stores *domain.User in Locals. Returns 401 JSON on failure.
+func AuthMiddleware(auth *app.AuthService, apiKeyRepo *postgres.APIKeyRepo) fiber.Handler {
 	return func(c *fiber.Ctx) error {
+		// Try API key first (Authorization: Bearer pc_live_...)
+		if authHeader := c.Get("Authorization"); strings.HasPrefix(authHeader, "Bearer ") {
+			rawKey := strings.TrimPrefix(authHeader, "Bearer ")
+			if strings.HasPrefix(rawKey, "pc_live_") {
+				return authenticateWithAPIKey(c, auth, apiKeyRepo, rawKey)
+			}
+		}
+
+		// Fall back to session cookie
 		sessionID := c.Cookies("session_id")
 		if sessionID == "" {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
@@ -26,6 +41,35 @@ func AuthMiddleware(auth *app.AuthService) fiber.Handler {
 		c.Locals(userCtxKey, user)
 		return c.Next()
 	}
+}
+
+func authenticateWithAPIKey(c *fiber.Ctx, auth *app.AuthService, apiKeyRepo *postgres.APIKeyRepo, rawKey string) error {
+	hash := sha256.Sum256([]byte(rawKey))
+	keyHash := hex.EncodeToString(hash[:])
+
+	apiKey, err := apiKeyRepo.GetByHash(c.UserContext(), keyHash)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid api key"})
+	}
+
+	if apiKey.IsExpired() {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "api key expired"})
+	}
+
+	user, err := auth.GetUserByID(c.UserContext(), apiKey.UserID)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "user not found"})
+	}
+
+	// Touch last_used_at in background (non-blocking)
+	go func() {
+		if err := apiKeyRepo.Touch(c.UserContext(), apiKey.ID); err != nil {
+			slog.Warn("failed to touch api key", "key_id", apiKey.ID, "error", err)
+		}
+	}()
+
+	c.Locals(userCtxKey, user)
+	return c.Next()
 }
 
 // PageMiddleware returns a Fiber handler that validates the session cookie

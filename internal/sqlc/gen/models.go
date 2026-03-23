@@ -11,6 +11,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ApiKey struct {
+	ID         uuid.UUID          `json:"id"`
+	UserID     uuid.UUID          `json:"user_id"`
+	KeyHash    string             `json:"key_hash"`
+	Name       string             `json:"name"`
+	Scopes     []string           `json:"scopes"`
+	CreatedAt  time.Time          `json:"created_at"`
+	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+}
+
 type CheckResult struct {
 	ID             int64       `json:"id"`
 	MonitorID      uuid.UUID   `json:"monitor_id"`

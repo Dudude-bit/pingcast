@@ -11,6 +11,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
 	apigen "github.com/kirillinakin/pingcast/internal/api/gen"
+	"github.com/kirillinakin/pingcast/internal/adapter/postgres"
 	"github.com/kirillinakin/pingcast/internal/app"
 	"github.com/kirillinakin/pingcast/internal/web"
 )
@@ -20,6 +21,7 @@ func SetupApp(
 	pageHandler *PageHandler,
 	server *Server,
 	webhookHandler *WebhookHandler,
+	apiKeyRepo *postgres.APIKeyRepo,
 ) *fiber.App {
 	app := fiber.New(fiber.Config{
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
@@ -88,7 +90,7 @@ func SetupApp(
 	// Auth endpoints are public, monitor endpoints need auth middleware.
 	apigen.RegisterHandlersWithOptions(app, server, apigen.FiberServerOptions{
 		Middlewares: []apigen.MiddlewareFunc{
-			authMiddlewareSelector(authService),
+			authMiddlewareSelector(authService, apiKeyRepo),
 		},
 	})
 
@@ -120,7 +122,7 @@ func SetupApp(
 }
 
 // authMiddlewareSelector returns a middleware that applies auth only to protected routes.
-func authMiddlewareSelector(authService *app.AuthService) apigen.MiddlewareFunc {
+func authMiddlewareSelector(authService *app.AuthService, apiKeyRepo *postgres.APIKeyRepo) apigen.MiddlewareFunc {
 	return func(c *fiber.Ctx) error {
 		path := c.Path()
 
@@ -130,7 +132,7 @@ func authMiddlewareSelector(authService *app.AuthService) apigen.MiddlewareFunc 
 			return c.Next()
 		}
 
-		// All other /api/ routes need auth
-		return AuthMiddleware(authService)(c)
+		// All other /api/ routes need auth (session cookie or API key)
+		return AuthMiddleware(authService, apiKeyRepo)(c)
 	}
 }
