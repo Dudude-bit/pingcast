@@ -18,6 +18,7 @@
                     {{if .User}}
                         <a href="/dashboard">Dashboard</a>
                         <form method="POST" action="/logout" style="display:inline; margin:0;">
+                            {{if .CsrfToken}}<input type="hidden" name="_csrf" value="{{.CsrfToken}}">{{end}}
                             <button type="submit" class="btn-link">Logout</button>
                         </form>
                     {{else}}

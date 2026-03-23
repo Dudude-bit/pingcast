@@ -65,15 +65,22 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Channel registry
+	// Channel registry (notifier: sending mode, only register with valid credentials)
 	channelReg := channel.NewRegistry()
 	if cfg.TelegramToken != "" {
 		channelReg.Register(domain.ChannelTelegram, "Telegram", telegram.NewFactory(cfg.TelegramToken))
+	} else {
+		slog.Warn("telegram channel disabled: TELEGRAM_BOT_TOKEN not set")
 	}
 	if cfg.SMTPHost != "" {
 		channelReg.Register(domain.ChannelEmail, "Email", smtpadapter.NewFactory(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPFrom))
+	} else {
+		slog.Warn("email channel disabled: SMTP_HOST not set")
 	}
 	channelReg.Register(domain.ChannelWebhook, "Webhook", webhook.NewFactory())
+	if len(channelReg.Types()) == 1 {
+		slog.Warn("only webhook channel active, telegram and email disabled")
+	}
 
 	// Alert service
 	alertSvc := app.NewAlertService(channelRepo, monitorRepo, channelReg)

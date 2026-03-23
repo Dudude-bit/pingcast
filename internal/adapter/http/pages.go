@@ -560,6 +560,14 @@ func (h *PageHandler) render(c *fiber.Ctx, name string, data fiber.Map) error {
 		return c.Status(500).SendString("template not found: " + name)
 	}
 
+	// Inject CSRF token into all template data
+	if data == nil {
+		data = fiber.Map{}
+	}
+	if token, ok := c.Locals("csrf").(string); ok {
+		data["CsrfToken"] = token
+	}
+
 	c.Set("Content-Type", "text/html; charset=utf-8")
 	var buf bytes.Buffer
 

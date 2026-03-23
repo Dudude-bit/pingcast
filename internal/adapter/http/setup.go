@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/csrf"
 	"github.com/gofiber/fiber/v2/middleware/filesystem"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
@@ -35,6 +36,29 @@ func SetupApp(
 		Format: "${time} ${status} ${method} ${path} ${latency}\n",
 	}))
 	app.Use(recover.New())
+
+	// CSRF protection for HTML form submissions.
+	// JSON API endpoints are exempt (they use Authorization header, not cookies).
+	app.Use(csrf.New(csrf.Config{
+		KeyLookup:      "form:_csrf",
+		CookieName:     "csrf_",
+		CookieSameSite: "Lax",
+		CookieHTTPOnly: true,
+		Next: func(c *fiber.Ctx) bool {
+			// Skip CSRF for JSON API, webhooks, and health endpoints
+			path := c.Path()
+			if len(path) >= 4 && path[:4] == "/api" {
+				return true
+			}
+			if len(path) >= 8 && path[:8] == "/webhook" {
+				return true
+			}
+			if path == "/health" {
+				return true
+			}
+			return false
+		},
+	}))
 
 	// Static files
 	staticFS, _ := fs.Sub(web.FS, "static")

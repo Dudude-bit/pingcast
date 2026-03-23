@@ -98,12 +98,13 @@ func main() {
 	registry.Register(domain.MonitorTCP, "TCP", checker.NewTCPChecker(10*time.Second))
 	registry.Register(domain.MonitorDNS, "DNS", checker.NewDNSChecker())
 
-	// Channel registry
+	// Channel registry (API: validation + schema only, no sending credentials needed)
 	channelRepo := postgres.NewChannelRepo(queries)
 	channelReg := channel.NewRegistry()
 	channelReg.Register(domain.ChannelTelegram, "Telegram", telegram.NewFactory(""))
 	channelReg.Register(domain.ChannelEmail, "Email", smtpadapter.NewFactory("", 0, "", "", ""))
 	channelReg.Register(domain.ChannelWebhook, "Webhook", webhook.NewFactory())
+	slog.Info("channel registry initialized (validation-only mode)", "types", len(channelReg.Types()))
 
 	// App services
 	authSvc := app.NewAuthService(userRepo, sessionRepo)
