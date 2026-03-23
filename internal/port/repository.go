@@ -2,6 +2,7 @@ package port
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -55,4 +56,8 @@ type IncidentRepo interface {
 	GetOpen(ctx context.Context, monitorID uuid.UUID) (*domain.Incident, error)
 	IsInCooldown(ctx context.Context, monitorID uuid.UUID) (bool, error)
 	ListByMonitorID(ctx context.Context, monitorID uuid.UUID, limit int) ([]domain.Incident, error)
+}
+
+type FailedAlertRepo interface {
+	Create(ctx context.Context, event json.RawMessage, errMsg string, failedChannelIDs []uuid.UUID) error
 }

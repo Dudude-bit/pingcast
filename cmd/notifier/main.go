@@ -20,11 +20,13 @@ import (
 	"github.com/kirillinakin/pingcast/internal/config"
 	"github.com/kirillinakin/pingcast/internal/database"
 	"github.com/kirillinakin/pingcast/internal/domain"
+	"github.com/kirillinakin/pingcast/internal/observability"
 	sqlcgen "github.com/kirillinakin/pingcast/internal/sqlc/gen"
 )
 
 func main() {
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	inner := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})
+	slog.SetDefault(slog.New(observability.NewTracingHandler(inner)))
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
@@ -36,7 +38,9 @@ func main() {
 	}
 
 	// PostgreSQL (for channel lookup)
-	pool, err := database.Connect(ctx, cfg.DatabaseURL, int32(cfg.MaxDBConns))
+	devMode := os.Getenv("DEV_MODE") == "true"
+	slowQueryTracer := observability.NewSlowQueryTracer(100*time.Millisecond, devMode)
+	pool, err := database.Connect(ctx, cfg.DatabaseURL, int32(cfg.MaxDBConns), database.WithTracer(slowQueryTracer))
 	if err != nil {
 		slog.Error("failed to connect to database", "error", err)
 		os.Exit(1)
@@ -46,6 +50,7 @@ func main() {
 	queries := sqlcgen.New(pool)
 	channelRepo := postgres.NewChannelRepo(pool, queries)
 	monitorRepo := postgres.NewMonitorRepo(pool, queries)
+	failedAlertRepo := postgres.NewFailedAlertRepo(queries)
 
 	// NATS
 	nc, err := natsadapter.Connect(cfg.NatsURL)
@@ -83,8 +88,11 @@ func main() {
 		slog.Warn("only webhook channel active, telegram and email disabled")
 	}
 
+	// Business metrics
+	metrics := observability.NewMetrics()
+
 	// Alert service
-	alertSvc := app.NewAlertService(channelRepo, monitorRepo, channelReg)
+	alertSvc := app.NewAlertService(channelRepo, monitorRepo, channelReg, failedAlertRepo, metrics)
 
 	// Subscribe to alerts
 	alertSub := natsadapter.NewAlertSubscriber(js)

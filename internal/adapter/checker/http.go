@@ -36,6 +36,9 @@ type HTTPCheckConfig struct {
 	Method         HTTPMethod `json:"method"`
 	ExpectedStatus int        `json:"expected_status"`
 	Keyword        *string    `json:"keyword,omitempty"`
+	Timeout        int        `json:"timeout,omitempty"`    // seconds, 0 = use default
+	BodyLimit      int        `json:"body_limit,omitempty"` // bytes, 0 = use default 1MB
+	UserAgent      string     `json:"user_agent,omitempty"` // empty = use default
 }
 
 type HTTPChecker struct {
@@ -96,9 +99,23 @@ func (c *HTTPChecker) Check(ctx context.Context, monitor *domain.Monitor) *domai
 		result.ResponseTimeMs = int(time.Since(start).Milliseconds())
 		return result
 	}
-	req.Header.Set("User-Agent", userAgent)
 
-	resp, err := c.httpClient.Do(req)
+	ua := userAgent
+	if cfg.UserAgent != "" {
+		ua = cfg.UserAgent
+	}
+	req.Header.Set("User-Agent", ua)
+
+	client := c.httpClient
+	if cfg.Timeout > 0 {
+		client = &http.Client{
+			Timeout:       time.Duration(cfg.Timeout) * time.Second,
+			CheckRedirect: c.httpClient.CheckRedirect,
+			Transport:     c.httpClient.Transport,
+		}
+	}
+
+	resp, err := client.Do(req)
 	result.ResponseTimeMs = int(time.Since(start).Milliseconds())
 
 	if err != nil {
@@ -120,7 +137,11 @@ func (c *HTTPChecker) Check(ctx context.Context, monitor *domain.Monitor) *domai
 	}
 
 	if cfg.Keyword != nil && *cfg.Keyword != "" {
-		body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyRead))
+		bodyLimit := int64(maxBodyRead)
+		if cfg.BodyLimit > 0 {
+			bodyLimit = int64(cfg.BodyLimit)
+		}
+		body, err := io.ReadAll(io.LimitReader(resp.Body, bodyLimit))
 		if err != nil {
 			errMsg := fmt.Sprintf("failed to read body: %s", err)
 			result.Status = domain.StatusDown

@@ -12,13 +12,15 @@ import (
 )
 
 type AlertService struct {
-	channels port.ChannelRepo
-	monitors port.MonitorRepo
-	registry port.ChannelRegistry
+	channels     port.ChannelRepo
+	monitors     port.MonitorRepo
+	registry     port.ChannelRegistry
+	failedAlerts port.FailedAlertRepo
+	metrics      port.Metrics
 }
 
-func NewAlertService(channels port.ChannelRepo, monitors port.MonitorRepo, registry port.ChannelRegistry) *AlertService {
-	return &AlertService{channels: channels, monitors: monitors, registry: registry}
+func NewAlertService(channels port.ChannelRepo, monitors port.MonitorRepo, registry port.ChannelRegistry, failedAlerts port.FailedAlertRepo, metrics port.Metrics) *AlertService {
+	return &AlertService{channels: channels, monitors: monitors, registry: registry, failedAlerts: failedAlerts, metrics: metrics}
 }
 
 func (s *AlertService) Registry() port.ChannelRegistry {
@@ -51,6 +53,7 @@ func (s *AlertService) Handle(ctx context.Context, event *domain.AlertEvent) err
 	}
 
 	var sent, failed int
+	var failedIDs []uuid.UUID
 	for _, ch := range channels {
 		if !ch.IsEnabled {
 			continue
@@ -58,32 +61,65 @@ func (s *AlertService) Handle(ctx context.Context, event *domain.AlertEvent) err
 		sender, err := s.registry.CreateSenderWithRetry(ch.Type, ch.Config)
 		if err != nil {
 			slog.Error("failed to create sender", "channel_id", ch.ID, "type", ch.Type, "error", err)
+			if s.metrics != nil {
+				s.metrics.RecordAlertSent(ctx, string(ch.Type), false)
+			}
+			failedIDs = append(failedIDs, ch.ID)
 			failed++
 			continue
 		}
 		if err := sender.Send(ctx, event); err != nil {
 			slog.Error("channel delivery failed", "channel_id", ch.ID, "type", ch.Type, "error", err)
+			if s.metrics != nil {
+				s.metrics.RecordAlertSent(ctx, string(ch.Type), false)
+			}
+			failedIDs = append(failedIDs, ch.ID)
 			failed++
 			continue
+		}
+		if s.metrics != nil {
+			s.metrics.RecordAlertSent(ctx, string(ch.Type), true)
 		}
 		sent++
 	}
 
 	// All channels failed → return error so NATS retries the entire event
 	if sent == 0 && failed > 0 {
+		if s.metrics != nil {
+			s.metrics.RecordAlertAllFailed(ctx)
+		}
 		return fmt.Errorf("all %d channels failed for monitor %s", failed, event.MonitorID)
 	}
 
-	// Partial failure → Ack (avoid re-sending to successful channels), log for visibility
+	// Partial failure → Ack (avoid re-sending to successful channels), write to DLQ
 	if failed > 0 {
 		slog.Error("partial alert delivery failure",
 			"monitor_id", event.MonitorID,
 			"sent", sent,
 			"failed", failed,
 		)
+		s.writeToDLQ(ctx, event, sent, failed, failedIDs)
 	}
 
 	return nil
+}
+
+// writeToDLQ persists a partial-failure event to the failed_alerts table.
+// Errors are logged but never propagated — the alert is already Acked.
+func (s *AlertService) writeToDLQ(ctx context.Context, event *domain.AlertEvent, sent, failed int, failedIDs []uuid.UUID) {
+	eventJSON, err := json.Marshal(event)
+	if err != nil {
+		slog.Error("failed to marshal event for DLQ", "error", err)
+		return
+	}
+	errMsg := fmt.Sprintf("%d/%d channels failed for monitor %s", failed, sent+failed, event.MonitorID)
+	if dlqErr := s.failedAlerts.Create(ctx, eventJSON, errMsg, failedIDs); dlqErr != nil {
+		slog.Error("failed to write to DLQ", "error", dlqErr)
+		return
+	}
+	if s.metrics != nil {
+		s.metrics.RecordAlertDeadLettered(ctx)
+	}
 }
 
 // --- Channel CRUD ---

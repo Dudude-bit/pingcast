@@ -23,6 +23,7 @@ type MonitoringService struct {
 	txm          port.TxManager
 	alerts       port.AlertEventPublisher
 	registry     port.CheckerRegistry
+	metrics      port.Metrics
 }
 
 func NewMonitoringService(
@@ -35,6 +36,7 @@ func NewMonitoringService(
 	txm port.TxManager,
 	alerts port.AlertEventPublisher,
 	registry port.CheckerRegistry,
+	metrics port.Metrics,
 ) *MonitoringService {
 	return &MonitoringService{
 		monitors:     monitors,
@@ -46,6 +48,7 @@ func NewMonitoringService(
 		txm:          txm,
 		alerts:       alerts,
 		registry:     registry,
+		metrics:      metrics,
 	}
 }
 
@@ -110,7 +113,14 @@ func (s *MonitoringService) CreateMonitor(ctx context.Context, user *domain.User
 
 	// No channels to bind — simple create without transaction
 	if len(input.ChannelIDs) == 0 {
-		return s.monitors.Create(ctx, mon)
+		created, err := s.monitors.Create(ctx, mon)
+		if err != nil {
+			return nil, err
+		}
+		if s.metrics != nil {
+			s.metrics.MonitorCreated(ctx)
+		}
+		return created, nil
 	}
 
 	// Transactional: create monitor + bind channels atomically via go-trm.
@@ -132,6 +142,9 @@ func (s *MonitoringService) CreateMonitor(ctx context.Context, user *domain.User
 	})
 	if err != nil {
 		return nil, err
+	}
+	if s.metrics != nil {
+		s.metrics.MonitorCreated(ctx)
 	}
 	return created, nil
 }
@@ -188,7 +201,13 @@ func (s *MonitoringService) UpdateMonitor(ctx context.Context, user *domain.User
 }
 
 func (s *MonitoringService) DeleteMonitor(ctx context.Context, userID, monitorID uuid.UUID) error {
-	return s.monitors.Delete(ctx, monitorID, userID)
+	if err := s.monitors.Delete(ctx, monitorID, userID); err != nil {
+		return err
+	}
+	if s.metrics != nil {
+		s.metrics.MonitorDeleted(ctx)
+	}
+	return nil
 }
 
 func (s *MonitoringService) TogglePause(ctx context.Context, user *domain.User, monitorID uuid.UUID) (*domain.Monitor, error) {
@@ -207,6 +226,15 @@ func (s *MonitoringService) TogglePause(ctx context.Context, user *domain.User, 
 
 // ProcessCheckResult is the core business logic.
 func (s *MonitoringService) ProcessCheckResult(ctx context.Context, monitor *domain.Monitor, result *domain.CheckResult) error {
+	// Record business metrics
+	if s.metrics != nil {
+		s.metrics.RecordCheck(ctx,
+			string(monitor.Type),
+			string(result.Status),
+			time.Duration(result.ResponseTimeMs)*time.Millisecond,
+		)
+	}
+
 	if err := s.checkResults.Insert(ctx, result); err != nil {
 		return fmt.Errorf("insert check result: %w", err)
 	}
@@ -269,6 +297,10 @@ func (s *MonitoringService) handleDown(ctx context.Context, monitor *domain.Moni
 		return fmt.Errorf("create incident: %w", err)
 	}
 
+	if s.metrics != nil {
+		s.metrics.IncidentOpened(ctx)
+	}
+
 	return s.publishAlert(ctx, monitor, domain.AlertDown, cause, incident.ID)
 }
 
@@ -280,6 +312,10 @@ func (s *MonitoringService) handleRecovery(ctx context.Context, monitor *domain.
 
 	if err := s.incidents.Resolve(ctx, incident.ID, time.Now()); err != nil {
 		return fmt.Errorf("resolve incident: %w", err)
+	}
+
+	if s.metrics != nil {
+		s.metrics.IncidentResolved(ctx)
 	}
 
 	return s.publishAlert(ctx, monitor, domain.AlertUp, "", incident.ID)
@@ -317,13 +353,20 @@ func (s *MonitoringService) ListMonitorsWithUptime(ctx context.Context, userID u
 		return nil, err
 	}
 
+	ids := make([]uuid.UUID, len(monitors))
+	for i, m := range monitors {
+		ids[i] = m.ID
+	}
+
+	uptimeMap, err := s.uptime.GetUptimeBatch(ctx, ids, time.Now().Add(-24*time.Hour))
+	if err != nil {
+		slog.Error("failed to get uptime batch", "error", err)
+		uptimeMap = make(map[uuid.UUID]float64)
+	}
+
 	result := make([]MonitorWithUptime, 0, len(monitors))
 	for _, m := range monitors {
-		uptime, err := s.uptime.GetUptime(ctx, m.ID, time.Now().Add(-24*time.Hour))
-		if err != nil {
-			slog.Error("failed to get uptime", "monitor_id", m.ID, "error", err)
-		}
-		result = append(result, MonitorWithUptime{Monitor: m, Uptime: uptime})
+		result = append(result, MonitorWithUptime{Monitor: m, Uptime: uptimeMap[m.ID]})
 	}
 	return result, nil
 }

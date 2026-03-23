@@ -14,8 +14,9 @@ import (
 var _ port.MonitorChecker = (*TCPChecker)(nil)
 
 type TCPCheckConfig struct {
-	Host string `json:"host"`
-	Port int    `json:"port"`
+	Host    string `json:"host"`
+	Port    int    `json:"port"`
+	Timeout int    `json:"timeout,omitempty"` // seconds, 0 = use default
 }
 
 type TCPChecker struct {
@@ -39,8 +40,13 @@ func (c *TCPChecker) Check(ctx context.Context, monitor *domain.Monitor) *domain
 		return result
 	}
 
+	timeout := c.timeout
+	if cfg.Timeout > 0 {
+		timeout = time.Duration(cfg.Timeout) * time.Second
+	}
+
 	addr := net.JoinHostPort(cfg.Host, fmt.Sprintf("%d", cfg.Port))
-	conn, err := net.DialTimeout("tcp", addr, c.timeout)
+	conn, err := net.DialTimeout("tcp", addr, timeout)
 	result.ResponseTimeMs = int(time.Since(start).Milliseconds())
 
 	if err != nil {

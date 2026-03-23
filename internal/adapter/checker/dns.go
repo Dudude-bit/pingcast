@@ -18,6 +18,7 @@ type DNSCheckConfig struct {
 	Hostname   string  `json:"hostname"`
 	ExpectedIP *string `json:"expected_ip,omitempty"`
 	DNSServer  *string `json:"dns_server,omitempty"`
+	Timeout    int     `json:"timeout,omitempty"` // seconds, 0 = use default 10s
 }
 
 type DNSChecker struct{}
@@ -39,12 +40,17 @@ func (c *DNSChecker) Check(ctx context.Context, monitor *domain.Monitor) *domain
 		return result
 	}
 
+	dialTimeout := 10 * time.Second
+	if cfg.Timeout > 0 {
+		dialTimeout = time.Duration(cfg.Timeout) * time.Second
+	}
+
 	resolver := net.DefaultResolver
 	if cfg.DNSServer != nil && *cfg.DNSServer != "" {
 		resolver = &net.Resolver{
 			PreferGo: true,
 			Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-				d := net.Dialer{Timeout: 10 * time.Second}
+				d := net.Dialer{Timeout: dialTimeout}
 				return d.DialContext(ctx, "udp", *cfg.DNSServer+":53")
 			},
 		}

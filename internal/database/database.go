@@ -10,21 +10,36 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// ConnectOption applies optional configuration to the pgxpool.
+type ConnectOption func(*pgxpool.Config)
+
+// WithTracer attaches a pgx.QueryTracer to the connection pool.
+func WithTracer(tracer pgx.QueryTracer) ConnectOption {
+	return func(cfg *pgxpool.Config) {
+		cfg.ConnConfig.Tracer = tracer
+	}
+}
 
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
 // Connect creates a connection pool with configurable max connections.
 // Pass maxConns=0 to use the default (max(4, numCPU*2)).
-func Connect(ctx context.Context, databaseURL string, maxConns int32) (*pgxpool.Pool, error) {
+// Optional ConnectOption values can be provided to attach tracers, etc.
+func Connect(ctx context.Context, databaseURL string, maxConns int32, opts ...ConnectOption) (*pgxpool.Pool, error) {
 	config, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse database url: %w", err)
 	}
 	if maxConns > 0 {
 		config.MaxConns = maxConns
+	}
+	for _, opt := range opts {
+		opt(config)
 	}
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {

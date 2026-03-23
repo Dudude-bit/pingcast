@@ -30,7 +30,8 @@ import (
 )
 
 func main() {
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	inner := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})
+	slog.SetDefault(slog.New(observability.NewTracingHandler(inner)))
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
@@ -50,7 +51,9 @@ func main() {
 	defer otelShutdown(context.Background())
 
 	// PostgreSQL
-	pool, err := database.Connect(ctx, cfg.DatabaseURL, int32(cfg.MaxDBConns))
+	devMode := os.Getenv("DEV_MODE") == "true"
+	slowQueryTracer := observability.NewSlowQueryTracer(100*time.Millisecond, devMode)
+	pool, err := database.Connect(ctx, cfg.DatabaseURL, int32(cfg.MaxDBConns), database.WithTracer(slowQueryTracer))
 	if err != nil {
 		slog.Error("failed to connect to database", "error", err)
 		os.Exit(1)
@@ -142,10 +145,16 @@ func main() {
 	channelReg.Register(domain.ChannelWebhook, "Webhook", webhook.NewFactory())
 	slog.Info("channel registry initialized (validation-only mode)", "types", len(channelReg.Types()))
 
+	// Failed alerts (DLQ)
+	failedAlertRepo := postgres.NewFailedAlertRepo(queries)
+
+	// Business metrics
+	metrics := observability.NewMetrics()
+
 	// App services
 	authSvc := app.NewAuthService(userRepo, sessionRepo)
-	monitoringSvc := app.NewMonitoringService(monitorRepo, channelRepo, checkResultRepo, incidentRepo, userRepo, uptimeRepo, txm, alertPub, registry)
-	alertSvc := app.NewAlertService(channelRepo, monitorRepo, channelReg)
+	monitoringSvc := app.NewMonitoringService(monitorRepo, channelRepo, checkResultRepo, incidentRepo, userRepo, uptimeRepo, txm, alertPub, registry, metrics)
+	alertSvc := app.NewAlertService(channelRepo, monitorRepo, channelReg, failedAlertRepo, metrics)
 
 	// HTTP handlers
 	rateLimiter := redisadapter.NewRateLimiter(rdb, "login", 5, 15*time.Minute)
