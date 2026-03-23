@@ -111,3 +111,78 @@ func TestHTTPChecker_KeywordMissing(t *testing.T) {
 		t.Errorf("status = %q, want down (keyword missing)", result.Status)
 	}
 }
+
+func TestHTTPChecker_InvalidURL(t *testing.T) {
+	c := checker.NewHTTPChecker()
+	result := c.Check(context.Background(), httpMonitor("://bad-url", "GET", 200, nil))
+
+	if result.Status != domain.StatusDown {
+		t.Errorf("status = %q, want %q", result.Status, domain.StatusDown)
+	}
+	if result.ErrorMessage == nil || *result.ErrorMessage == "" {
+		t.Error("expected error message for invalid URL")
+	}
+}
+
+func TestHTTPChecker_PerMonitorTimeoutOverride(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	// Build config with a 1-second timeout override in CheckConfig.
+	cfg := map[string]any{
+		"url":             server.URL,
+		"method":          "GET",
+		"expected_status": 200,
+		"timeout":         1,
+	}
+	data, _ := json.Marshal(cfg)
+	mon := &domain.Monitor{
+		Type:        domain.MonitorHTTP,
+		CheckConfig: data,
+	}
+
+	// Use default checker (10s timeout) but the per-monitor config overrides to 1s.
+	c := checker.NewHTTPChecker()
+	result := c.Check(context.Background(), mon)
+
+	if result.Status != domain.StatusDown {
+		t.Errorf("status = %q, want %q (per-monitor timeout should trigger)", result.Status, domain.StatusDown)
+	}
+	if result.ErrorMessage == nil || *result.ErrorMessage == "" {
+		t.Error("expected error message for timeout")
+	}
+}
+
+func TestHTTPChecker_CustomUserAgent(t *testing.T) {
+	customUA := "MyBot/2.0"
+	var gotUA string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUA = r.Header.Get("User-Agent")
+		w.WriteHeader(200)
+	}))
+	defer server.Close()
+
+	cfg := map[string]any{
+		"url":             server.URL,
+		"method":          "GET",
+		"expected_status": 200,
+		"user_agent":      customUA,
+	}
+	data, _ := json.Marshal(cfg)
+	mon := &domain.Monitor{
+		Type:        domain.MonitorHTTP,
+		CheckConfig: data,
+	}
+
+	c := checker.NewHTTPChecker()
+	result := c.Check(context.Background(), mon)
+
+	if result.Status != domain.StatusUp {
+		t.Errorf("status = %q, want %q", result.Status, domain.StatusUp)
+	}
+	if gotUA != customUA {
+		t.Errorf("User-Agent = %q, want %q", gotUA, customUA)
+	}
+}
