@@ -1,30 +1,30 @@
 -- name: CreateChannel :one
 INSERT INTO notification_channels (user_id, name, type, config)
 VALUES ($1, $2, $3, $4)
-RETURNING id, user_id, name, type, config, is_enabled, created_at;
+RETURNING id, user_id, name, type, config, is_enabled, created_at, deleted_at;
 
 -- name: GetChannelByID :one
-SELECT id, user_id, name, type, config, is_enabled, created_at
-FROM notification_channels WHERE id = $1;
+SELECT id, user_id, name, type, config, is_enabled, created_at, deleted_at
+FROM notification_channels WHERE id = $1 AND deleted_at IS NULL;
 
 -- name: ListChannelsByUserID :many
-SELECT id, user_id, name, type, config, is_enabled, created_at
-FROM notification_channels WHERE user_id = $1 ORDER BY created_at;
+SELECT id, user_id, name, type, config, is_enabled, created_at, deleted_at
+FROM notification_channels WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at;
 
 -- name: ListChannelsForMonitor :many
-SELECT c.id, c.user_id, c.name, c.type, c.config, c.is_enabled, c.created_at
+SELECT c.id, c.user_id, c.name, c.type, c.config, c.is_enabled, c.created_at, c.deleted_at
 FROM notification_channels c
 JOIN monitor_channels mc ON c.id = mc.channel_id
-WHERE mc.monitor_id = $1
+WHERE mc.monitor_id = $1 AND c.deleted_at IS NULL
 ORDER BY c.name;
 
 -- name: UpdateChannel :exec
 UPDATE notification_channels
 SET name = $2, config = $3, is_enabled = $4
-WHERE id = $1 AND user_id = $5;
+WHERE id = $1 AND user_id = $5 AND deleted_at IS NULL;
 
 -- name: DeleteChannel :exec
-DELETE FROM notification_channels WHERE id = $1 AND user_id = $2;
+UPDATE notification_channels SET deleted_at = NOW() WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL;
 
 -- name: BindChannelToMonitor :exec
 INSERT INTO monitor_channels (monitor_id, channel_id) VALUES ($1, $2)

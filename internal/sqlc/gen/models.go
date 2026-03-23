@@ -41,17 +41,18 @@ type Incident struct {
 }
 
 type Monitor struct {
-	ID                 uuid.UUID `json:"id"`
-	UserID             uuid.UUID `json:"user_id"`
-	Name               string    `json:"name"`
-	IntervalSeconds    int32     `json:"interval_seconds"`
-	AlertAfterFailures int32     `json:"alert_after_failures"`
-	IsPaused           bool      `json:"is_paused"`
-	IsPublic           bool      `json:"is_public"`
-	CurrentStatus      string    `json:"current_status"`
-	CreatedAt          time.Time `json:"created_at"`
-	Type               string    `json:"type"`
-	CheckConfig        []byte    `json:"check_config"`
+	ID                 uuid.UUID          `json:"id"`
+	UserID             uuid.UUID          `json:"user_id"`
+	Name               string             `json:"name"`
+	IntervalSeconds    int32              `json:"interval_seconds"`
+	AlertAfterFailures int32              `json:"alert_after_failures"`
+	IsPaused           bool               `json:"is_paused"`
+	IsPublic           bool               `json:"is_public"`
+	CurrentStatus      string             `json:"current_status"`
+	CreatedAt          time.Time          `json:"created_at"`
+	Type               string             `json:"type"`
+	CheckConfig        []byte             `json:"check_config"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type MonitorChannel struct {
@@ -60,13 +61,14 @@ type MonitorChannel struct {
 }
 
 type NotificationChannel struct {
-	ID        uuid.UUID `json:"id"`
-	UserID    uuid.UUID `json:"user_id"`
-	Name      string    `json:"name"`
-	Type      string    `json:"type"`
-	Config    []byte    `json:"config"`
-	IsEnabled bool      `json:"is_enabled"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        uuid.UUID          `json:"id"`
+	UserID    uuid.UUID          `json:"user_id"`
+	Name      string             `json:"name"`
+	Type      string             `json:"type"`
+	Config    []byte             `json:"config"`
+	IsEnabled bool               `json:"is_enabled"`
+	CreatedAt time.Time          `json:"created_at"`
+	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type Session struct {
@@ -77,13 +79,14 @@ type Session struct {
 }
 
 type User struct {
-	ID                         uuid.UUID   `json:"id"`
-	Email                      string      `json:"email"`
-	Slug                       string      `json:"slug"`
-	PasswordHash               string      `json:"password_hash"`
-	TgChatID                   pgtype.Int8 `json:"tg_chat_id"`
-	Plan                       string      `json:"plan"`
-	LemonSqueezyCustomerID     *string     `json:"lemon_squeezy_customer_id"`
-	LemonSqueezySubscriptionID *string     `json:"lemon_squeezy_subscription_id"`
-	CreatedAt                  time.Time   `json:"created_at"`
+	ID                         uuid.UUID          `json:"id"`
+	Email                      string             `json:"email"`
+	Slug                       string             `json:"slug"`
+	PasswordHash               string             `json:"password_hash"`
+	TgChatID                   pgtype.Int8        `json:"tg_chat_id"`
+	Plan                       string             `json:"plan"`
+	LemonSqueezyCustomerID     *string            `json:"lemon_squeezy_customer_id"`
+	LemonSqueezySubscriptionID *string            `json:"lemon_squeezy_subscription_id"`
+	CreatedAt                  time.Time          `json:"created_at"`
+	DeletedAt                  pgtype.Timestamptz `json:"deleted_at"`
 }

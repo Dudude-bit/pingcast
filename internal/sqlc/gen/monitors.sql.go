@@ -10,10 +10,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const countMonitorsByUserID = `-- name: CountMonitorsByUserID :one
-SELECT COUNT(*)::int FROM monitors WHERE user_id = $1
+SELECT COUNT(*)::int FROM monitors WHERE user_id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) CountMonitorsByUserID(ctx context.Context, userID uuid.UUID) (int32, error) {
@@ -26,7 +27,7 @@ func (q *Queries) CountMonitorsByUserID(ctx context.Context, userID uuid.UUID) (
 const createMonitor = `-- name: CreateMonitor :one
 INSERT INTO monitors (user_id, name, type, check_config, interval_seconds, alert_after_failures, is_paused, is_public)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, user_id, name, type, check_config, interval_seconds, alert_after_failures, is_paused, is_public, current_status, created_at
+RETURNING id, user_id, name, type, check_config, interval_seconds, alert_after_failures, is_paused, is_public, current_status, created_at, deleted_at
 `
 
 type CreateMonitorParams struct {
@@ -41,17 +42,18 @@ type CreateMonitorParams struct {
 }
 
 type CreateMonitorRow struct {
-	ID                 uuid.UUID `json:"id"`
-	UserID             uuid.UUID `json:"user_id"`
-	Name               string    `json:"name"`
-	Type               string    `json:"type"`
-	CheckConfig        []byte    `json:"check_config"`
-	IntervalSeconds    int32     `json:"interval_seconds"`
-	AlertAfterFailures int32     `json:"alert_after_failures"`
-	IsPaused           bool      `json:"is_paused"`
-	IsPublic           bool      `json:"is_public"`
-	CurrentStatus      string    `json:"current_status"`
-	CreatedAt          time.Time `json:"created_at"`
+	ID                 uuid.UUID          `json:"id"`
+	UserID             uuid.UUID          `json:"user_id"`
+	Name               string             `json:"name"`
+	Type               string             `json:"type"`
+	CheckConfig        []byte             `json:"check_config"`
+	IntervalSeconds    int32              `json:"interval_seconds"`
+	AlertAfterFailures int32              `json:"alert_after_failures"`
+	IsPaused           bool               `json:"is_paused"`
+	IsPublic           bool               `json:"is_public"`
+	CurrentStatus      string             `json:"current_status"`
+	CreatedAt          time.Time          `json:"created_at"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
 }
 
 func (q *Queries) CreateMonitor(ctx context.Context, arg CreateMonitorParams) (CreateMonitorRow, error) {
@@ -78,12 +80,13 @@ func (q *Queries) CreateMonitor(ctx context.Context, arg CreateMonitorParams) (C
 		&i.IsPublic,
 		&i.CurrentStatus,
 		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const deleteMonitor = `-- name: DeleteMonitor :exec
-DELETE FROM monitors WHERE id = $1 AND user_id = $2
+UPDATE monitors SET deleted_at = NOW() WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
 `
 
 type DeleteMonitorParams struct {
@@ -97,22 +100,23 @@ func (q *Queries) DeleteMonitor(ctx context.Context, arg DeleteMonitorParams) er
 }
 
 const getMonitorByID = `-- name: GetMonitorByID :one
-SELECT id, user_id, name, type, check_config, interval_seconds, alert_after_failures, is_paused, is_public, current_status, created_at
-FROM monitors WHERE id = $1
+SELECT id, user_id, name, type, check_config, interval_seconds, alert_after_failures, is_paused, is_public, current_status, created_at, deleted_at
+FROM monitors WHERE id = $1 AND deleted_at IS NULL
 `
 
 type GetMonitorByIDRow struct {
-	ID                 uuid.UUID `json:"id"`
-	UserID             uuid.UUID `json:"user_id"`
-	Name               string    `json:"name"`
-	Type               string    `json:"type"`
-	CheckConfig        []byte    `json:"check_config"`
-	IntervalSeconds    int32     `json:"interval_seconds"`
-	AlertAfterFailures int32     `json:"alert_after_failures"`
-	IsPaused           bool      `json:"is_paused"`
-	IsPublic           bool      `json:"is_public"`
-	CurrentStatus      string    `json:"current_status"`
-	CreatedAt          time.Time `json:"created_at"`
+	ID                 uuid.UUID          `json:"id"`
+	UserID             uuid.UUID          `json:"user_id"`
+	Name               string             `json:"name"`
+	Type               string             `json:"type"`
+	CheckConfig        []byte             `json:"check_config"`
+	IntervalSeconds    int32              `json:"interval_seconds"`
+	AlertAfterFailures int32              `json:"alert_after_failures"`
+	IsPaused           bool               `json:"is_paused"`
+	IsPublic           bool               `json:"is_public"`
+	CurrentStatus      string             `json:"current_status"`
+	CreatedAt          time.Time          `json:"created_at"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
 }
 
 func (q *Queries) GetMonitorByID(ctx context.Context, id uuid.UUID) (GetMonitorByIDRow, error) {
@@ -130,27 +134,29 @@ func (q *Queries) GetMonitorByID(ctx context.Context, id uuid.UUID) (GetMonitorB
 		&i.IsPublic,
 		&i.CurrentStatus,
 		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const listActiveMonitors = `-- name: ListActiveMonitors :many
-SELECT id, user_id, name, type, check_config, interval_seconds, alert_after_failures, is_paused, is_public, current_status, created_at
-FROM monitors WHERE is_paused = FALSE
+SELECT id, user_id, name, type, check_config, interval_seconds, alert_after_failures, is_paused, is_public, current_status, created_at, deleted_at
+FROM monitors WHERE is_paused = FALSE AND deleted_at IS NULL
 `
 
 type ListActiveMonitorsRow struct {
-	ID                 uuid.UUID `json:"id"`
-	UserID             uuid.UUID `json:"user_id"`
-	Name               string    `json:"name"`
-	Type               string    `json:"type"`
-	CheckConfig        []byte    `json:"check_config"`
-	IntervalSeconds    int32     `json:"interval_seconds"`
-	AlertAfterFailures int32     `json:"alert_after_failures"`
-	IsPaused           bool      `json:"is_paused"`
-	IsPublic           bool      `json:"is_public"`
-	CurrentStatus      string    `json:"current_status"`
-	CreatedAt          time.Time `json:"created_at"`
+	ID                 uuid.UUID          `json:"id"`
+	UserID             uuid.UUID          `json:"user_id"`
+	Name               string             `json:"name"`
+	Type               string             `json:"type"`
+	CheckConfig        []byte             `json:"check_config"`
+	IntervalSeconds    int32              `json:"interval_seconds"`
+	AlertAfterFailures int32              `json:"alert_after_failures"`
+	IsPaused           bool               `json:"is_paused"`
+	IsPublic           bool               `json:"is_public"`
+	CurrentStatus      string             `json:"current_status"`
+	CreatedAt          time.Time          `json:"created_at"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
 }
 
 func (q *Queries) ListActiveMonitors(ctx context.Context) ([]ListActiveMonitorsRow, error) {
@@ -174,6 +180,7 @@ func (q *Queries) ListActiveMonitors(ctx context.Context) ([]ListActiveMonitorsR
 			&i.IsPublic,
 			&i.CurrentStatus,
 			&i.CreatedAt,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -186,22 +193,23 @@ func (q *Queries) ListActiveMonitors(ctx context.Context) ([]ListActiveMonitorsR
 }
 
 const listMonitorsByUserID = `-- name: ListMonitorsByUserID :many
-SELECT id, user_id, name, type, check_config, interval_seconds, alert_after_failures, is_paused, is_public, current_status, created_at
-FROM monitors WHERE user_id = $1 ORDER BY created_at
+SELECT id, user_id, name, type, check_config, interval_seconds, alert_after_failures, is_paused, is_public, current_status, created_at, deleted_at
+FROM monitors WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at
 `
 
 type ListMonitorsByUserIDRow struct {
-	ID                 uuid.UUID `json:"id"`
-	UserID             uuid.UUID `json:"user_id"`
-	Name               string    `json:"name"`
-	Type               string    `json:"type"`
-	CheckConfig        []byte    `json:"check_config"`
-	IntervalSeconds    int32     `json:"interval_seconds"`
-	AlertAfterFailures int32     `json:"alert_after_failures"`
-	IsPaused           bool      `json:"is_paused"`
-	IsPublic           bool      `json:"is_public"`
-	CurrentStatus      string    `json:"current_status"`
-	CreatedAt          time.Time `json:"created_at"`
+	ID                 uuid.UUID          `json:"id"`
+	UserID             uuid.UUID          `json:"user_id"`
+	Name               string             `json:"name"`
+	Type               string             `json:"type"`
+	CheckConfig        []byte             `json:"check_config"`
+	IntervalSeconds    int32              `json:"interval_seconds"`
+	AlertAfterFailures int32              `json:"alert_after_failures"`
+	IsPaused           bool               `json:"is_paused"`
+	IsPublic           bool               `json:"is_public"`
+	CurrentStatus      string             `json:"current_status"`
+	CreatedAt          time.Time          `json:"created_at"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
 }
 
 func (q *Queries) ListMonitorsByUserID(ctx context.Context, userID uuid.UUID) ([]ListMonitorsByUserIDRow, error) {
@@ -225,6 +233,7 @@ func (q *Queries) ListMonitorsByUserID(ctx context.Context, userID uuid.UUID) ([
 			&i.IsPublic,
 			&i.CurrentStatus,
 			&i.CreatedAt,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -237,25 +246,26 @@ func (q *Queries) ListMonitorsByUserID(ctx context.Context, userID uuid.UUID) ([
 }
 
 const listPublicMonitorsByUserSlug = `-- name: ListPublicMonitorsByUserSlug :many
-SELECT m.id, m.user_id, m.name, m.type, m.check_config, m.interval_seconds, m.alert_after_failures, m.is_paused, m.is_public, m.current_status, m.created_at
+SELECT m.id, m.user_id, m.name, m.type, m.check_config, m.interval_seconds, m.alert_after_failures, m.is_paused, m.is_public, m.current_status, m.created_at, m.deleted_at
 FROM monitors m
 JOIN users u ON m.user_id = u.id
-WHERE u.slug = $1 AND m.is_public = TRUE
+WHERE u.slug = $1 AND m.is_public = TRUE AND m.deleted_at IS NULL AND u.deleted_at IS NULL
 ORDER BY m.name
 `
 
 type ListPublicMonitorsByUserSlugRow struct {
-	ID                 uuid.UUID `json:"id"`
-	UserID             uuid.UUID `json:"user_id"`
-	Name               string    `json:"name"`
-	Type               string    `json:"type"`
-	CheckConfig        []byte    `json:"check_config"`
-	IntervalSeconds    int32     `json:"interval_seconds"`
-	AlertAfterFailures int32     `json:"alert_after_failures"`
-	IsPaused           bool      `json:"is_paused"`
-	IsPublic           bool      `json:"is_public"`
-	CurrentStatus      string    `json:"current_status"`
-	CreatedAt          time.Time `json:"created_at"`
+	ID                 uuid.UUID          `json:"id"`
+	UserID             uuid.UUID          `json:"user_id"`
+	Name               string             `json:"name"`
+	Type               string             `json:"type"`
+	CheckConfig        []byte             `json:"check_config"`
+	IntervalSeconds    int32              `json:"interval_seconds"`
+	AlertAfterFailures int32              `json:"alert_after_failures"`
+	IsPaused           bool               `json:"is_paused"`
+	IsPublic           bool               `json:"is_public"`
+	CurrentStatus      string             `json:"current_status"`
+	CreatedAt          time.Time          `json:"created_at"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
 }
 
 func (q *Queries) ListPublicMonitorsByUserSlug(ctx context.Context, slug string) ([]ListPublicMonitorsByUserSlugRow, error) {
@@ -279,6 +289,7 @@ func (q *Queries) ListPublicMonitorsByUserSlug(ctx context.Context, slug string)
 			&i.IsPublic,
 			&i.CurrentStatus,
 			&i.CreatedAt,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -293,7 +304,7 @@ func (q *Queries) ListPublicMonitorsByUserSlug(ctx context.Context, slug string)
 const updateMonitor = `-- name: UpdateMonitor :exec
 UPDATE monitors
 SET name = $2, check_config = $3, interval_seconds = $4, alert_after_failures = $5, is_paused = $6, is_public = $7
-WHERE id = $1 AND user_id = $8
+WHERE id = $1 AND user_id = $8 AND deleted_at IS NULL
 `
 
 type UpdateMonitorParams struct {
@@ -322,7 +333,7 @@ func (q *Queries) UpdateMonitor(ctx context.Context, arg UpdateMonitorParams) er
 }
 
 const updateMonitorStatus = `-- name: UpdateMonitorStatus :exec
-UPDATE monitors SET current_status = $2 WHERE id = $1
+UPDATE monitors SET current_status = $2 WHERE id = $1 AND deleted_at IS NULL
 `
 
 type UpdateMonitorStatusParams struct {

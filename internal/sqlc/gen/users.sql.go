@@ -10,12 +10,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, slug, password_hash)
 VALUES ($1, $2, $3)
-RETURNING id, email, slug, password_hash, plan, lemon_squeezy_customer_id, lemon_squeezy_subscription_id, created_at
+RETURNING id, email, slug, password_hash, plan, lemon_squeezy_customer_id, lemon_squeezy_subscription_id, created_at, deleted_at
 `
 
 type CreateUserParams struct {
@@ -25,14 +26,15 @@ type CreateUserParams struct {
 }
 
 type CreateUserRow struct {
-	ID                         uuid.UUID `json:"id"`
-	Email                      string    `json:"email"`
-	Slug                       string    `json:"slug"`
-	PasswordHash               string    `json:"password_hash"`
-	Plan                       string    `json:"plan"`
-	LemonSqueezyCustomerID     *string   `json:"lemon_squeezy_customer_id"`
-	LemonSqueezySubscriptionID *string   `json:"lemon_squeezy_subscription_id"`
-	CreatedAt                  time.Time `json:"created_at"`
+	ID                         uuid.UUID          `json:"id"`
+	Email                      string             `json:"email"`
+	Slug                       string             `json:"slug"`
+	PasswordHash               string             `json:"password_hash"`
+	Plan                       string             `json:"plan"`
+	LemonSqueezyCustomerID     *string            `json:"lemon_squeezy_customer_id"`
+	LemonSqueezySubscriptionID *string            `json:"lemon_squeezy_subscription_id"`
+	CreatedAt                  time.Time          `json:"created_at"`
+	DeletedAt                  pgtype.Timestamptz `json:"deleted_at"`
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
@@ -47,22 +49,24 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 		&i.LemonSqueezyCustomerID,
 		&i.LemonSqueezySubscriptionID,
 		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, slug, password_hash, plan, created_at
-FROM users WHERE email = $1
+SELECT id, email, slug, password_hash, plan, created_at, deleted_at
+FROM users WHERE email = $1 AND deleted_at IS NULL
 `
 
 type GetUserByEmailRow struct {
-	ID           uuid.UUID `json:"id"`
-	Email        string    `json:"email"`
-	Slug         string    `json:"slug"`
-	PasswordHash string    `json:"password_hash"`
-	Plan         string    `json:"plan"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID           uuid.UUID          `json:"id"`
+	Email        string             `json:"email"`
+	Slug         string             `json:"slug"`
+	PasswordHash string             `json:"password_hash"`
+	Plan         string             `json:"plan"`
+	CreatedAt    time.Time          `json:"created_at"`
+	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
 }
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error) {
@@ -75,23 +79,25 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (GetUserByEm
 		&i.PasswordHash,
 		&i.Plan,
 		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, slug, plan, lemon_squeezy_customer_id, lemon_squeezy_subscription_id, created_at
-FROM users WHERE id = $1
+SELECT id, email, slug, plan, lemon_squeezy_customer_id, lemon_squeezy_subscription_id, created_at, deleted_at
+FROM users WHERE id = $1 AND deleted_at IS NULL
 `
 
 type GetUserByIDRow struct {
-	ID                         uuid.UUID `json:"id"`
-	Email                      string    `json:"email"`
-	Slug                       string    `json:"slug"`
-	Plan                       string    `json:"plan"`
-	LemonSqueezyCustomerID     *string   `json:"lemon_squeezy_customer_id"`
-	LemonSqueezySubscriptionID *string   `json:"lemon_squeezy_subscription_id"`
-	CreatedAt                  time.Time `json:"created_at"`
+	ID                         uuid.UUID          `json:"id"`
+	Email                      string             `json:"email"`
+	Slug                       string             `json:"slug"`
+	Plan                       string             `json:"plan"`
+	LemonSqueezyCustomerID     *string            `json:"lemon_squeezy_customer_id"`
+	LemonSqueezySubscriptionID *string            `json:"lemon_squeezy_subscription_id"`
+	CreatedAt                  time.Time          `json:"created_at"`
+	DeletedAt                  pgtype.Timestamptz `json:"deleted_at"`
 }
 
 func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error) {
@@ -105,21 +111,23 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow
 		&i.LemonSqueezyCustomerID,
 		&i.LemonSqueezySubscriptionID,
 		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const getUserBySlug = `-- name: GetUserBySlug :one
-SELECT id, email, slug, plan, created_at
-FROM users WHERE slug = $1
+SELECT id, email, slug, plan, created_at, deleted_at
+FROM users WHERE slug = $1 AND deleted_at IS NULL
 `
 
 type GetUserBySlugRow struct {
-	ID        uuid.UUID `json:"id"`
-	Email     string    `json:"email"`
-	Slug      string    `json:"slug"`
-	Plan      string    `json:"plan"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        uuid.UUID          `json:"id"`
+	Email     string             `json:"email"`
+	Slug      string             `json:"slug"`
+	Plan      string             `json:"plan"`
+	CreatedAt time.Time          `json:"created_at"`
+	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
 }
 
 func (q *Queries) GetUserBySlug(ctx context.Context, slug string) (GetUserBySlugRow, error) {
@@ -131,6 +139,7 @@ func (q *Queries) GetUserBySlug(ctx context.Context, slug string) (GetUserBySlug
 		&i.Slug,
 		&i.Plan,
 		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -138,7 +147,7 @@ func (q *Queries) GetUserBySlug(ctx context.Context, slug string) (GetUserBySlug
 const updateUserLemonSqueezy = `-- name: UpdateUserLemonSqueezy :exec
 UPDATE users
 SET lemon_squeezy_customer_id = $2, lemon_squeezy_subscription_id = $3
-WHERE id = $1
+WHERE id = $1 AND deleted_at IS NULL
 `
 
 type UpdateUserLemonSqueezyParams struct {
@@ -153,7 +162,7 @@ func (q *Queries) UpdateUserLemonSqueezy(ctx context.Context, arg UpdateUserLemo
 }
 
 const updateUserPlan = `-- name: UpdateUserPlan :exec
-UPDATE users SET plan = $2 WHERE id = $1
+UPDATE users SET plan = $2 WHERE id = $1 AND deleted_at IS NULL
 `
 
 type UpdateUserPlanParams struct {

@@ -29,7 +29,7 @@ func (q *Queries) BindChannelToMonitor(ctx context.Context, arg BindChannelToMon
 const createChannel = `-- name: CreateChannel :one
 INSERT INTO notification_channels (user_id, name, type, config)
 VALUES ($1, $2, $3, $4)
-RETURNING id, user_id, name, type, config, is_enabled, created_at
+RETURNING id, user_id, name, type, config, is_enabled, created_at, deleted_at
 `
 
 type CreateChannelParams struct {
@@ -55,12 +55,13 @@ func (q *Queries) CreateChannel(ctx context.Context, arg CreateChannelParams) (N
 		&i.Config,
 		&i.IsEnabled,
 		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const deleteChannel = `-- name: DeleteChannel :exec
-DELETE FROM notification_channels WHERE id = $1 AND user_id = $2
+UPDATE notification_channels SET deleted_at = NOW() WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
 `
 
 type DeleteChannelParams struct {
@@ -74,8 +75,8 @@ func (q *Queries) DeleteChannel(ctx context.Context, arg DeleteChannelParams) er
 }
 
 const getChannelByID = `-- name: GetChannelByID :one
-SELECT id, user_id, name, type, config, is_enabled, created_at
-FROM notification_channels WHERE id = $1
+SELECT id, user_id, name, type, config, is_enabled, created_at, deleted_at
+FROM notification_channels WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetChannelByID(ctx context.Context, id uuid.UUID) (NotificationChannel, error) {
@@ -89,13 +90,14 @@ func (q *Queries) GetChannelByID(ctx context.Context, id uuid.UUID) (Notificatio
 		&i.Config,
 		&i.IsEnabled,
 		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const listChannelsByUserID = `-- name: ListChannelsByUserID :many
-SELECT id, user_id, name, type, config, is_enabled, created_at
-FROM notification_channels WHERE user_id = $1 ORDER BY created_at
+SELECT id, user_id, name, type, config, is_enabled, created_at, deleted_at
+FROM notification_channels WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at
 `
 
 func (q *Queries) ListChannelsByUserID(ctx context.Context, userID uuid.UUID) ([]NotificationChannel, error) {
@@ -115,6 +117,7 @@ func (q *Queries) ListChannelsByUserID(ctx context.Context, userID uuid.UUID) ([
 			&i.Config,
 			&i.IsEnabled,
 			&i.CreatedAt,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -127,10 +130,10 @@ func (q *Queries) ListChannelsByUserID(ctx context.Context, userID uuid.UUID) ([
 }
 
 const listChannelsForMonitor = `-- name: ListChannelsForMonitor :many
-SELECT c.id, c.user_id, c.name, c.type, c.config, c.is_enabled, c.created_at
+SELECT c.id, c.user_id, c.name, c.type, c.config, c.is_enabled, c.created_at, c.deleted_at
 FROM notification_channels c
 JOIN monitor_channels mc ON c.id = mc.channel_id
-WHERE mc.monitor_id = $1
+WHERE mc.monitor_id = $1 AND c.deleted_at IS NULL
 ORDER BY c.name
 `
 
@@ -151,6 +154,7 @@ func (q *Queries) ListChannelsForMonitor(ctx context.Context, monitorID uuid.UUI
 			&i.Config,
 			&i.IsEnabled,
 			&i.CreatedAt,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -179,7 +183,7 @@ func (q *Queries) UnbindChannelFromMonitor(ctx context.Context, arg UnbindChanne
 const updateChannel = `-- name: UpdateChannel :exec
 UPDATE notification_channels
 SET name = $2, config = $3, is_enabled = $4
-WHERE id = $1 AND user_id = $5
+WHERE id = $1 AND user_id = $5 AND deleted_at IS NULL
 `
 
 type UpdateChannelParams struct {
