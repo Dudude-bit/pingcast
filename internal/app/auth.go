@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"time"
 
@@ -90,7 +91,9 @@ func (s *AuthService) ValidateSession(ctx context.Context, sessionID string) (*d
 		return nil, fmt.Errorf("user not found")
 	}
 
-	_ = s.sessions.Touch(ctx, sessionID, time.Now().Add(sessionDuration))
+	if err := s.sessions.Touch(ctx, sessionID, time.Now().Add(sessionDuration)); err != nil {
+		slog.Warn("failed to touch session", "session_id", sessionID, "error", err)
+	}
 
 	return user, nil
 }

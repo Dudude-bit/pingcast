@@ -2,6 +2,7 @@ package httpadapter
 
 import (
 	"encoding/json"
+	"log/slog"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -334,8 +335,10 @@ func (s *Server) domainMonitorToAPI(m *domain.Monitor) apigen.Monitor {
 	alertAfter := m.AlertAfterFailures
 	target := s.monitoring.Registry().Target(m.Type, m.CheckConfig)
 	monType := string(m.Type)
-	var checkConfig map[string]any
-	json.Unmarshal(m.CheckConfig, &checkConfig)
+	checkConfig, err := m.ParseCheckConfig()
+	if err != nil {
+		slog.Error("failed to parse check config", "monitor_id", m.ID, "error", err)
+	}
 	return apigen.Monitor{
 		Id:                 (*openapi_types.UUID)(&m.ID),
 		Name:               &m.Name,
@@ -357,8 +360,10 @@ func (s *Server) domainMonitorToAPIWithUptime(m *domain.Monitor, uptime *float32
 	alertAfter := m.AlertAfterFailures
 	target := s.monitoring.Registry().Target(m.Type, m.CheckConfig)
 	monType := string(m.Type)
-	var checkConfig map[string]any
-	json.Unmarshal(m.CheckConfig, &checkConfig)
+	checkConfig, err := m.ParseCheckConfig()
+	if err != nil {
+		slog.Error("failed to parse check config", "monitor_id", m.ID, "error", err)
+	}
 	return apigen.MonitorWithUptime{
 		Id:                 (*openapi_types.UUID)(&m.ID),
 		Name:               &m.Name,
@@ -381,8 +386,10 @@ func (s *Server) domainMonitorToAPIDetail(m *domain.Monitor, u24h, u7d, u30d flo
 	alertAfter := m.AlertAfterFailures
 	target := s.monitoring.Registry().Target(m.Type, m.CheckConfig)
 	monType := string(m.Type)
-	var checkConfig map[string]any
-	json.Unmarshal(m.CheckConfig, &checkConfig)
+	checkConfig, err := m.ParseCheckConfig()
+	if err != nil {
+		slog.Error("failed to parse check config", "monitor_id", m.ID, "error", err)
+	}
 	u24 := float32(u24h)
 	u7 := float32(u7d)
 	u30 := float32(u30d)
@@ -547,8 +554,10 @@ func (s *Server) UnbindChannel(c *fiber.Ctx, id openapi_types.UUID, channelId op
 
 func domainChannelToAPI(ch *domain.NotificationChannel) apigen.NotificationChannel {
 	typ := string(ch.Type)
-	var config map[string]any
-	json.Unmarshal(ch.Config, &config)
+	config, err := ch.ParseConfig()
+	if err != nil {
+		slog.Error("failed to parse channel config", "channel_id", ch.ID, "error", err)
+	}
 	return apigen.NotificationChannel{
 		Id:        (*openapi_types.UUID)(&ch.ID),
 		Name:      &ch.Name,

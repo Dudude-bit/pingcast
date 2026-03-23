@@ -2,6 +2,7 @@ package domain
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -43,6 +44,18 @@ type Monitor struct {
 	IsPublic           bool
 	CurrentStatus      MonitorStatus
 	CreatedAt          time.Time
+}
+
+// ParseCheckConfig unmarshals CheckConfig into a map. Returns error instead of silently returning nil.
+func (m *Monitor) ParseCheckConfig() (map[string]any, error) {
+	if len(m.CheckConfig) == 0 {
+		return nil, nil
+	}
+	var config map[string]any
+	if err := json.Unmarshal(m.CheckConfig, &config); err != nil {
+		return nil, fmt.Errorf("parse check config for monitor %s: %w", m.ID, err)
+	}
+	return config, nil
 }
 
 type CheckResult struct {

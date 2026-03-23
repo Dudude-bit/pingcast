@@ -25,14 +25,32 @@ func (s *AlertService) Registry() port.ChannelRegistry {
 	return s.registry
 }
 
-// Handle delivers an alert to all relevant channels (best-effort).
+// Handle delivers an alert to all relevant channels with per-channel error tracking.
+//
+// Error semantics:
+//   - Channel list query fails → return error → NATS Nak → retry
+//   - ALL channels fail → return error → NATS Nak → retry entire event
+//   - SOME channels fail → return nil (Ack) → failed channels logged for DLQ (P4.4)
+//   - All succeed → return nil (Ack)
 func (s *AlertService) Handle(ctx context.Context, event *domain.AlertEvent) error {
-	channels, _ := s.channels.ListForMonitor(ctx, event.MonitorID)
-
-	if len(channels) == 0 {
-		channels, _ = s.channels.ListByUserID(ctx, event.UserID)
+	channels, err := s.channels.ListForMonitor(ctx, event.MonitorID)
+	if err != nil {
+		return fmt.Errorf("list channels for monitor %s: %w", event.MonitorID, err)
 	}
 
+	if len(channels) == 0 {
+		channels, err = s.channels.ListByUserID(ctx, event.UserID)
+		if err != nil {
+			return fmt.Errorf("list channels for user %s: %w", event.UserID, err)
+		}
+	}
+
+	if len(channels) == 0 {
+		slog.Warn("no channels configured for alert", "monitor_id", event.MonitorID, "user_id", event.UserID)
+		return nil
+	}
+
+	var sent, failed int
 	for _, ch := range channels {
 		if !ch.IsEnabled {
 			continue
@@ -40,17 +58,37 @@ func (s *AlertService) Handle(ctx context.Context, event *domain.AlertEvent) err
 		factory, err := s.registry.Get(ch.Type)
 		if err != nil {
 			slog.Error("unknown channel type", "type", ch.Type, "channel_id", ch.ID)
+			failed++
 			continue
 		}
 		sender, err := factory.CreateSender(ch.Config)
 		if err != nil {
 			slog.Error("failed to create sender", "channel_id", ch.ID, "error", err)
+			failed++
 			continue
 		}
 		if err := sender.Send(ctx, event); err != nil {
 			slog.Error("channel delivery failed", "channel_id", ch.ID, "type", ch.Type, "error", err)
+			failed++
+			continue
 		}
+		sent++
 	}
+
+	// All channels failed → return error so NATS retries the entire event
+	if sent == 0 && failed > 0 {
+		return fmt.Errorf("all %d channels failed for monitor %s", failed, event.MonitorID)
+	}
+
+	// Partial failure → Ack (avoid re-sending to successful channels), log for visibility
+	if failed > 0 {
+		slog.Error("partial alert delivery failure",
+			"monitor_id", event.MonitorID,
+			"sent", sent,
+			"failed", failed,
+		)
+	}
+
 	return nil
 }
 

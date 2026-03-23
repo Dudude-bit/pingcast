@@ -93,7 +93,11 @@ func main() {
 	})
 
 	// Load existing monitors from DB
-	activeMonitors, _ := monitorRepo.ListActive(ctx)
+	activeMonitors, err := monitorRepo.ListActive(ctx)
+	if err != nil {
+		slog.Error("failed to load active monitors", "error", err)
+		os.Exit(1)
+	}
 	for i := range activeMonitors {
 		scheduler.Add(&activeMonitors[i])
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -268,7 +269,10 @@ func (s *MonitoringService) ListMonitorsWithUptime(ctx context.Context, userID u
 
 	result := make([]MonitorWithUptime, 0, len(monitors))
 	for _, m := range monitors {
-		uptime, _ := s.checkResults.GetUptime(ctx, m.ID, time.Now().Add(-24*time.Hour))
+		uptime, err := s.checkResults.GetUptime(ctx, m.ID, time.Now().Add(-24*time.Hour))
+		if err != nil {
+			slog.Error("failed to get uptime", "monitor_id", m.ID, "error", err)
+		}
 		result = append(result, MonitorWithUptime{Monitor: m, Uptime: uptime})
 	}
 	return result, nil
@@ -289,11 +293,23 @@ func (s *MonitoringService) GetMonitorDetail(ctx context.Context, monitorID uuid
 	}
 
 	now := time.Now()
-	u24, _ := s.checkResults.GetUptime(ctx, monitorID, now.Add(-24*time.Hour))
-	u7, _ := s.checkResults.GetUptime(ctx, monitorID, now.Add(-7*24*time.Hour))
-	u30, _ := s.checkResults.GetUptime(ctx, monitorID, now.Add(-30*24*time.Hour))
+	u24, err := s.checkResults.GetUptime(ctx, monitorID, now.Add(-24*time.Hour))
+	if err != nil {
+		slog.Error("failed to get 24h uptime", "monitor_id", monitorID, "error", err)
+	}
+	u7, err := s.checkResults.GetUptime(ctx, monitorID, now.Add(-7*24*time.Hour))
+	if err != nil {
+		slog.Error("failed to get 7d uptime", "monitor_id", monitorID, "error", err)
+	}
+	u30, err := s.checkResults.GetUptime(ctx, monitorID, now.Add(-30*24*time.Hour))
+	if err != nil {
+		slog.Error("failed to get 30d uptime", "monitor_id", monitorID, "error", err)
+	}
 
-	incidents, _ := s.incidents.ListByMonitorID(ctx, monitorID, 10)
+	incidents, err := s.incidents.ListByMonitorID(ctx, monitorID, 10)
+	if err != nil {
+		slog.Error("failed to list incidents", "monitor_id", monitorID, "error", err)
+	}
 
 	return &MonitorDetail{
 		Monitor:   *mon,
@@ -334,7 +350,10 @@ func (s *MonitoringService) GetStatusPage(ctx context.Context, slug string) (*St
 	var incidents []domain.Incident
 
 	for _, m := range monitors {
-		uptime, _ := s.checkResults.GetUptime(ctx, m.ID, time.Now().Add(-90*24*time.Hour))
+		uptime, err := s.checkResults.GetUptime(ctx, m.ID, time.Now().Add(-90*24*time.Hour))
+		if err != nil {
+			slog.Error("failed to get 90d uptime", "monitor_id", m.ID, "error", err)
+		}
 		if m.CurrentStatus != domain.StatusUp {
 			allUp = false
 		}
@@ -344,7 +363,10 @@ func (s *MonitoringService) GetStatusPage(ctx context.Context, slug string) (*St
 			Uptime90d:     uptime,
 		})
 
-		monIncidents, _ := s.incidents.ListByMonitorID(ctx, m.ID, 5)
+		monIncidents, err := s.incidents.ListByMonitorID(ctx, m.ID, 5)
+		if err != nil {
+			slog.Error("failed to list incidents for status page", "monitor_id", m.ID, "error", err)
+		}
 		incidents = append(incidents, monIncidents...)
 	}
 
