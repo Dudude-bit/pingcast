@@ -38,7 +38,30 @@ Full codebase audit of PingCast revealed ~55 issues across security, error handl
 
 **Problem:** HTML form submissions (login, register, monitor/channel CRUD) protected only by session cookies. No CSRF tokens. `SameSite: Lax` partially mitigates but not fully.
 
-**Fix:** Add Fiber CSRF middleware for all POST/PUT/DELETE form submissions. CSRF token rendered in all HTML forms via `<input type="hidden">`. API JSON endpoints exempt (use Authorization header, not cookies).
+**Fix:** Add Fiber CSRF middleware for all POST/PUT/DELETE form submissions. CSRF token rendered in all HTML forms via `<input type="hidden">`. API JSON endpoints authenticated via API keys (see P0.7) are exempt from CSRF.
+
+### 0.6 Sensitive Data Encryption at Rest
+
+**Problem:** `CheckConfig` JSONB may contain webhook URLs with tokens, custom headers with API keys, SMTP credentials. Stored plain text in Postgres.
+
+**Fix:**
+- Encrypt sensitive fields in `CheckConfig` and `channels.config` before writing to DB using AES-256-GCM.
+- Encryption key from env var `ENCRYPTION_KEY` (32-byte base64-encoded).
+- Domain layer: `EncryptConfig(plaintext []byte) ([]byte, error)`, `DecryptConfig(ciphertext []byte) ([]byte, error)`.
+- Only sensitive fields encrypted (not the entire JSONB) — allows Postgres to still index/query non-sensitive fields.
+- Key rotation: support `ENCRYPTION_KEY_OLD` for decryption during migration to new key.
+
+### 0.7 API Keys for JSON API
+
+**Problem:** JSON API uses session cookies for auth. External integrations (CI/CD, mobile apps, third-party dashboards) cannot use cookie-based auth. No programmatic access.
+
+**Fix:**
+- New table: `api_keys(id UUID, user_id UUID, key_hash TEXT, name TEXT, scopes TEXT[], created_at, last_used_at, expires_at)`
+- Key format: `pc_live_<random 32 bytes base64>` — prefix for easy identification in logs/scanners
+- Auth middleware: `Authorization: Bearer <key>` → hash key → lookup in DB → set user context
+- Scopes: `monitors:read`, `monitors:write`, `channels:read`, `channels:write` — least privilege
+- UI: API key management page (create, list, revoke)
+- Rate limiting: per API key, same limits as per-user (P0.3)
 
 ### 0.3 Rate Limiter — Redis-Based
 
@@ -128,7 +151,19 @@ Dashboard shows 0% uptime instead of error when queries fail.
 - URL/Host: format validation per monitor type
 - Email: format validation on user registration (prevents silent notification failures)
 
-### 2.4 Missing Database Indexes (migration `009_add_missing_indexes.sql`)
+### 2.4 Row-Level Security (RLS) for Multi-Tenancy
+
+**Problem:** All queries filter by `user_id` in app layer. A single bug (forgotten WHERE, bad JOIN) leaks data across users. For SaaS this is critical.
+
+**Fix:** PostgreSQL RLS as defense-in-depth:
+- Enable RLS on `monitors`, `channels`, `incidents`, `check_results` tables
+- Policy: `USING (user_id = current_setting('app.current_user_id')::uuid)`
+- At the start of each DB transaction: `SET LOCAL app.current_user_id = '<user_id>'`
+- Wrapper in repository layer: `WithUserScope(ctx, tx, userID)` sets the session variable
+- RLS does NOT replace app-layer filtering — it's a safety net. App queries still include `WHERE user_id = $1` for clarity and index usage.
+- Admin/system queries (scheduler, cleanup) use a role that bypasses RLS.
+
+### 2.5 Missing Database Indexes (migration `009_add_missing_indexes.sql`)
 
 ```sql
 CREATE INDEX idx_check_results_monitor_created ON check_results (monitor_id, created_at DESC);
@@ -141,7 +176,21 @@ CREATE INDEX idx_monitor_channels_channel ON monitor_channels (channel_id);
 
 Note: verify all sqlc queries in `internal/sqlc/queries/check_results.sql` to ensure proposed indexes cover all access patterns.
 
-### 2.5 Soft Delete
+### 2.6 check_results Table Partitioning
+
+**Problem:** At 1000 monitors × 1 check/min = 43M rows/month. With 90-day retention = ~130M rows. `DELETE FROM check_results WHERE created_at < X` is a heavy operation that locks rows and generates dead tuples requiring VACUUM.
+
+**Fix:** Native Postgres time-based partitioning:
+- `check_results` becomes a partitioned table: `PARTITION BY RANGE (created_at)`
+- Monthly partitions: `check_results_2026_03`, `check_results_2026_04`, etc.
+- Retention cleanup: `DROP TABLE check_results_2026_01` — instant, no locks, no VACUUM
+- Scheduled job creates next month's partition in advance (avoid runtime partition creation)
+- Existing indexes are per-partition (Postgres handles this automatically)
+- Migration: recreate `check_results` as partitioned table, migrate existing data
+
+Same approach for `incidents` if volume warrants it (likely much lower volume — partition only if needed).
+
+### 2.7 Soft Delete
 
 **Problem:** Hard delete loses data permanently. No recovery, no audit trail.
 
@@ -153,7 +202,7 @@ Note: verify all sqlc queries in `internal/sqlc/queries/check_results.sql` to en
 - `check_results`, `incidents`, `sessions` — remain hard delete (ephemeral data, handled by retention policy)
 - Physical cleanup: records with `deleted_at > 30 days` purged by scheduled job with Redis distributed lock
 
-### 2.6 Cascade Verification
+### 2.8 Cascade Verification
 
 With soft delete, DB-level `ON DELETE CASCADE` becomes dead code (soft delete is UPDATE, not DELETE). Cascade chain:
 
@@ -168,7 +217,7 @@ With soft delete, DB-level `ON DELETE CASCADE` becomes dead code (soft delete is
 
 **Existing FK constraints:** verify they exist in migration 008. Add where missing.
 
-### 2.7 Sessions → Redis
+### 2.9 Sessions → Redis
 
 **Problem:** Sessions in Postgres = DB query on every HTTP request. Doesn't scale with replicas.
 
@@ -181,7 +230,7 @@ With soft delete, DB-level `ON DELETE CASCADE` becomes dead code (soft delete is
 
 This avoids a scenario where the migration runs but Redis is misconfigured, breaking all authentication with no rollback.
 
-### 2.8 Distributed Lock for Cleanup
+### 2.10 Distributed Lock for Cleanup
 
 Soft delete cleanup + data retention cleanup: use Redis `SET NX EX` lock. One process runs cleanup, others skip.
 
@@ -193,7 +242,9 @@ Soft delete cleanup + data retention cleanup: use Redis `SET NX EX` lock. One pr
 
 **Problem:** N+1 queries in `GetMonitorDetail` — per-monitor uptime queries for 24h, 7d, 30d + incidents list.
 
-**Fix:** `GetUptimeBatch(ctx, monitorIDs, []Duration)` — single SQL with `GROUP BY monitor_id`, window functions for multi-period uptime calculation.
+**Fix:** `GetUptimeBatch(ctx, monitorIDs, []Duration)` — single SQL with `GROUP BY monitor_id`, multi-period uptime calculation.
+
+**Important:** after P3.2 (uptime aggregation table) is implemented, this batch query must read from `monitor_uptime_hourly`, NOT from raw `check_results`. Implementation order: P3.2 first (create aggregation table), then P3.1 (batch query reads from aggregates).
 
 ### 3.2 Uptime Aggregation Table
 
@@ -265,7 +316,7 @@ At scale (many replicas), add PgBouncer as connection pooler between services an
 
 **Fix:**
 - NATS consumer with `MaxDeliver: 10` — finite retry limit (currently unlimited by default)
-- On max delivery exhaustion: NATS publishes advisory to `$JS.EVENT.ADVISORY.CONSUMER.MAX_DELIVERIES.*`
+- On max delivery exhaustion: NATS publishes advisory to `$JS.EVENT.ADVISORY.CONSUMER.MAX_DELIVERIES.>` (multi-level wildcard — subject has two trailing tokens: `<stream>.<consumer>`)
 - Dedicated DLQ consumer listens to advisories, writes failed events to `failed_alerts(id, event, error, failed_channel_ids, attempts, created_at)` table
 - `failed_channel_ids` supports per-channel retry (see P1.1 partial failure strategy)
 - UI: "3 alerts failed to deliver" with retry button (retries only failed channels)
@@ -330,26 +381,34 @@ Exported via OTel metrics exporter (single SDK for traces + metrics):
 - **Infrastructure:** `redis_pool_active_connections`, `nats_pending_messages`, `pg_pool_active_connections`
 - Endpoint: `GET /metrics` on separate internal port (`:9090`), not exposed publicly. Prometheus scrapes internal port. Kubernetes service with `clusterIP: None` for service discovery.
 
-### 5.3 Grafana + Loki + Tempo (Dev Stack)
+### 5.3 OTel Collector
+
+Services do NOT export directly to Tempo/Prometheus. All telemetry goes through OTel Collector:
+- Services → OTel Collector (OTLP gRPC) → Tempo (traces), Prometheus (metrics)
+- Benefits: sampling, filtering, batching at collector level. Retry on backend unavailability. Switch backends (Tempo → Jaeger) without code changes.
+- Add to docker-compose as a service.
+
+### 5.4 Grafana + Loki + Tempo (Dev Stack)
 
 Add to `docker-compose.yml`:
 - **Grafana** — dashboards, alerts
 - **Loki** — centralized logs from all replicas via Docker log driver
-- **Tempo** — distributed traces
+- **Tempo** — distributed traces (receives from OTel Collector)
+- **OTel Collector** — telemetry pipeline
 
 Trace ID auto-linked between logs and traces in Grafana.
 
-### 5.4 Structured Logging via OTel
+### 5.5 Structured Logging via OTel
 
 `slog` handler enriches every log entry with `trace_id`, `span_id`. In Grafana: click log → jump to trace → see full request path across services.
 
-### 5.5 Health/Readiness Endpoints
+### 5.6 Health/Readiness Endpoints
 
 - `GET /healthz` — Postgres ping, Redis ping, NATS connection status
 - `GET /readyz` — service ready to accept traffic
 - Kubernetes-ready for liveness/readiness probes
 
-### 5.6 Query Logging
+### 5.7 Query Logging
 
 pgxpool OTel tracer — every SQL query as a span in trace. Slow queries (>100ms) logged as `slog.Warn` with query text and duration.
 
@@ -472,6 +531,7 @@ Alert event data interpolated into Markdown without escaping. Monitor names with
 | Service | Purpose |
 |---------|---------|
 | Redis | Rate limiting, sessions, distributed locks, host limiter |
+| OTel Collector | Telemetry pipeline — receives traces/metrics from services, exports to backends |
 | Grafana | Dashboards, alerting |
 | Loki | Centralized log aggregation |
 | Tempo | Distributed trace storage |
@@ -490,10 +550,13 @@ Alert event data interpolated into Markdown without escaping. Monitor names with
 | Migration | Changes |
 |-----------|---------|
 | `009_add_missing_indexes.sql` | Indexes on check_results, incidents, sessions, monitor_channels |
-| `010_add_soft_delete.sql` | `deleted_at` column + partial indexes on users, monitors, channels |
-| `011_create_uptime_hourly.sql` | `monitor_uptime_hourly` aggregation table |
-| `012_create_failed_alerts.sql` | DLQ table for failed alert deliveries |
-| `013_drop_sessions_table.sql` | Remove sessions from Postgres (moved to Redis). Apply only after Redis is verified stable — see P2.7 migration strategy. |
+| `010_enable_rls.sql` | Row-Level Security policies on monitors, channels, incidents, check_results |
+| `011_partition_check_results.sql` | Convert check_results to time-based partitioned table (monthly) |
+| `012_add_soft_delete.sql` | `deleted_at` column + partial indexes on users, monitors, channels |
+| `013_create_uptime_hourly.sql` | `monitor_uptime_hourly` aggregation table |
+| `014_create_failed_alerts.sql` | DLQ table for failed alert deliveries |
+| `015_create_api_keys.sql` | API keys table for programmatic access |
+| `016_drop_sessions_table.sql` | Remove sessions from Postgres (moved to Redis). Apply only after Redis verified stable — see P2.9. |
 
 ### Architectural Changes
 
@@ -501,3 +564,8 @@ Alert event data interpolated into Markdown without escaping. Monitor names with
 - Sessions: Postgres → Redis
 - Rate limiting: in-memory → Redis sliding window
 - Host limiting: in-memory semaphore map → Redis semaphore
+- Auth: session cookies + API keys (dual auth strategy)
+- Multi-tenancy: RLS as defense-in-depth
+- check_results: flat table → time-partitioned
+- Sensitive config: plain text → AES-256-GCM encrypted
+- Telemetry: services → OTel Collector → backends
