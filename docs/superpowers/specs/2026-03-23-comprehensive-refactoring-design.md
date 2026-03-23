@@ -30,11 +30,19 @@ Full codebase audit of PingCast revealed ~55 issues across security, error handl
 
 **Problem:** `cmd/api/main.go` registers Telegram and SMTP channel factories with empty credentials. They fail at runtime when attempting to send.
 
-**Fix:** Register channels only if credentials are provided (matching the pattern already used in `cmd/notifier/main.go`). Log warning at startup for each disabled channel type. Validate that at least one notification channel is active in notifier.
+**Fix:** Split channel registry into two concerns:
+- **API registry** (schema + validation): always registers all channel types with validation-only factories. Used for `ValidateConfig` and `ConfigSchema` in channel CRUD. No credentials needed.
+- **Notifier registry** (sending): registers only channels with valid credentials (matching existing pattern in `cmd/notifier/main.go`). Log warning at startup for each disabled channel type. Validate that at least one notification channel is active.
+
+### 0.5 CSRF Protection
+
+**Problem:** HTML form submissions (login, register, monitor/channel CRUD) protected only by session cookies. No CSRF tokens. `SameSite: Lax` partially mitigates but not fully.
+
+**Fix:** Add Fiber CSRF middleware for all POST/PUT/DELETE form submissions. CSRF token rendered in all HTML forms via `<input type="hidden">`. API JSON endpoints exempt (use Authorization header, not cookies).
 
 ### 0.3 Rate Limiter — Redis-Based
 
-**Problem:** Current in-memory rate limiter has TOCTOU race condition and doesn't work across replicas.
+**Problem:** Current in-memory rate limiter is per-process only (doesn't work across replicas) and has unbounded memory growth (`attempts` map never cleaned — old entries accumulate until process restart).
 
 **Fix:** Replace with Redis sliding window counter.
 - **Login/register:** 5 requests / 15 minutes per IP
@@ -55,11 +63,19 @@ Full codebase audit of PingCast revealed ~55 issues across security, error handl
 
 **Principle:** No `_` for errors anywhere. Either `return error` or `slog.Warn/Error` with context. Enforce via `errcheck` linter in CI.
 
-### 1.1 Alert Handler (`internal/app/alert.go:30-33`)
+### 1.1 Alert Handler (`internal/app/alert.go`) — Full Error Semantics
 
-`ListForMonitor()` and `ListByUserID()` errors silently ignored. If DB is down, alerts silently don't send.
+**Problems:**
+1. `ListForMonitor()` and `ListByUserID()` errors silently ignored (lines 30-33). If DB is down, alerts silently don't send.
+2. `Handle()` returns `nil` unconditionally — even when channel delivery fails (lines 50-51). NATS Acks the message even though delivery failed for some channels.
+3. Partial failure undefined: 3 channels, 1 fails — what happens?
 
-**Fix:** Return error. NATS subscriber will Nak and retry.
+**Fix — Partial failure strategy:**
+- Track per-channel delivery state within `Handle()`: `sent []ChannelID`, `failed []ChannelID`
+- If ALL channels fail → return error → NATS Nak → retry entire event
+- If SOME channels fail → Ack the NATS message (avoid re-sending to successful channels), write failed deliveries to `failed_alerts` table (P4.4 DLQ) with the specific failed channel IDs for targeted retry
+- If channel list query fails → return error → NATS Nak → retry
+- Cross-reference: P4.4 DLQ must support per-channel retry, not just per-event retry
 
 ### 1.2 Session Touch (`internal/app/auth.go:93`)
 
@@ -71,7 +87,7 @@ Full codebase audit of PingCast revealed ~55 issues across security, error handl
 
 `json.Unmarshal(m.CheckConfig, &checkConfig)` error ignored in 4 places. Corrupted config returns null to API.
 
-**Fix:** Extract to `Monitor.ParseCheckConfig() (map[string]any, error)` on domain model. Return 500 on failure.
+**Fix:** Extract to `Monitor.ParseCheckConfig() (map[string]any, error)` and `NotificationChannel.ParseConfig() (map[string]any, error)` on domain models. Return 500 on failure. Line 547 is channel config (different pattern) — gets its own method.
 
 ### 1.4 GetUptime / ListByMonitorID (`internal/app/monitoring.go:271, 292-293`)
 
@@ -110,16 +126,20 @@ Dashboard shows 0% uptime instead of error when queries fail.
 - AlertAfterFailures: 1–100
 - Name: 1–255 chars, trimmed
 - URL/Host: format validation per monitor type
+- Email: format validation on user registration (prevents silent notification failures)
 
 ### 2.4 Missing Database Indexes (migration `009_add_missing_indexes.sql`)
 
 ```sql
 CREATE INDEX idx_check_results_monitor_created ON check_results (monitor_id, created_at DESC);
+CREATE INDEX idx_check_results_monitor_status ON check_results (monitor_id, status); -- for ConsecutiveFailures query
 CREATE INDEX idx_incidents_monitor_started ON incidents (monitor_id, started_at DESC);
 CREATE INDEX idx_sessions_expires_at ON sessions (expires_at);
 CREATE INDEX idx_monitor_channels_monitor ON monitor_channels (monitor_id);
 CREATE INDEX idx_monitor_channels_channel ON monitor_channels (channel_id);
 ```
+
+Note: verify all sqlc queries in `internal/sqlc/queries/check_results.sql` to ensure proposed indexes cover all access patterns.
 
 ### 2.5 Soft Delete
 
@@ -135,15 +155,31 @@ CREATE INDEX idx_monitor_channels_channel ON monitor_channels (channel_id);
 
 ### 2.6 Cascade Verification
 
-Verify `ON DELETE CASCADE` on all foreign keys. With soft delete, cascading behavior changes:
-- Soft-deleting a user → soft-deletes their monitors → soft-deletes channel bindings
-- Application-level cascade, not DB-level (since soft delete is an UPDATE, not DELETE)
+With soft delete, DB-level `ON DELETE CASCADE` becomes dead code (soft delete is UPDATE, not DELETE). Cascade chain:
+
+**Application-level cascade (single transaction):**
+1. Soft-delete user → `UPDATE users SET deleted_at = NOW() WHERE id = $1`
+2. Within same tx: `UPDATE monitors SET deleted_at = NOW() WHERE user_id = $1 AND deleted_at IS NULL`
+3. Within same tx: `DELETE FROM monitor_channels WHERE monitor_id IN (soft-deleted monitor IDs)`
+
+**Junction table (`monitor_channels`):** hard delete, not soft delete. It's a relationship table — when the parent is soft-deleted, the binding is removed. On restore, channels are re-bound explicitly.
+
+**DB-level `ON DELETE CASCADE`:** keep as safety net for the 30-day physical cleanup job (which does real DELETEs). The cascade ensures orphaned rows are cleaned up when hard-deleting expired soft-deleted records.
+
+**Existing FK constraints:** verify they exist in migration 008. Add where missing.
 
 ### 2.7 Sessions → Redis
 
 **Problem:** Sessions in Postgres = DB query on every HTTP request. Doesn't scale with replicas.
 
-**Fix:** Move sessions to Redis with TTL. Remove `sessions` table from Postgres. Session lookup becomes O(1) Redis GET. Auto-expiry via Redis TTL replaces manual cleanup.
+**Fix:** Move sessions to Redis with TTL. Session lookup becomes O(1) Redis GET. Auto-expiry via Redis TTL replaces manual cleanup.
+
+**Migration strategy (avoid hard dependency on Redis availability):**
+1. Deploy with dual-write: session created in both Postgres and Redis. Lookup reads from Redis, falls back to Postgres.
+2. Verify Redis is stable in production.
+3. Apply migration `013_drop_sessions_table.sql` to remove Postgres table.
+
+This avoids a scenario where the migration runs but Redis is misconfigured, breaking all authentication with no rollback.
 
 ### 2.8 Distributed Lock for Cleanup
 
@@ -169,7 +205,15 @@ Soft delete cleanup + data retention cleanup: use Redis `SET NX EX` lock. One pr
 
 **Problem:** pgxpool defaults (4 conns) vs 100 worker pool size.
 
-**Fix:** `MaxConns` from config. Default = `max(4, numCPU * 2)`. Checker gets separate pool size config tied to worker count.
+**Fix:** `MaxConns` from config. Default = `max(4, numCPU * 2)` per service.
+
+**Important:** formula is per-service. With 3 services × N replicas, total connections = `3 * N * MaxConns`. Must not exceed Postgres `max_connections` (default 100). Document the connection budget:
+- API: 10 conns × R replicas
+- Checker: 15 conns × R replicas
+- Notifier: 5 conns × R replicas
+- Overhead: 10 reserved for migrations, admin
+
+At scale (many replicas), add PgBouncer as connection pooler between services and Postgres.
 
 ### 3.4 Host Limiter — Redis Semaphore
 
@@ -220,9 +264,11 @@ Soft delete cleanup + data retention cleanup: use Redis `SET NX EX` lock. One pr
 **Problem:** After NATS retries exhausted, messages lost forever. No visibility.
 
 **Fix:**
-- NATS consumer with `MaxDeliver` + DLQ stream
-- Failed alerts saved to `failed_alerts(id, event, error, attempts, created_at)` table
-- UI: "3 alerts failed to deliver" with retry button
+- NATS consumer with `MaxDeliver: 10` — finite retry limit (currently unlimited by default)
+- On max delivery exhaustion: NATS publishes advisory to `$JS.EVENT.ADVISORY.CONSUMER.MAX_DELIVERIES.*`
+- Dedicated DLQ consumer listens to advisories, writes failed events to `failed_alerts(id, event, error, failed_channel_ids, attempts, created_at)` table
+- `failed_channel_ids` supports per-channel retry (see P1.1 partial failure strategy)
+- UI: "3 alerts failed to deliver" with retry button (retries only failed channels)
 - Metric: `alerts_dead_lettered_total`
 
 ### 4.5 NATS Streams Retention
@@ -231,26 +277,34 @@ Soft delete cleanup + data retention cleanup: use Redis `SET NX EX` lock. One pr
 
 **Fix:** Increase to 72h. With DLQ this is less critical but provides buffer.
 
-### 4.6 Scheduler Overload Awareness
+### 4.6 Checker Scaling — NATS Work Queue Architecture
 
-**Problem:** Scheduler blindly dispatches even when worker pool is overwhelmed.
-
-**Fix:** Scheduler receives queue depth feedback from worker pool. If queue > 80% — skip tick, log warning. Metric `scheduler_skipped_ticks_total`.
-
-### 4.7 Checker Scaling — NATS Work Queue Architecture
-
-**Problem:** Each checker replica loads ALL monitors and checks them all. 3 replicas = 3x duplicate checks. Not scalable.
+**Problem:** Each checker replica loads ALL monitors and checks them all. 3 replicas = 3x duplicate checks. Not scalable. Additionally, P3.4 (host limiter) and P3.5 (backpressure) need to work within this new architecture.
 
 **Fix:** Separate scheduling from checking:
 
 - **Scheduler**: single leader-elected process (Redis lock with TTL). Publishes `check.run.{monitor_id}` events to NATS stream at configured intervals.
-- **Checker workers**: stateless consumers from NATS consumer group. Pick up tasks, execute checks, write results.
+- **Checker workers**: stateless consumers from NATS consumer group using **pull-based consumption** (`Fetch`/`FetchNoWait`). Workers pull messages only when they have capacity — natural backpressure.
+
+**Pull-based consumption model (reconciles P3.4 + P3.5):**
+1. Worker has a local concurrency limit (e.g., 50 goroutines via semaphore)
+2. Worker calls `Fetch(batch)` only when semaphore has free slots — pulls exactly as many messages as it can handle
+3. For each message: check Redis host semaphore (P3.4). If host limit reached → Nak with delay (NATS redelivers later to any worker). If available → acquire semaphore, run check, release.
+4. If Redis host semaphore is full, Nak with configurable delay (e.g., 5s) — avoids redelivery storms. NATS distributes the message to another worker or redelivers after delay.
+5. Metric `checks_host_limited_total` tracks how often host limiting kicks in.
+
+**Leader election — fencing against stale leaders:**
+- Scheduler acquires Redis lock with TTL (e.g., 30s)
+- Before each scheduling tick: refresh the lock. If refresh fails → scheduler stops itself immediately.
+- Other instances attempt to acquire the lock every 10s. On success → become new leader.
+- Prevents split-brain: stale leader (GC pause, CPU starvation) detects lost lock on next tick and stops.
 
 **Benefits:**
 - Replica dies → pending checks auto-redelivered by NATS
 - Scale → add checker instances, NATS balances load
 - Zero per-replica config — all instances identical
-- Scheduler leader dies → another instance acquires Redis lock within seconds
+- Natural backpressure: workers only pull what they can handle
+- Host limiting works across replicas via Redis
 - Clean separation: scheduling ≠ checking
 
 **Load:** 1000 monitors × 1 check/min = ~17 msg/sec — trivial for NATS.
@@ -274,7 +328,7 @@ Exported via OTel metrics exporter (single SDK for traces + metrics):
 - **Alerts:** `alerts_sent_total` (by channel type, status), `alerts_failed_total`, `alerts_dead_lettered_total`
 - **Business:** `monitors_active_total`, `incidents_open_total`
 - **Infrastructure:** `redis_pool_active_connections`, `nats_pending_messages`, `pg_pool_active_connections`
-- Endpoint: `GET /metrics`
+- Endpoint: `GET /metrics` on separate internal port (`:9090`), not exposed publicly. Prometheus scrapes internal port. Kubernetes service with `clusterIP: None` for service discovery.
 
 ### 5.3 Grafana + Loki + Tempo (Dev Stack)
 
@@ -349,9 +403,13 @@ OpenAPI spec as source of truth. Tests validate that actual handler responses ma
 
 ### 7.1 Deduplicate JSON Unmarshal
 
-4+ identical `json.Unmarshal(m.CheckConfig, &checkConfig)` calls with ignored errors.
+4+ identical `json.Unmarshal` calls with ignored errors: 3 for monitor `CheckConfig` (lines 334, 357, 381 in server.go) and 1 for channel `Config` (line 547).
 
-**Fix:** `Monitor.ParseCheckConfig() (map[string]any, error)` method on domain model. Single source of truth.
+**Fix:** Two domain methods:
+- `Monitor.ParseCheckConfig() (map[string]any, error)` — for monitor config
+- `NotificationChannel.ParseConfig() (map[string]any, error)` — for channel config
+
+Single source of truth per domain type.
 
 ### 7.2 Deduplicate Enum Validation
 
@@ -435,7 +493,7 @@ Alert event data interpolated into Markdown without escaping. Monitor names with
 | `010_add_soft_delete.sql` | `deleted_at` column + partial indexes on users, monitors, channels |
 | `011_create_uptime_hourly.sql` | `monitor_uptime_hourly` aggregation table |
 | `012_create_failed_alerts.sql` | DLQ table for failed alert deliveries |
-| `013_drop_sessions_table.sql` | Remove sessions from Postgres (moved to Redis) |
+| `013_drop_sessions_table.sql` | Remove sessions from Postgres (moved to Redis). Apply only after Redis is verified stable — see P2.7 migration strategy. |
 
 ### Architectural Changes
 
