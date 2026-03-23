@@ -16,7 +16,7 @@ Preventive reliability audit of PingCast identified 28 issues across 4 component
 
 **Problem:** `PublishMonitorChanged()` errors are ignored in `server.go`. User gets 200, but checker never learns about the monitor.
 
-**Fix:** If Publish fails, return HTTP 500 with message `"monitor saved but sync failed, retry later"`. The DB write has already succeeded, so the monitor exists but isn't being checked until the next sync.
+**Fix:** If Publish fails, return HTTP 500 with message `"monitor saved but sync failed, retry later"`. The DB write has already succeeded, so the monitor exists but isn't being checked until the next sync. Note: `ToggleMonitorPause` has two publish calls (pause/resume) — each needs individual error handling.
 
 **Files:** `internal/adapter/http/server.go` (lines 169, 244, 261, 285, 287)
 
@@ -82,7 +82,7 @@ handler(msgCtx, &event)
 
 **Problem:** Channels are sent sequentially. N channels x 10s timeout = catastrophic backpressure. Can exceed NATS AckWait.
 
-**Fix:** Use `errgroup.Group` with per-channel goroutines. Each channel gets its own `context.WithTimeout(ctx, 10*time.Second)`. Overall group timeout: 30s.
+**Fix:** Use `errgroup.Group` with per-channel goroutines. Each channel gets its own `context.WithTimeout(ctx, 10*time.Second)`. Overall group timeout: 30s. Channels that don't complete within the 30s group deadline will fail with context deadline exceeded and be captured in the DLQ via Issue 2.3's partial-failure handling.
 
 **Files:** `internal/app/alert.go` (lines 57-84)
 
@@ -106,7 +106,7 @@ handler(msgCtx, &event)
 
 **Problem:** One CB per channel type (telegram, email). One user's misconfigured channel triggers CB for all users of that type.
 
-**Fix:** Move CB creation to `CreateSenderWithRetry()` with key `channelType:channelID`. Store CBs in `sync.Map` inside Registry. Add periodic cleanup (every 10 minutes) to evict entries for channels that no longer exist in the DB, preventing unbounded map growth from deleted channels.
+**Fix:** Move CB creation to `CreateSenderWithRetry()` with key `channelType:channelID`. Store CBs in `sync.Map` inside Registry. Add periodic cleanup (every 10 minutes) to evict entries for channels that no longer exist in the DB, preventing unbounded map growth from deleted channels. This requires injecting a channel-existence-check function (e.g., `func(channelID uuid.UUID) bool`) into the Registry to avoid a hard dependency on `port.ChannelRepo`.
 
 **Files:** `internal/adapter/channel/registry.go`
 
@@ -183,10 +183,10 @@ handler(msgCtx, &event)
 **Fix:** Use a CTE to atomically read the previous status and update in one query:
 ```sql
 WITH prev AS (
-    SELECT current_status FROM monitors WHERE id = $1
+    SELECT current_status FROM monitors WHERE id = $1 AND deleted_at IS NULL
 )
 UPDATE monitors SET current_status = $2
-WHERE id = $1
+WHERE id = $1 AND deleted_at IS NULL
 RETURNING (SELECT current_status FROM prev) AS previous_status
 ```
 
@@ -198,7 +198,7 @@ Note: A plain `RETURNING (SELECT ...)` subquery would read the post-update state
 
 **Problem:** `ListAPIKeys` and potentially other handlers don't nil-check `UserFromCtx()`. Panic if auth middleware fails.
 
-**Fix:** Grep all handlers for `UserFromCtx()` without nil check. Add uniform check or extract to helper `requireUser(c *fiber.Ctx) (*domain.User, error)`.
+**Fix:** The three handlers missing nil checks are: `ListAPIKeys`, `CreateAPIKey`, `RevokeAPIKey`. Extract a helper `requireUser(c *fiber.Ctx) (*domain.User, error)` that returns 401 on nil, and use it in all handlers that need auth.
 
 **Files:** `internal/adapter/http/server.go`
 
@@ -223,6 +223,8 @@ RETURNING is_paused
 - `ErrUserExists` -> `"email already registered"`
 - `ErrNotFound` -> `"resource not found"`
 - Everything else -> `"internal error"` (details in logs only)
+
+**Prerequisite:** Introduce `ErrUserExists` sentinel error in `internal/domain/errors.go`. Currently the auth service wraps the raw database unique constraint violation; the Register handler can't classify it. The auth service should catch the postgres unique violation and return `ErrUserExists`.
 
 Apply both to individual handlers in `server.go` and the global error handler in `setup.go` (which also leaks `err.Error()` for non-DomainError cases). Also fix HTML pages in `pages.go` that render raw errors into templates (e.g., `RegisterSubmit`).
 
@@ -307,11 +309,16 @@ PRs 3, 4a, and 4b can be developed in parallel after PR 1 is merged.
 
 ## Shared Utility
 
-The pattern of creating a detached context with timeout is repeated across Issues 1.2, 2.1, and 4.5. Extract a shared utility:
+The pattern of creating a detached context with timeout is repeated across Issues 1.2, 2.1, and 4.5. Extract a shared utility that preserves OTel span context for tracing correlation:
 ```go
 // internal/xcontext/detached.go
-func Detached(timeout time.Duration) (context.Context, context.CancelFunc) {
-    return context.WithTimeout(context.Background(), timeout)
+func Detached(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+    ctx := context.Background()
+    // Propagate trace span so detached operations are correlated in Grafana
+    if span := trace.SpanFromContext(parent); span.SpanContext().IsValid() {
+        ctx = trace.ContextWithSpan(ctx, span)
+    }
+    return context.WithTimeout(ctx, timeout)
 }
 ```
 
