@@ -81,9 +81,11 @@ func main() {
 	// Postgres repos
 	userRepo := postgres.NewUserRepo(queries)
 	monitorRepo := postgres.NewMonitorRepo(pool, queries)
+	channelRepo := postgres.NewChannelRepo(pool, queries)
 	checkResultRepo := postgres.NewCheckResultRepo(queries)
 	incidentRepo := postgres.NewIncidentRepo(queries)
 	uptimeRepo := postgres.NewUptimeRepo(queries)
+	txm := postgres.NewTxManager(pool)
 
 	// NATS publisher
 	alertPub := natsadapter.NewAlertPublisher(js)
@@ -98,8 +100,8 @@ func main() {
 	// Business metrics
 	metrics := observability.NewMetrics()
 
-	// App service (registry injected via port)
-	monitoringSvc := app.NewMonitoringService(monitorRepo, nil, checkResultRepo, incidentRepo, userRepo, uptimeRepo, nil, alertPub, registry, metrics)
+	// App service
+	monitoringSvc := app.NewMonitoringService(monitorRepo, channelRepo, checkResultRepo, incidentRepo, userRepo, uptimeRepo, txm, alertPub, registry, metrics)
 
 	// --- NATS Work Queue Architecture ---
 	// Leader-elected scheduler publishes check tasks to NATS.

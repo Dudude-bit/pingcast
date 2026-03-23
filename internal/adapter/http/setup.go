@@ -131,8 +131,7 @@ func SetupApp(
 	// Monitor type config (HTMX partial, authenticated)
 	app.Get("/monitors/config-fields", PageMiddleware(authService), pageHandler.MonitorConfigFields)
 
-	// API: list available monitor types
-	app.Get("/api/monitor-types", server.ListMonitorTypes)
+	// /api/monitor-types is registered by oapi-codegen — no manual registration needed
 
 	// Authenticated HTML pages
 	authed := app.Group("", PageMiddleware(authService))

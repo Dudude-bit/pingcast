@@ -305,6 +305,30 @@ func (r *stubAPIKeyRepo) ListByUser(_ context.Context, _ uuid.UUID) ([]domain.AP
 func (r *stubAPIKeyRepo) Delete(_ context.Context, _, _ uuid.UUID) error { return nil }
 func (r *stubAPIKeyRepo) Touch(_ context.Context, _ uuid.UUID) error     { return nil }
 
+// stubAlertPublisher implements port.AlertEventPublisher.
+type stubAlertPublisher struct{}
+
+func (p *stubAlertPublisher) PublishAlert(_ context.Context, _ *domain.AlertEvent) error { return nil }
+
+// stubMonitorEventPublisher implements port.MonitorEventPublisher.
+type stubMonitorEventPublisher struct{}
+
+func (p *stubMonitorEventPublisher) PublishMonitorChanged(_ context.Context, _ domain.MonitorAction, _ uuid.UUID, _ *domain.Monitor) error {
+	return nil
+}
+
+// stubMetrics implements port.Metrics (all no-ops).
+type stubMetrics struct{}
+
+func (m *stubMetrics) RecordCheck(_ context.Context, _, _ string, _ time.Duration) {}
+func (m *stubMetrics) RecordAlertSent(_ context.Context, _ string, _ bool)         {}
+func (m *stubMetrics) RecordAlertAllFailed(_ context.Context)                      {}
+func (m *stubMetrics) RecordAlertDeadLettered(_ context.Context)                   {}
+func (m *stubMetrics) MonitorCreated(_ context.Context)                            {}
+func (m *stubMetrics) MonitorDeleted(_ context.Context)                            {}
+func (m *stubMetrics) IncidentOpened(_ context.Context)                            {}
+func (m *stubMetrics) IncidentResolved(_ context.Context)                          {}
+
 // ---------------------------------------------------------------------------
 // Test fixture builder
 // ---------------------------------------------------------------------------
@@ -333,16 +357,19 @@ func setupTestApp(t *testing.T) *testEnv {
 	channelRegistry := &stubChannelRegistry{}
 	failedAlertRepo := &stubFailedAlertRepo{}
 	txManager := &stubTxManager{}
+	alertPub := &stubAlertPublisher{}
+	metrics := &stubMetrics{}
+	eventPub := &stubMonitorEventPublisher{}
 
 	authService := app.NewAuthService(userRepo, sessionRepo)
 	monitoringService := app.NewMonitoringService(
 		monitorRepo, channelRepo, checkResultRepo, incidentRepo,
-		userRepo, uptimeRepo, txManager, nil, checkerRegistry, nil,
+		userRepo, uptimeRepo, txManager, alertPub, checkerRegistry, metrics,
 	)
-	alertService := app.NewAlertService(channelRepo, monitorRepo, channelRegistry, failedAlertRepo, nil)
+	alertService := app.NewAlertService(channelRepo, monitorRepo, channelRegistry, failedAlertRepo, metrics)
 
 	pageHandler := NewPageHandler(authService, monitoringService, alertService, rateLimiter, apiKeyRepo)
-	server := NewServer(authService, monitoringService, alertService, nil, rateLimiter)
+	server := NewServer(authService, monitoringService, alertService, eventPub, rateLimiter, apiKeyRepo)
 	webhookHandler := NewWebhookHandler(authService, alertService, "test-secret")
 
 	// HealthChecker must be non-nil because SetupApp registers its methods as route handlers.

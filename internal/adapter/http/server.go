@@ -1,7 +1,10 @@
 package httpadapter
 
 import (
+	cryptoRand "crypto/rand"
+	sha256Hash "crypto/sha256"
 	"encoding/json"
+	hexEncoding "encoding/hex"
 	"log/slog"
 	"time"
 
@@ -21,6 +24,7 @@ type Server struct {
 	alerts      *app.AlertService
 	events      port.MonitorEventPublisher
 	rateLimiter port.RateLimiter
+	apiKeys     port.APIKeyRepo
 }
 
 func NewServer(
@@ -29,6 +33,7 @@ func NewServer(
 	alerts *app.AlertService,
 	events port.MonitorEventPublisher,
 	rateLimiter port.RateLimiter,
+	apiKeys port.APIKeyRepo,
 ) *Server {
 	return &Server{
 		auth:        auth,
@@ -36,6 +41,7 @@ func NewServer(
 		alerts:      alerts,
 		events:      events,
 		rateLimiter: rateLimiter,
+		apiKeys:     apiKeys,
 	}
 }
 
@@ -569,4 +575,93 @@ func domainChannelToAPI(ch *domain.NotificationChannel) apigen.NotificationChann
 		IsEnabled: &ch.IsEnabled,
 		CreatedAt: &ch.CreatedAt,
 	}
+}
+
+// --- API Key JSON endpoints ---
+
+func (s *Server) ListAPIKeys(c *fiber.Ctx) error {
+	user := UserFromCtx(c)
+	keys, err := s.apiKeys.ListByUser(c.UserContext(), user.ID)
+	if err != nil {
+		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("failed to list api keys")})
+	}
+	result := make([]apigen.APIKey, len(keys))
+	for i, k := range keys {
+		result[i] = domainAPIKeyToAPI(&k)
+	}
+	return c.JSON(result)
+}
+
+func (s *Server) CreateAPIKey(c *fiber.Ctx) error {
+	user := UserFromCtx(c)
+	var req apigen.CreateAPIKeyJSONRequestBody
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid request body")})
+	}
+	if req.Name == "" || len(req.Scopes) == 0 {
+		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("name and scopes required")})
+	}
+
+	randomBytes := make([]byte, 32)
+	if _, err := cryptoRand.Read(randomBytes); err != nil {
+		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("failed to generate key")})
+	}
+	rawKey := "pc_live_" + hexEncoding.EncodeToString(randomBytes)
+
+	hash := sha256Hash.Sum256([]byte(rawKey))
+	keyHash := hexEncoding.EncodeToString(hash[:])
+
+	scopes := make([]string, len(req.Scopes))
+	for i, s := range req.Scopes {
+		scopes[i] = string(s)
+	}
+
+	var expiresAt *time.Time
+	if req.ExpiresInDays != nil && *req.ExpiresInDays > 0 {
+		t := time.Now().Add(time.Duration(*req.ExpiresInDays) * 24 * time.Hour)
+		expiresAt = &t
+	}
+
+	apiKey := &domain.APIKey{
+		UserID:    user.ID,
+		KeyHash:   keyHash,
+		Name:      req.Name,
+		Scopes:    scopes,
+		ExpiresAt: expiresAt,
+	}
+
+	created, err := s.apiKeys.Create(c.UserContext(), apiKey)
+	if err != nil {
+		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("failed to create api key")})
+	}
+
+	apiKeyResp := domainAPIKeyToAPI(created)
+	return c.Status(201).JSON(apigen.APIKeyCreated{
+		Key:    &apiKeyResp,
+		RawKey: &rawKey,
+	})
+}
+
+func (s *Server) RevokeAPIKey(c *fiber.Ctx, id openapi_types.UUID) error {
+	user := UserFromCtx(c)
+	if err := s.apiKeys.Delete(c.UserContext(), uuid.UUID(id), user.ID); err != nil {
+		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("failed to revoke api key")})
+	}
+	return c.SendStatus(204)
+}
+
+func domainAPIKeyToAPI(k *domain.APIKey) apigen.APIKey {
+	result := apigen.APIKey{
+		Id:        (*openapi_types.UUID)(&k.ID),
+		Name:      &k.Name,
+		Scopes:    &k.Scopes,
+		CreatedAt: &k.CreatedAt,
+	}
+	if k.LastUsedAt != nil {
+		result.LastUsedAt = k.LastUsedAt
+	}
+	if k.ExpiresAt != nil {
+		result.ExpiresAt = k.ExpiresAt
+	}
+	return result
 }
