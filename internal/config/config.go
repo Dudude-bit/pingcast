@@ -12,6 +12,7 @@ type APIConfig struct {
 	MaxDBConns                 int
 	RedisURL                   string
 	NatsURL                    string
+	OTelEndpoint               string
 	LemonSqueezyWebhookSecret string
 	BaseURL                    string
 	EncryptionKey              string
@@ -53,6 +54,7 @@ func LoadAPI() (*APIConfig, error) {
 		MaxDBConns:                 maxDBConns,
 		RedisURL:                   getEnv("REDIS_URL", "redis://localhost:6379"),
 		NatsURL:                    getEnv("NATS_URL", "nats://localhost:4222"),
+		OTelEndpoint:               os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
 		LemonSqueezyWebhookSecret: os.Getenv("LEMONSQUEEZY_WEBHOOK_SECRET"),
 		BaseURL:                    getEnv("BASE_URL", "http://localhost:8080"),
 		EncryptionKey:              os.Getenv("ENCRYPTION_KEY"),

@@ -22,6 +22,7 @@ func SetupApp(
 	server *Server,
 	webhookHandler *WebhookHandler,
 	apiKeyRepo *postgres.APIKeyRepo,
+	healthChecker *HealthChecker,
 ) *fiber.App {
 	app := fiber.New(fiber.Config{
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
@@ -68,8 +69,10 @@ func SetupApp(
 		Root: http.FS(staticFS),
 	}))
 
-	// Health
+	// Health / readiness
 	app.Get("/health", server.HealthCheck)
+	app.Get("/healthz", healthChecker.Healthz)
+	app.Get("/readyz", healthChecker.Readyz)
 
 	// Public pages
 	app.Get("/", pageHandler.Landing)

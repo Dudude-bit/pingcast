@@ -17,6 +17,7 @@ import (
 	natsadapter "github.com/kirillinakin/pingcast/internal/adapter/nats"
 	"github.com/kirillinakin/pingcast/internal/adapter/postgres"
 	redisadapter "github.com/kirillinakin/pingcast/internal/adapter/redis"
+	"github.com/kirillinakin/pingcast/internal/observability"
 	smtpadapter "github.com/kirillinakin/pingcast/internal/adapter/smtp"
 	"github.com/kirillinakin/pingcast/internal/adapter/telegram"
 	"github.com/kirillinakin/pingcast/internal/adapter/webhook"
@@ -38,6 +39,14 @@ func main() {
 		slog.Error("failed to load config", "error", err)
 		os.Exit(1)
 	}
+
+	// OpenTelemetry
+	otelShutdown, err := observability.Setup(ctx, "pingcast-api", cfg.OTelEndpoint)
+	if err != nil {
+		slog.Error("failed to setup otel", "error", err)
+		os.Exit(1)
+	}
+	defer otelShutdown(context.Background())
 
 	// PostgreSQL
 	pool, err := database.Connect(ctx, cfg.DatabaseURL, int32(cfg.MaxDBConns))
@@ -121,8 +130,11 @@ func main() {
 	pageHandler := httpadapter.NewPageHandler(authSvc, monitoringSvc, alertSvc, rateLimiter)
 	webhookHandler := httpadapter.NewWebhookHandler(authSvc, alertSvc, cfg.LemonSqueezyWebhookSecret)
 
+	// Health checker
+	healthChecker := httpadapter.NewHealthChecker(pool, rdb, nc)
+
 	// Wire
-	fiberApp := httpadapter.SetupApp(authSvc, pageHandler, server, webhookHandler, apiKeyRepo)
+	fiberApp := httpadapter.SetupApp(authSvc, pageHandler, server, webhookHandler, apiKeyRepo, healthChecker)
 
 	// Start
 	go func() {
