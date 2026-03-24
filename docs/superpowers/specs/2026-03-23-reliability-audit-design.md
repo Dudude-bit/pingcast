@@ -21,6 +21,8 @@ Preventive reliability audit of PingCast identified 29 issues across 4 component
 - `DeleteMonitor`: delete from DB first, then publish. If publish fails after successful delete, checker syncs via periodic reload.
 - `TogglePause`: two publish paths (pause/resume) — each needs individual error handling.
 
+**Scalability note (Phase 2 — Transactional Outbox):** The current approach returns 500 when publish fails after a successful DB write. The user may retry and create a duplicate. For higher scale, replace with the **Transactional Outbox** pattern: write the event to an `outbox` table in the same DB transaction as the monitor mutation. A relay goroutine (or separate process) reads the outbox and publishes to NATS. This guarantees at-least-once delivery without the 500-on-publish-failure problem. Not needed at current scale — checker's periodic DB reload provides eventual consistency — but documented here as the upgrade path.
+
 **Files:** `internal/app/monitoring.go` (after 1.6 relocation)
 
 ### 1.2. Per-Message Context in Subscribe Closures
@@ -131,7 +133,7 @@ Remove `events port.MonitorEventPublisher` from `Server` struct — it no longer
 
 **Problem:** Channels are sent sequentially. N channels x 10s timeout = catastrophic backpressure. Can exceed NATS AckWait.
 
-**Fix:** Use `errgroup.Group` with per-channel goroutines. Each channel gets its own `context.WithTimeout(ctx, 10*time.Second)`. Overall group timeout: 30s. Channels that don't complete within the 30s group deadline will fail with context deadline exceeded and be captured in the DLQ via Issue 2.3's partial-failure handling.
+**Fix:** Use `errgroup.Group` with per-channel goroutines and **concurrency limit** `g.SetLimit(10)` to avoid overwhelming external services when a user has many channels. Each channel gets its own `context.WithTimeout(ctx, 10*time.Second)`. Overall group timeout: 30s. Channels that don't complete within the 30s group deadline will fail with context deadline exceeded and be captured in the DLQ via Issue 2.3's partial-failure handling.
 
 **Files:** `internal/app/alert.go` (lines 57-84)
 
@@ -155,7 +157,7 @@ Remove `events port.MonitorEventPublisher` from `Server` struct — it no longer
 
 **Problem:** One CB per channel type (telegram, email). One user's misconfigured channel triggers CB for all users of that type.
 
-**Fix:** Move CB creation to `CreateSender()` (renamed per Issue 2.9) with key `channelType:channelID`. Store CBs in `sync.Map` inside Registry. Add periodic cleanup (every 10 minutes) to evict entries for channels that no longer exist in the DB, preventing unbounded map growth from deleted channels. This requires injecting a channel-existence-check function (e.g., `func(channelID uuid.UUID) bool`) into the Registry to avoid a hard dependency on `port.ChannelRepo`.
+**Fix:** Move CB creation to `CreateSender()` (renamed per Issue 2.9) with key `channelType:channelID`. Store CBs in `sync.Map` inside Registry. Use **TTL-based eviction**: if a CB entry hasn't been accessed in 1 hour, evict it on next access or via a periodic sweep. Deleted channels naturally stop generating traffic, so their CB entries become stale and get evicted without any DB dependency. No need to inject a channel-existence-check function.
 
 **Files:** `internal/adapter/channel/registry.go`
 
@@ -467,18 +469,19 @@ Note: PR 1 is now the largest PR due to issues 1.5 and 1.6 (event DTO + publish 
 
 ## Shared Utility
 
-The pattern of creating a detached context with timeout is repeated across Issues 1.2, 2.1, and 4.5. Extract a shared utility that preserves OTel span context for tracing correlation:
+The pattern of creating a detached context with timeout is repeated across Issues 1.2, 2.1, and 4.5. Extract a shared utility that creates a **linked span** (standard OTel pattern for async operations — the parent span may already be finished when the detached operation completes):
 ```go
 // internal/xcontext/detached.go
-func Detached(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+func Detached(parent context.Context, timeout time.Duration, spanName string) (context.Context, context.CancelFunc) {
     ctx := context.Background()
-    // Propagate trace span so detached operations are correlated in Grafana
-    if span := trace.SpanFromContext(parent); span.SpanContext().IsValid() {
-        ctx = trace.ContextWithSpan(ctx, span)
+    if parentSpan := trace.SpanFromContext(parent); parentSpan.SpanContext().IsValid() {
+        ctx, _ = tracer.Start(ctx, spanName,
+            trace.WithLinks(trace.Link{SpanContext: parentSpan.SpanContext()}))
     }
     return context.WithTimeout(ctx, timeout)
 }
 ```
+This creates a new independent span linked to the parent, rather than reusing the parent span. The link preserves tracing correlation in Grafana without the risk of attaching events to a closed span.
 
 ## Testing Strategy
 
