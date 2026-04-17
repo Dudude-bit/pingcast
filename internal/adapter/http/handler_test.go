@@ -193,33 +193,8 @@ func TestHealthz_PostgresDown(t *testing.T) {
 // endpoints /api/auth/register and /api/auth/login are covered by the
 // Playwright E2E suite in frontend/tests/auth.spec.ts.
 
-// ---------------------------------------------------------------------------
-// 7. TestDashboard_Unauthenticated
-// ---------------------------------------------------------------------------
-
-func TestDashboard_Unauthenticated(t *testing.T) {
-	te := setupTestApp(t)
-
-	// No valid session — middleware should redirect to /login.
-	te.sessionRepo.EXPECT().GetUserID(mock.Anything, mock.Anything).Return(uuid.Nil, errors.New("session not found")).Maybe()
-
-	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
-	resp, err := te.app.Test(req, -1)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	defer resp.Body.Close()
-
-	// PageMiddleware must redirect unauthenticated HTML requests to /login.
-	if resp.StatusCode != 302 {
-		t.Fatalf("expected 302 redirect to /login, got %d", resp.StatusCode)
-	}
-
-	location := resp.Header.Get("Location")
-	if location != "/login" {
-		t.Errorf("expected redirect to /login, got %q", location)
-	}
-}
+// Test 7 (Dashboard unauth redirect) removed in C2 — /dashboard is now
+// served by Next.js; auth redirect logic lives in frontend/proxy.ts.
 
 // ---------------------------------------------------------------------------
 // 8. TestCSRF_MissingToken

@@ -127,21 +127,11 @@ func SetupApp(
 		},
 	})
 
-	// Monitor type config (HTMX partial, authenticated)
-	app.Get("/monitors/config-fields", PageMiddleware(authService), pageHandler.MonitorConfigFields)
-
 	// /api/monitor-types is registered by oapi-codegen — no manual registration needed
+	// /dashboard, /monitors/* HTML pages are served by the Next.js frontend (C2).
 
-	// Authenticated HTML pages
+	// Authenticated HTML pages (channels + api-keys still Go until C3)
 	authed := app.Group("", PageMiddleware(authService))
-	authed.Get("/dashboard", pageHandler.Dashboard)
-	authed.Get("/monitors/new", pageHandler.MonitorNewForm)
-	authed.Post("/monitors", pageHandler.MonitorCreate)
-	authed.Post("/monitors/:id/pause", pageHandler.MonitorTogglePause)
-	authed.Post("/monitors/:id", pageHandler.MonitorUpdate)
-	authed.Get("/monitors/:id/edit", pageHandler.MonitorEditForm)
-	authed.Get("/monitors/:id", pageHandler.MonitorDetail)
-	authed.Post("/monitors/:id/delete", pageHandler.MonitorDelete)
 	authed.Get("/channels", pageHandler.ChannelList)
 	authed.Get("/channels/new", pageHandler.ChannelNewForm)
 	authed.Post("/channels", pageHandler.ChannelCreate)
