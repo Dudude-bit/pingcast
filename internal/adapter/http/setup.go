@@ -109,12 +109,7 @@ func SetupApp(
 	app.Get("/healthz", healthChecker.Healthz)
 	app.Get("/readyz", healthChecker.Readyz)
 
-	// Public pages
-	app.Get("/", pageHandler.Landing)
-	app.Get("/login", pageHandler.LoginPage)
-	app.Post("/login", pageHandler.LoginSubmit)
-	app.Get("/register", pageHandler.RegisterPage)
-	app.Post("/register", pageHandler.RegisterSubmit)
+	// Public pages (landing/login/register now served by Next.js frontend; C1).
 	app.Post("/logout", pageHandler.Logout)
 
 	// Public status page (HTML)

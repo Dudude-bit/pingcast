@@ -1,16 +1,13 @@
 package httpadapter
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -191,204 +188,10 @@ func TestHealthz_PostgresDown(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// 3. TestRegisterPage_GET
-// ---------------------------------------------------------------------------
-
-func TestRegisterPage_GET(t *testing.T) {
-	te := setupTestApp(t)
-
-	// The GET /register page may call session repo to check auth state.
-	te.sessionRepo.EXPECT().GetUserID(mock.Anything, mock.Anything).Return(uuid.Nil, errors.New("no session")).Maybe()
-
-	req := httptest.NewRequest(http.MethodGet, "/register", nil)
-	resp, err := te.app.Test(req, -1)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-
-	ct := resp.Header.Get("Content-Type")
-	if !strings.Contains(ct, "text/html") {
-		t.Errorf("expected text/html content type, got %q", ct)
-	}
-
-	body, _ := io.ReadAll(resp.Body)
-	bodyStr := string(body)
-
-	if !strings.Contains(bodyStr, "<form") {
-		t.Error("expected HTML to contain a <form element")
-	}
-	if !strings.Contains(bodyStr, "register") && !strings.Contains(bodyStr, "Register") && !strings.Contains(bodyStr, "sign up") && !strings.Contains(bodyStr, "Sign Up") {
-		t.Error("expected HTML to reference registration")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// 4. TestLoginPage_GET
-// ---------------------------------------------------------------------------
-
-func TestLoginPage_GET(t *testing.T) {
-	te := setupTestApp(t)
-
-	// The GET /login page may call session repo to check auth state.
-	te.sessionRepo.EXPECT().GetUserID(mock.Anything, mock.Anything).Return(uuid.Nil, errors.New("no session")).Maybe()
-
-	req := httptest.NewRequest(http.MethodGet, "/login", nil)
-	resp, err := te.app.Test(req, -1)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-
-	ct := resp.Header.Get("Content-Type")
-	if !strings.Contains(ct, "text/html") {
-		t.Errorf("expected text/html content type, got %q", ct)
-	}
-
-	body, _ := io.ReadAll(resp.Body)
-	bodyStr := string(body)
-
-	if !strings.Contains(bodyStr, "<form") {
-		t.Error("expected HTML to contain a <form element")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// 5. TestLoginSubmit_InvalidCredentials
-// ---------------------------------------------------------------------------
-
-func TestLoginSubmit_InvalidCredentials(t *testing.T) {
-	te := setupTestApp(t)
-
-	// Set up a user with a known bcrypt hash.
-	hash, _ := app.HashPassword("correct-password-123")
-	userID := uuid.New()
-	user := &domain.User{
-		ID:        userID,
-		Email:     "test@example.com",
-		Slug:      "test-user",
-		Plan:      domain.PlanFree,
-		CreatedAt: time.Now(),
-	}
-
-	// GET /login to obtain CSRF token — no session cookie sent.
-	te.sessionRepo.EXPECT().GetUserID(mock.Anything, mock.Anything).Return(uuid.Nil, errors.New("no session")).Maybe()
-
-	// Login POST calls GetByEmail; returns user with hash so bcrypt check happens.
-	te.userRepo.EXPECT().GetByEmail(mock.Anything, "test@example.com").Return(user, hash, nil).Maybe()
-
-	// Rate limiter allows the request.
-	te.rateLimiter.EXPECT().Allow(mock.Anything, mock.Anything).Return(true, nil).Maybe()
-
-	// First GET to /login to obtain a CSRF token from the rendered HTML.
-	csrfToken, csrfCookie := getCSRFToken(t, te.app, "/login")
-
-	formData := fmt.Sprintf("email=test@example.com&password=wrong-password&_csrf=%s", csrfToken)
-	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(formData))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Cookie", csrfCookie)
-
-	resp, err := te.app.Test(req, -1)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	defer resp.Body.Close()
-
-	// LoginSubmit re-renders login.html with error on failure (200, not redirect).
-	if resp.StatusCode != 200 {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-
-	body, _ := io.ReadAll(resp.Body)
-	bodyStr := string(body)
-
-	if !strings.Contains(bodyStr, "Invalid email or password") {
-		t.Errorf("expected error message in HTML, got: %s", truncate(bodyStr, 500))
-	}
-}
-
-// ---------------------------------------------------------------------------
-// 6. TestLoginSubmit_RateLimited
-// ---------------------------------------------------------------------------
-
-func TestLoginSubmit_RateLimited(t *testing.T) {
-	te := setupTestApp(t)
-
-	// Set up a user with a known bcrypt hash.
-	hash, _ := app.HashPassword("some-password-123")
-	userID := uuid.New()
-	user := &domain.User{
-		ID:        userID,
-		Email:     "limited@example.com",
-		Slug:      "limited",
-		Plan:      domain.PlanFree,
-		CreatedAt: time.Now(),
-	}
-
-	// No session cookie for these requests.
-	te.sessionRepo.EXPECT().GetUserID(mock.Anything, mock.Anything).Return(uuid.Nil, errors.New("no session")).Maybe()
-
-	// GetByEmail will be called for each login attempt.
-	te.userRepo.EXPECT().GetByEmail(mock.Anything, "limited@example.com").Return(user, hash, nil).Maybe()
-
-	// Rate limiter: allow first 5 calls, then deny.
-	callCount := 0
-	te.rateLimiter.EXPECT().Allow(mock.Anything, mock.Anything).RunAndReturn(
-		func(_ context.Context, _ string) (bool, error) {
-			callCount++
-			if callCount > 5 {
-				return false, nil
-			}
-			return true, nil
-		},
-	).Maybe()
-	te.rateLimiter.EXPECT().Reset(mock.Anything, mock.Anything).Return(nil).Maybe()
-
-	// Exhaust rate limit with 5 calls.
-	for i := range 5 {
-		csrfToken, csrfCookie := getCSRFToken(t, te.app, "/login")
-		formData := fmt.Sprintf("email=limited@example.com&password=wrong-pass-%d&_csrf=%s", i, csrfToken)
-		req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(formData))
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		req.Header.Set("Cookie", csrfCookie)
-
-		resp, err := te.app.Test(req, -1)
-		if err != nil {
-			t.Fatalf("request %d: unexpected error: %v", i, err)
-		}
-		resp.Body.Close()
-	}
-
-	// 6th request should be rate limited.
-	csrfToken, csrfCookie := getCSRFToken(t, te.app, "/login")
-	formData := fmt.Sprintf("email=limited@example.com&password=wrong-pass-6&_csrf=%s", csrfToken)
-	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(formData))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Cookie", csrfCookie)
-
-	resp, err := te.app.Test(req, -1)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(resp.Body)
-	bodyStr := string(body)
-
-	// The page handler renders login.html with "Too many login attempts" error.
-	if !strings.Contains(bodyStr, "Too many login attempts") {
-		t.Errorf("expected rate limit message in HTML, got: %s", truncate(bodyStr, 500))
-	}
-}
+// Tests 3–6 (register/login page & submit HTML flows) were removed in C1
+// when these routes migrated to the Next.js frontend. The JSON API
+// endpoints /api/auth/register and /api/auth/login are covered by the
+// Playwright E2E suite in frontend/tests/auth.spec.ts.
 
 // ---------------------------------------------------------------------------
 // 7. TestDashboard_Unauthenticated
@@ -563,84 +366,6 @@ func TestErrorHandler_DomainError(t *testing.T) {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-// getCSRFToken performs a GET to the given path and extracts the CSRF token
-// from the hidden form field and the csrf cookie from Set-Cookie headers.
-func getCSRFToken(t *testing.T, app *fiber.App, path string) (token string, cookieHeader string) {
-	t.Helper()
-
-	req := httptest.NewRequest(http.MethodGet, path, nil)
-	resp, err := app.Test(req, -1)
-	if err != nil {
-		t.Fatalf("getCSRFToken: GET %s failed: %v", path, err)
-	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(resp.Body)
-	bodyStr := string(body)
-
-	// Extract CSRF token from: <input type="hidden" name="_csrf" value="...">
-	// or value='...' variants.
-	token = extractInputValue(bodyStr, "_csrf")
-	if token == "" {
-		t.Fatalf("getCSRFToken: _csrf hidden field not found in HTML for %s — CSRF middleware may be misconfigured", path)
-	}
-
-	// Collect all Set-Cookie headers for the csrf cookie.
-	var cookies []string
-	for _, c := range resp.Cookies() {
-		cookies = append(cookies, fmt.Sprintf("%s=%s", c.Name, c.Value))
-	}
-
-	return token, strings.Join(cookies, "; ")
-}
-
-// extractInputValue finds value="..." for a hidden input with the given name.
-func extractInputValue(html, name string) string {
-	// Look for name="_csrf" (or name='_csrf') and extract the value.
-	needle := fmt.Sprintf(`name="%s"`, name)
-	idx := strings.Index(html, needle)
-	if idx < 0 {
-		needle = fmt.Sprintf(`name='%s'`, name)
-		idx = strings.Index(html, needle)
-	}
-	if idx < 0 {
-		return ""
-	}
-
-	// Search backwards and forwards for the enclosing <input> tag to find value="..."
-	start := strings.LastIndex(html[:idx], "<input")
-	if start < 0 {
-		start = strings.LastIndex(html[:idx], "<Input")
-		if start < 0 {
-			return ""
-		}
-	}
-	end := strings.Index(html[start:], ">")
-	if end < 0 {
-		return ""
-	}
-	tag := html[start : start+end+1]
-
-	// Extract value="..." or value='...'
-	valIdx := strings.Index(tag, `value="`)
-	if valIdx >= 0 {
-		valStart := valIdx + len(`value="`)
-		valEnd := strings.Index(tag[valStart:], `"`)
-		if valEnd >= 0 {
-			return tag[valStart : valStart+valEnd]
-		}
-	}
-	valIdx = strings.Index(tag, `value='`)
-	if valIdx >= 0 {
-		valStart := valIdx + len(`value='`)
-		valEnd := strings.Index(tag[valStart:], `'`)
-		if valEnd >= 0 {
-			return tag[valStart : valStart+valEnd]
-		}
-	}
-	return ""
-}
 
 // truncate returns up to n characters of s, for readable error messages.
 func truncate(s string, n int) string {

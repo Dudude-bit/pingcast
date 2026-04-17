@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"html/template"
 	"io/fs"
@@ -40,7 +39,6 @@ func NewPageHandler(auth *app.AuthService, monitoring *app.MonitoringService, al
 	// This is required because Go's html/template only keeps the last {{define "content"}}
 	// when all pages are parsed together.
 	pages := []string{
-		"landing.html", "login.html", "register.html",
 		"dashboard.html", "monitor_detail.html", "monitor_form.html",
 		"channels.html", "channel_form.html",
 		"api_keys.html", "api_key_form.html",
@@ -65,84 +63,6 @@ func NewPageHandler(auth *app.AuthService, monitoring *app.MonitoringService, al
 	}
 }
 
-func (h *PageHandler) Landing(c *fiber.Ctx) error {
-	if h.isLoggedIn(c) {
-		return c.Redirect("/dashboard")
-	}
-	return h.render(c, "landing.html", nil)
-}
-
-func (h *PageHandler) isLoggedIn(c *fiber.Ctx) bool {
-	sessionID := c.Cookies("session_id")
-	if sessionID == "" {
-		return false
-	}
-	user, err := h.auth.ValidateSession(c.UserContext(), sessionID)
-	return err == nil && user != nil
-}
-
-func (h *PageHandler) LoginPage(c *fiber.Ctx) error {
-	if h.isLoggedIn(c) {
-		return c.Redirect("/dashboard")
-	}
-	return h.render(c, "login.html", nil)
-}
-
-func (h *PageHandler) LoginSubmit(c *fiber.Ctx) error {
-	if h.isLoggedIn(c) {
-		return c.Redirect("/dashboard")
-	}
-	email := c.FormValue("email")
-	password := c.FormValue("password")
-
-	allowed, err := h.rateLimiter.Allow(c.UserContext(), email)
-	if err != nil {
-		return h.render(c, "login.html", fiber.Map{"Error": "Service temporarily unavailable. Try again later."})
-	}
-	if !allowed {
-		return h.render(c, "login.html", fiber.Map{"Error": "Too many login attempts. Try again later."})
-	}
-
-	_, sessionID, err := h.auth.Login(c.UserContext(), email, password)
-	if err != nil {
-		return h.render(c, "login.html", fiber.Map{"Error": "Invalid email or password."})
-	}
-
-	if err := h.rateLimiter.Reset(c.UserContext(), email); err != nil {
-		slog.Warn("rate limiter reset failed after successful login", "email", email, "error", err)
-	}
-	setSessionCookie(c, sessionID)
-	return c.Redirect("/dashboard")
-}
-
-func (h *PageHandler) RegisterPage(c *fiber.Ctx) error {
-	if h.isLoggedIn(c) {
-		return c.Redirect("/dashboard")
-	}
-	return h.render(c, "register.html", nil)
-}
-
-func (h *PageHandler) RegisterSubmit(c *fiber.Ctx) error {
-	if h.isLoggedIn(c) {
-		return c.Redirect("/dashboard")
-	}
-	email := c.FormValue("email")
-	slug := c.FormValue("slug")
-	password := c.FormValue("password")
-
-	_, sessionID, err := h.auth.Register(c.UserContext(), email, slug, password)
-	if err != nil {
-		if errors.Is(err, domain.ErrUserExists) {
-			slog.Info("duplicate registration attempt", "email", email)
-		} else {
-			slog.Warn("registration failed", "error", err)
-		}
-		return h.render(c, "register.html", fiber.Map{"Error": "Registration failed"})
-	}
-
-	setSessionCookie(c, sessionID)
-	return c.Redirect("/dashboard")
-}
 
 func (h *PageHandler) Logout(c *fiber.Ctx) error {
 	sessionID := c.Cookies("session_id")
