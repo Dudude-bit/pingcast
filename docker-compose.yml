@@ -20,6 +20,21 @@ services:
       nats:
         condition: service_started
 
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "3001:3000"  # 3001 externally (Grafana is on 3000)
+    environment:
+      NODE_ENV: production
+      INTERNAL_API_URL: http://api:8080/api
+      NEXT_PUBLIC_API_URL: http://localhost:8080/api
+      NEXT_PUBLIC_SITE_URL: http://localhost:3001
+    depends_on:
+      api:
+        condition: service_started
+
   scheduler:
     build:
       context: .

@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+.gitignore
+README.md
+npm-debug.log
+.env*.local
+.vscode
+.idea
+playwright-report
+test-results
