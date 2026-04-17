@@ -5,11 +5,13 @@ import (
 	"encoding/hex"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/kirillinakin/pingcast/internal/app"
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/port"
+	"github.com/kirillinakin/pingcast/internal/xcontext"
 )
 
 const userCtxKey = "auth.user"
@@ -86,9 +88,12 @@ func authenticateWithAPIKey(c *fiber.Ctx, auth *app.AuthService, apiKeyRepo port
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "user not found"})
 	}
 
-	// Touch last_used_at in background (non-blocking)
+	// Touch last_used_at in background with detached context (Issue 4.5).
+	// Request context may be cancelled before goroutine executes.
+	touchCtx, touchCancel := xcontext.Detached(c.UserContext(), 5*time.Second, "api-key.touch")
 	go func() {
-		if err := apiKeyRepo.Touch(c.UserContext(), apiKey.ID); err != nil {
+		defer touchCancel()
+		if err := apiKeyRepo.Touch(touchCtx, apiKey.ID); err != nil {
 			slog.Warn("failed to touch api key", "key_id", apiKey.ID, "error", err)
 		}
 	}()

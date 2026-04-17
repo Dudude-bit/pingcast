@@ -82,15 +82,19 @@ func (m *Metrics) RecordCheck(ctx context.Context, monitorType, status string, d
 	))
 }
 
-func (m *Metrics) RecordAlertSent(ctx context.Context, channelType string, success bool) {
+func (m *Metrics) RecordAlertSent(ctx context.Context, channelType string, success bool, reason string) {
 	status := "success"
 	if !success {
 		status = "failure"
 	}
-	m.alertsSentTotal.Add(ctx, 1, otelmetric.WithAttributes(
+	attrs := []attribute.KeyValue{
 		attribute.String("channel_type", channelType),
 		attribute.String("status", status),
-	))
+	}
+	if reason != "" {
+		attrs = append(attrs, attribute.String("reason", reason))
+	}
+	m.alertsSentTotal.Add(ctx, 1, otelmetric.WithAttributes(attrs...))
 }
 
 func (m *Metrics) RecordAlertAllFailed(ctx context.Context) {

@@ -3,8 +3,11 @@ package channel
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/sony/gobreaker/v2"
 
 	"github.com/kirillinakin/pingcast/internal/domain"
@@ -16,27 +19,44 @@ var _ port.ChannelRegistry = (*Registry)(nil)
 type registryEntry struct {
 	label   string
 	factory port.ChannelSenderFactory
-	cb      *gobreaker.CircuitBreaker[any]
+}
+
+// cbEntry wraps a circuit breaker with an atomic last-accessed timestamp for TTL eviction.
+type cbEntry struct {
+	cb         *gobreaker.CircuitBreaker[any]
+	lastAccess atomic.Int64 // unix timestamp
 }
 
 type Registry struct {
 	entries map[domain.ChannelType]registryEntry
+	cbs     sync.Map
+	cbTTL   time.Duration
+	stop    chan struct{}
 }
 
 func NewRegistry() *Registry {
-	return &Registry{entries: make(map[domain.ChannelType]registryEntry)}
+	r := &Registry{
+		entries: make(map[domain.ChannelType]registryEntry),
+		cbTTL:   1 * time.Hour,
+		stop:    make(chan struct{}),
+	}
+	go r.evictLoop()
+	return r
+}
+
+func (r *Registry) Close() {
+	close(r.stop)
 }
 
 func (r *Registry) Register(t domain.ChannelType, label string, f port.ChannelSenderFactory) {
 	r.entries[t] = registryEntry{
 		label:   label,
 		factory: f,
-		cb:      NewCircuitBreaker(string(t), 5, 60*time.Second),
 	}
 }
 
-// CreateSenderWithRetry creates a sender wrapped with retry + circuit breaker.
-func (r *Registry) CreateSenderWithRetry(t domain.ChannelType, config json.RawMessage) (port.AlertSender, error) {
+// CreateSender creates a sender wrapped with retry + per-channel circuit breaker.
+func (r *Registry) CreateSender(t domain.ChannelType, channelID uuid.UUID, config json.RawMessage) (port.AlertSender, error) {
 	entry, ok := r.entries[t]
 	if !ok {
 		return nil, fmt.Errorf("unknown channel type: %s", t)
@@ -45,7 +65,44 @@ func (r *Registry) CreateSenderWithRetry(t domain.ChannelType, config json.RawMe
 	if err != nil {
 		return nil, err
 	}
-	return NewRetryingSender(inner, entry.cb), nil
+	cb := r.getOrCreateCB(t, channelID)
+	return NewRetryingSender(inner, cb), nil
+}
+
+func (r *Registry) getOrCreateCB(t domain.ChannelType, channelID uuid.UUID) *gobreaker.CircuitBreaker[any] {
+	key := fmt.Sprintf("%s:%s", t, channelID)
+	now := time.Now().Unix()
+
+	if v, ok := r.cbs.Load(key); ok {
+		e := v.(*cbEntry)
+		e.lastAccess.Store(now)
+		return e.cb
+	}
+
+	cb := NewCircuitBreaker(key, 5, 60*time.Second)
+	e := &cbEntry{cb: cb}
+	e.lastAccess.Store(now)
+	actual, _ := r.cbs.LoadOrStore(key, e)
+	return actual.(*cbEntry).cb
+}
+
+func (r *Registry) evictLoop() {
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-r.stop:
+			return
+		case <-ticker.C:
+			cutoff := time.Now().Add(-r.cbTTL).Unix()
+			r.cbs.Range(func(key, value any) bool {
+				if e := value.(*cbEntry); e.lastAccess.Load() < cutoff {
+					r.cbs.Delete(key)
+				}
+				return true
+			})
+		}
+	}
 }
 
 func (r *Registry) Get(t domain.ChannelType) (port.ChannelSenderFactory, error) {

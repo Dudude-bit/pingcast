@@ -9,6 +9,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go/jetstream"
+
+	"github.com/kirillinakin/pingcast/internal/xcontext"
 )
 
 // CheckSubscriber consumes check tasks from the CHECKS stream using pull-based consumption.
@@ -66,16 +68,20 @@ func (s *CheckSubscriber) pullLoop(ctx context.Context, handler func(ctx context
 			var task checkTaskMessage
 			if err := json.Unmarshal(msg.Data(), &task); err != nil {
 				slog.Error("unmarshal check task — discarding malformed message", "error", err)
-				_ = msg.Ack() // Ack (discard): malformed JSON will never succeed on retry
+				_ = msg.Ack()
 				continue
 			}
 
-			if err := handler(ctx, task.MonitorID); err != nil {
+			msgCtx, msgCancel := xcontext.Detached(ctx, 60*time.Second, "nats.check.handle")
+
+			if err := handler(msgCtx, task.MonitorID); err != nil {
+				msgCancel()
 				slog.Error("handle check task", "monitor_id", task.MonitorID, "error", err)
 				_ = msg.NakWithDelay(5 * time.Second)
 				continue
 			}
 
+			msgCancel()
 			_ = msg.Ack()
 		}
 	}

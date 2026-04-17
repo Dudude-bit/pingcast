@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/kirillinakin/pingcast/internal/crypto"
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/port"
 	"github.com/kirillinakin/pingcast/internal/sqlc/gen"
@@ -17,17 +16,13 @@ import (
 var _ port.MonitorRepo = (*MonitorRepo)(nil)
 
 type MonitorRepo struct {
-	pool *pgxpool.Pool
-	q    *gen.Queries
-	enc  *crypto.Encryptor // nil = no encryption
+	pool   *pgxpool.Pool
+	q      *gen.Queries
+	cipher port.Cipher
 }
 
-func NewMonitorRepo(pool *pgxpool.Pool, q *gen.Queries) *MonitorRepo {
-	return &MonitorRepo{pool: pool, q: q}
-}
-
-func NewMonitorRepoWithEncryption(pool *pgxpool.Pool, q *gen.Queries, enc *crypto.Encryptor) *MonitorRepo {
-	return &MonitorRepo{pool: pool, q: q, enc: enc}
+func NewMonitorRepo(pool *pgxpool.Pool, q *gen.Queries, cipher port.Cipher) *MonitorRepo {
+	return &MonitorRepo{pool: pool, q: q, cipher: cipher}
 }
 
 // queries returns sqlc Queries scoped to the active transaction (if any).
@@ -35,27 +30,27 @@ func (r *MonitorRepo) queries(ctx context.Context) *gen.Queries {
 	return QueriesFromCtx(ctx, r.q, r.pool)
 }
 
-func (r *MonitorRepo) encryptConfig(config json.RawMessage) (json.RawMessage, error) {
-	if r.enc == nil || len(config) == 0 {
+func (r *MonitorRepo) encryptConfig(ctx context.Context, config json.RawMessage) (json.RawMessage, error) {
+	if len(config) == 0 {
 		return config, nil
 	}
-	encrypted, err := r.enc.Encrypt(config)
+	encrypted, err := r.cipher.Encrypt(ctx, config)
 	if err != nil {
 		return nil, fmt.Errorf("encrypt config: %w", err)
 	}
-	// Store as JSON string: "encrypted_base64"
 	return json.Marshal(encrypted)
 }
 
-func (r *MonitorRepo) decryptConfig(config json.RawMessage) (json.RawMessage, error) {
-	if r.enc == nil || len(config) == 0 {
+func (r *MonitorRepo) decryptConfig(ctx context.Context, config json.RawMessage) (json.RawMessage, error) {
+	if len(config) == 0 {
 		return config, nil
 	}
 	var encrypted string
 	if err := json.Unmarshal(config, &encrypted); err != nil {
-		return nil, fmt.Errorf("monitor config is not encrypted (expected JSON string): %w", err)
+		// Not encrypted — return as-is (plain JSON config)
+		return config, nil
 	}
-	decrypted, err := r.enc.Decrypt(encrypted)
+	decrypted, err := r.cipher.Decrypt(ctx, encrypted)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt monitor config: %w", err)
 	}
@@ -63,7 +58,7 @@ func (r *MonitorRepo) decryptConfig(config json.RawMessage) (json.RawMessage, er
 }
 
 func (r *MonitorRepo) Create(ctx context.Context, m *domain.Monitor) (*domain.Monitor, error) {
-	encConfig, err := r.encryptConfig(m.CheckConfig)
+	encConfig, err := r.encryptConfig(ctx, m.CheckConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +69,7 @@ func (r *MonitorRepo) Create(ctx context.Context, m *domain.Monitor) (*domain.Mo
 		return nil, err
 	}
 	out := monitorFromCreateRow(row)
-	decrypted, err := r.decryptConfig(out.CheckConfig)
+	decrypted, err := r.decryptConfig(ctx, out.CheckConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +83,7 @@ func (r *MonitorRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Monito
 		return nil, err
 	}
 	out := monitorFromGetByIDRow(row)
-	decrypted, err := r.decryptConfig(out.CheckConfig)
+	decrypted, err := r.decryptConfig(ctx, out.CheckConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +99,7 @@ func (r *MonitorRepo) ListByUserID(ctx context.Context, userID uuid.UUID) ([]dom
 	out := make([]domain.Monitor, len(rows))
 	for i, row := range rows {
 		out[i] = monitorFromListByUserIDRow(row)
-		if out[i].CheckConfig, err = r.decryptConfig(out[i].CheckConfig); err != nil {
+		if out[i].CheckConfig, err = r.decryptConfig(ctx, out[i].CheckConfig); err != nil {
 			return nil, err
 		}
 	}
@@ -119,7 +114,7 @@ func (r *MonitorRepo) ListPublicBySlug(ctx context.Context, slug string) ([]doma
 	out := make([]domain.Monitor, len(rows))
 	for i, row := range rows {
 		out[i] = monitorFromListPublicRow(row)
-		if out[i].CheckConfig, err = r.decryptConfig(out[i].CheckConfig); err != nil {
+		if out[i].CheckConfig, err = r.decryptConfig(ctx, out[i].CheckConfig); err != nil {
 			return nil, err
 		}
 	}
@@ -134,7 +129,7 @@ func (r *MonitorRepo) ListActive(ctx context.Context) ([]domain.Monitor, error) 
 	out := make([]domain.Monitor, len(rows))
 	for i, row := range rows {
 		out[i] = monitorFromListActiveRow(row)
-		if out[i].CheckConfig, err = r.decryptConfig(out[i].CheckConfig); err != nil {
+		if out[i].CheckConfig, err = r.decryptConfig(ctx, out[i].CheckConfig); err != nil {
 			return nil, err
 		}
 	}
@@ -150,7 +145,7 @@ func (r *MonitorRepo) CountByUserID(ctx context.Context, userID uuid.UUID) (int,
 }
 
 func (r *MonitorRepo) Update(ctx context.Context, m *domain.Monitor) error {
-	encConfig, err := r.encryptConfig(m.CheckConfig)
+	encConfig, err := r.encryptConfig(ctx, m.CheckConfig)
 	if err != nil {
 		return err
 	}
@@ -159,11 +154,42 @@ func (r *MonitorRepo) Update(ctx context.Context, m *domain.Monitor) error {
 	return r.queries(ctx).UpdateMonitor(ctx, monitorToUpdateParams(&mCopy))
 }
 
-func (r *MonitorRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status domain.MonitorStatus) error {
-	return r.queries(ctx).UpdateMonitorStatus(ctx, gen.UpdateMonitorStatusParams{
+func (r *MonitorRepo) TogglePause(ctx context.Context, id, userID uuid.UUID) (*domain.Monitor, error) {
+	row, err := r.queries(ctx).ToggleMonitorPause(ctx, gen.ToggleMonitorPauseParams{
+		ID:     id,
+		UserID: userID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	config, err := r.decryptConfig(ctx, row.CheckConfig)
+	if err != nil {
+		return nil, err
+	}
+	return &domain.Monitor{
+		ID:                 row.ID,
+		UserID:             row.UserID,
+		Name:               row.Name,
+		Type:               domain.MonitorType(row.Type),
+		CheckConfig:        config,
+		IntervalSeconds:    int(row.IntervalSeconds),
+		AlertAfterFailures: int(row.AlertAfterFailures),
+		IsPaused:           row.IsPaused,
+		IsPublic:           row.IsPublic,
+		CurrentStatus:      domain.MonitorStatus(row.CurrentStatus),
+		CreatedAt:          row.CreatedAt,
+	}, nil
+}
+
+func (r *MonitorRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status domain.MonitorStatus) (domain.MonitorStatus, error) {
+	prev, err := r.queries(ctx).UpdateMonitorStatus(ctx, gen.UpdateMonitorStatusParams{
 		ID:            id,
 		CurrentStatus: string(status),
 	})
+	if err != nil {
+		return "", err
+	}
+	return domain.MonitorStatus(prev), nil
 }
 
 func (r *MonitorRepo) Delete(ctx context.Context, id, userID uuid.UUID) error {

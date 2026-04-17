@@ -35,6 +35,7 @@ func SetupStreams(ctx context.Context, js jetstream.JetStream) error {
 		Retention: jetstream.WorkQueuePolicy,
 		Storage:   jetstream.FileStorage,
 		MaxAge:    72 * time.Hour,
+		MaxBytes:  1 * 1024 * 1024 * 1024, // 1 GB
 	})
 	if err != nil {
 		return fmt.Errorf("create MONITORS stream: %w", err)
@@ -46,6 +47,7 @@ func SetupStreams(ctx context.Context, js jetstream.JetStream) error {
 		Retention: jetstream.WorkQueuePolicy,
 		Storage:   jetstream.FileStorage,
 		MaxAge:    72 * time.Hour,
+		MaxBytes:  1 * 1024 * 1024 * 1024, // 1 GB
 	})
 	if err != nil {
 		return fmt.Errorf("create ALERTS stream: %w", err)
@@ -58,6 +60,7 @@ func SetupStreams(ctx context.Context, js jetstream.JetStream) error {
 		Retention: jetstream.WorkQueuePolicy,
 		Storage:   jetstream.MemoryStorage,
 		MaxAge:    1 * time.Hour,
+		MaxBytes:  100 * 1024 * 1024, // 100 MB (memory-backed — lower limit)
 	})
 	if err != nil {
 		return fmt.Errorf("create CHECKS stream: %w", err)

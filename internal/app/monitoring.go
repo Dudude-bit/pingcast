@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -13,6 +14,11 @@ import (
 	"github.com/kirillinakin/pingcast/internal/port"
 )
 
+// ErrEventPublishFailed indicates the DB write succeeded but the event
+// could not be published to the message bus. The caller should treat
+// the mutation as applied but warn the user that sync may be delayed.
+var ErrEventPublishFailed = fmt.Errorf("event publish failed")
+
 type MonitoringService struct {
 	monitors     port.MonitorRepo
 	channels     port.ChannelRepo
@@ -22,6 +28,7 @@ type MonitoringService struct {
 	uptime       port.UptimeRepo
 	txm          port.TxManager
 	alerts       port.AlertEventPublisher
+	events       port.MonitorEventPublisher
 	registry     port.CheckerRegistry
 	metrics      port.Metrics
 }
@@ -35,6 +42,7 @@ func NewMonitoringService(
 	uptime port.UptimeRepo,
 	txm port.TxManager,
 	alerts port.AlertEventPublisher,
+	events port.MonitorEventPublisher,
 	registry port.CheckerRegistry,
 	metrics port.Metrics,
 ) *MonitoringService {
@@ -47,6 +55,7 @@ func NewMonitoringService(
 		uptime:       uptime,
 		txm:          txm,
 		alerts:       alerts,
+		events:       events,
 		registry:     registry,
 		metrics:      metrics,
 	}
@@ -120,6 +129,9 @@ func (s *MonitoringService) CreateMonitor(ctx context.Context, user *domain.User
 		if s.metrics != nil {
 			s.metrics.MonitorCreated(ctx)
 		}
+		if err := s.publishMonitorEvent(ctx, domain.ActionCreate, created); err != nil {
+			return created, fmt.Errorf("%w: %w", ErrEventPublishFailed, err)
+		}
 		return created, nil
 	}
 
@@ -145,6 +157,9 @@ func (s *MonitoringService) CreateMonitor(ctx context.Context, user *domain.User
 	}
 	if s.metrics != nil {
 		s.metrics.MonitorCreated(ctx)
+	}
+	if err := s.publishMonitorEvent(ctx, domain.ActionCreate, created); err != nil {
+		return created, fmt.Errorf("%w: %w", ErrEventPublishFailed, err)
 	}
 	return created, nil
 }
@@ -197,6 +212,9 @@ func (s *MonitoringService) UpdateMonitor(ctx context.Context, user *domain.User
 		return nil, fmt.Errorf("update monitor: %w", err)
 	}
 
+	if err := s.publishMonitorEvent(ctx, domain.ActionUpdate, mon); err != nil {
+		return mon, fmt.Errorf("%w: %w", ErrEventPublishFailed, err)
+	}
 	return mon, nil
 }
 
@@ -207,21 +225,54 @@ func (s *MonitoringService) DeleteMonitor(ctx context.Context, userID, monitorID
 	if s.metrics != nil {
 		s.metrics.MonitorDeleted(ctx)
 	}
+	// Publish after DB delete (per spec 1.1a). If publish fails, checker
+	// will eventually sync via periodic monitor reload.
+	ev := port.MonitorChangedEvent{Action: domain.ActionDelete, MonitorID: monitorID}
+	if err := s.events.PublishMonitorChanged(ctx, ev); err != nil {
+		slog.Warn("failed to publish monitor delete event", "monitor_id", monitorID, "error", err)
+	}
 	return nil
 }
 
 func (s *MonitoringService) TogglePause(ctx context.Context, user *domain.User, monitorID uuid.UUID) (*domain.Monitor, error) {
-	mon, err := s.monitors.GetByID(ctx, monitorID)
-	if err != nil || mon.UserID != user.ID {
-		return nil, fmt.Errorf("monitor not found")
+	// Atomic toggle — single SQL query prevents race condition (Issue 4.3).
+	mon, err := s.monitors.TogglePause(ctx, monitorID, user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("toggle pause: %w", err)
 	}
 
-	mon.IsPaused = !mon.IsPaused
-	if err := s.monitors.Update(ctx, mon); err != nil {
-		return nil, fmt.Errorf("update monitor: %w", err)
+	action := domain.ActionResume
+	if mon.IsPaused {
+		action = domain.ActionPause
 	}
-
+	if err := s.publishMonitorEvent(ctx, action, mon); err != nil {
+		return mon, fmt.Errorf("%w: %w", ErrEventPublishFailed, err)
+	}
 	return mon, nil
+}
+
+func (s *MonitoringService) publishMonitorEvent(ctx context.Context, action domain.MonitorAction, m *domain.Monitor) error {
+	if s.events == nil {
+		return nil
+	}
+	return s.events.PublishMonitorChanged(ctx, monitorToEvent(action, m))
+}
+
+func monitorToEvent(action domain.MonitorAction, m *domain.Monitor) port.MonitorChangedEvent {
+	ev := port.MonitorChangedEvent{
+		Action:    action,
+		MonitorID: m.ID,
+	}
+	if action == domain.ActionDelete || action == domain.ActionPause {
+		return ev
+	}
+	ev.Name = m.Name
+	ev.Type = m.Type
+	ev.CheckConfig = m.CheckConfig
+	ev.IntervalSeconds = m.IntervalSeconds
+	ev.AlertAfterFailures = m.AlertAfterFailures
+	ev.IsPaused = m.IsPaused
+	return ev
 }
 
 // ProcessCheckResult is the core business logic.
@@ -244,13 +295,10 @@ func (s *MonitoringService) ProcessCheckResult(ctx context.Context, monitor *dom
 		slog.Error("failed to record uptime check", "monitor_id", monitor.ID, "error", err)
 	}
 
-	current, err := s.monitors.GetByID(ctx, monitor.ID)
-	previousStatus := domain.StatusUnknown
-	if err == nil {
-		previousStatus = current.CurrentStatus
-	}
-
-	if err := s.monitors.UpdateStatus(ctx, monitor.ID, result.Status); err != nil {
+	// Atomically update status and get previous value (Issue 4.1).
+	// CTE-based query prevents race condition between concurrent check results.
+	previousStatus, err := s.monitors.UpdateStatus(ctx, monitor.ID, result.Status)
+	if err != nil {
 		return fmt.Errorf("update status: %w", err)
 	}
 
@@ -294,6 +342,11 @@ func (s *MonitoringService) handleDown(ctx context.Context, monitor *domain.Moni
 
 	incident, err := s.incidents.Create(ctx, monitor.ID, cause)
 	if err != nil {
+		// Partial unique index caught a concurrent Create — another goroutine
+		// already opened the incident. Skip (Issue 4.6).
+		if errors.Is(err, domain.ErrIncidentExists) {
+			return nil
+		}
 		return fmt.Errorf("create incident: %w", err)
 	}
 

@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/kirillinakin/pingcast/internal/crypto"
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/port"
 	"github.com/kirillinakin/pingcast/internal/sqlc/gen"
@@ -16,43 +15,39 @@ import (
 var _ port.ChannelRepo = (*ChannelRepo)(nil)
 
 type ChannelRepo struct {
-	pool *pgxpool.Pool
-	q    *gen.Queries
-	enc  *crypto.Encryptor
+	pool   *pgxpool.Pool
+	q      *gen.Queries
+	cipher port.Cipher
 }
 
-func NewChannelRepo(pool *pgxpool.Pool, q *gen.Queries) *ChannelRepo {
-	return &ChannelRepo{pool: pool, q: q}
-}
-
-func NewChannelRepoWithEncryption(pool *pgxpool.Pool, q *gen.Queries, enc *crypto.Encryptor) *ChannelRepo {
-	return &ChannelRepo{pool: pool, q: q, enc: enc}
+func NewChannelRepo(pool *pgxpool.Pool, q *gen.Queries, cipher port.Cipher) *ChannelRepo {
+	return &ChannelRepo{pool: pool, q: q, cipher: cipher}
 }
 
 func (r *ChannelRepo) queries(ctx context.Context) *gen.Queries {
 	return QueriesFromCtx(ctx, r.q, r.pool)
 }
 
-func (r *ChannelRepo) encryptConfig(config json.RawMessage) (json.RawMessage, error) {
-	if r.enc == nil || len(config) == 0 {
+func (r *ChannelRepo) encryptConfig(ctx context.Context, config json.RawMessage) (json.RawMessage, error) {
+	if len(config) == 0 {
 		return config, nil
 	}
-	encrypted, err := r.enc.Encrypt(config)
+	encrypted, err := r.cipher.Encrypt(ctx, config)
 	if err != nil {
 		return nil, fmt.Errorf("encrypt channel config: %w", err)
 	}
 	return json.Marshal(encrypted)
 }
 
-func (r *ChannelRepo) decryptConfig(config json.RawMessage) (json.RawMessage, error) {
-	if r.enc == nil || len(config) == 0 {
+func (r *ChannelRepo) decryptConfig(ctx context.Context, config json.RawMessage) (json.RawMessage, error) {
+	if len(config) == 0 {
 		return config, nil
 	}
 	var encrypted string
 	if err := json.Unmarshal(config, &encrypted); err != nil {
-		return nil, fmt.Errorf("channel config is not encrypted (expected JSON string): %w", err)
+		return config, nil // Not encrypted — return as-is
 	}
-	decrypted, err := r.enc.Decrypt(encrypted)
+	decrypted, err := r.cipher.Decrypt(ctx, encrypted)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt channel config: %w", err)
 	}
@@ -60,7 +55,7 @@ func (r *ChannelRepo) decryptConfig(config json.RawMessage) (json.RawMessage, er
 }
 
 func (r *ChannelRepo) Create(ctx context.Context, ch *domain.NotificationChannel) (*domain.NotificationChannel, error) {
-	encConfig, err := r.encryptConfig(ch.Config)
+	encConfig, err := r.encryptConfig(ctx, ch.Config)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +69,7 @@ func (r *ChannelRepo) Create(ctx context.Context, ch *domain.NotificationChannel
 		return nil, fmt.Errorf("create channel: %w", err)
 	}
 	result := toDomainChannel(row)
-	decrypted, err := r.decryptConfig(result.Config)
+	decrypted, err := r.decryptConfig(ctx, result.Config)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +83,7 @@ func (r *ChannelRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Notifi
 		return nil, fmt.Errorf("get channel: %w", err)
 	}
 	result := toDomainChannel(row)
-	decrypted, err := r.decryptConfig(result.Config)
+	decrypted, err := r.decryptConfig(ctx, result.Config)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +98,7 @@ func (r *ChannelRepo) ListByUserID(ctx context.Context, userID uuid.UUID) ([]dom
 	}
 	channels := toDomainChannels(rows)
 	for i := range channels {
-		decrypted, err := r.decryptConfig(channels[i].Config)
+		decrypted, err := r.decryptConfig(ctx, channels[i].Config)
 		if err != nil {
 			return nil, err
 		}
@@ -119,7 +114,7 @@ func (r *ChannelRepo) ListForMonitor(ctx context.Context, monitorID uuid.UUID) (
 	}
 	channels := toDomainChannels(rows)
 	for i := range channels {
-		decrypted, err := r.decryptConfig(channels[i].Config)
+		decrypted, err := r.decryptConfig(ctx, channels[i].Config)
 		if err != nil {
 			return nil, err
 		}
@@ -129,7 +124,7 @@ func (r *ChannelRepo) ListForMonitor(ctx context.Context, monitorID uuid.UUID) (
 }
 
 func (r *ChannelRepo) Update(ctx context.Context, ch *domain.NotificationChannel) error {
-	encConfig, err := r.encryptConfig(ch.Config)
+	encConfig, err := r.encryptConfig(ctx, ch.Config)
 	if err != nil {
 		return err
 	}

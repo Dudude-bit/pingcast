@@ -18,6 +18,7 @@ import (
 	"github.com/kirillinakin/pingcast/internal/adapter/postgres"
 	"github.com/kirillinakin/pingcast/internal/crypto"
 	"github.com/kirillinakin/pingcast/internal/domain"
+	"github.com/kirillinakin/pingcast/internal/port"
 	"github.com/kirillinakin/pingcast/internal/sqlc/gen"
 )
 
@@ -47,6 +48,14 @@ func generateEncryptionKey(t *testing.T) string {
 	return base64.StdEncoding.EncodeToString(key)
 }
 
+// testCipher creates a real Encryptor for integration tests.
+func testCipher(t *testing.T) port.Cipher {
+	t.Helper()
+	enc, err := crypto.NewEncryptor(1, map[byte]string{1: generateEncryptionKey(t)})
+	require.NoError(t, err)
+	return enc
+}
+
 // ---------------------------------------------------------------------------
 // MonitorRepo
 // ---------------------------------------------------------------------------
@@ -61,7 +70,7 @@ func TestMonitorRepo_CRUD(t *testing.T) {
 
 	ctx := context.Background()
 	q := gen.New(pool)
-	repo := postgres.NewMonitorRepo(pool, q)
+	repo := postgres.NewMonitorRepo(pool, q, testCipher(t))
 
 	userID := createTestUser(t, pool)
 
@@ -125,7 +134,7 @@ func TestMonitorRepo_SoftDelete(t *testing.T) {
 
 	ctx := context.Background()
 	q := gen.New(pool)
-	repo := postgres.NewMonitorRepo(pool, q)
+	repo := postgres.NewMonitorRepo(pool, q, testCipher(t))
 
 	userID := createTestUser(t, pool)
 
@@ -172,7 +181,7 @@ func TestChannelRepo_CRUD(t *testing.T) {
 
 	ctx := context.Background()
 	q := gen.New(pool)
-	repo := postgres.NewChannelRepo(pool, q)
+	repo := postgres.NewChannelRepo(pool, q, testCipher(t))
 
 	userID := createTestUser(t, pool)
 
@@ -228,8 +237,8 @@ func TestChannelRepo_BindUnbind(t *testing.T) {
 
 	ctx := context.Background()
 	q := gen.New(pool)
-	monitorRepo := postgres.NewMonitorRepo(pool, q)
-	channelRepo := postgres.NewChannelRepo(pool, q)
+	monitorRepo := postgres.NewMonitorRepo(pool, q, testCipher(t))
+	channelRepo := postgres.NewChannelRepo(pool, q, testCipher(t))
 
 	userID := createTestUser(t, pool)
 
@@ -357,7 +366,7 @@ func TestUptimeRepo_RecordAndQuery(t *testing.T) {
 
 	// Create monitors directly via SQL (UptimeRepo needs only monitor IDs, and
 	// monitor_uptime_hourly has a FK to monitors).
-	monitorRepo := postgres.NewMonitorRepo(pool, q)
+	monitorRepo := postgres.NewMonitorRepo(pool, q, testCipher(t))
 
 	m1, err := monitorRepo.Create(ctx, &domain.Monitor{
 		UserID:             userID,
@@ -433,10 +442,10 @@ func TestEncryption_Roundtrip(t *testing.T) {
 	q := gen.New(pool)
 
 	keyBase64 := generateEncryptionKey(t)
-	enc, err := crypto.NewEncryptor(keyBase64, "")
+	enc, err := crypto.NewEncryptor(1, map[byte]string{1: keyBase64})
 	require.NoError(t, err)
 
-	repo := postgres.NewMonitorRepoWithEncryption(pool, q, enc)
+	repo := postgres.NewMonitorRepo(pool, q, enc)
 
 	userID := createTestUser(t, pool)
 

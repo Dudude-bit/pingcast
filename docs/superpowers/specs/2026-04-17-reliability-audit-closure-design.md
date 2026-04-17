@@ -245,9 +245,20 @@ Fixes applied in Stage 1 (working tree, unstaged — will land in the relevant P
 - `adapter/postgres/incident_repo.go`: catch pg unique_violation → `ErrIncidentExists`
 - `app/monitoring.go`: `handleDown` skips on `ErrIncidentExists`
 
-### PR-merges (if tangling forced any)
+### PR-merges (forced by tangling discovered in Stage 2)
 
-None required so far. Revisit during Stage 2 `git add -p`.
+The original parent-spec plan envisioned **6 PRs**. During Stage 2 splitting, the diff was found to be more interlocked than the spec anticipated:
+
+- `internal/adapter/postgres/monitor_repo.go` couples `port.Cipher` (PR5), atomic `TogglePause`/`UpdateStatus` (PR4a), and is used by `app/monitoring.go` together with event publish (PR1). These cannot be split across commits without rewriting the repo to use intermediate signatures.
+- `internal/adapter/nats/subscriber.go` interleaves MonitorSubscriber per-msg ctx + MaxDeliver (PR1) with AlertSubscriber BackOff (PR2) in adjacent hunks.
+- `internal/adapter/http/server.go` mixes removal of `events.PublishMonitorChanged` (PR1, 1.6) with register rate-limit (PR4b, 4.7). Most of the server.go diff (~85%) is PR1.
+
+**Final landed structure — 2 commits:**
+
+1. **`feat: reliability-audit foundation`** — PR1 + PR2 + PR3 + PR4a + PR5 + 4.7. All interlocked architecture (hex-arch + events + atomicity + encryption + notifier + scheduler lifecycle). Includes `server.go` wholly.
+2. **`feat: reliability-audit HTTP defensive coding`** — PR4b subset that can be cleanly isolated: `middleware.go` (4.5 detached Touch ctx), `pages.go` (4.8 range validation), `handler_test.go`, `setup.go` error handling. Depends on Commit 1.
+
+This deviation preserves every success-criterion (green build/vet/test/race at every step, full issue coverage, `git reset --hard pre-audit-closure` rollback) at the cost of finer-grained bisectability within the audit itself.
 
 ### go.mod changes (classification)
 

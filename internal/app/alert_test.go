@@ -10,7 +10,6 @@ import (
 	"github.com/kirillinakin/pingcast/internal/app"
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/mocks"
-	"github.com/kirillinakin/pingcast/internal/port"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -62,7 +61,7 @@ func TestHandle_AllChannelsSucceed(t *testing.T) {
 
 	registry := mocks.NewMockChannelRegistry(t)
 	registry.EXPECT().
-		CreateSenderWithRetry(mock.Anything, mock.Anything).
+		CreateSender(mock.Anything, mock.Anything, mock.Anything).
 		Return(sender, nil).
 		Times(2)
 
@@ -70,7 +69,7 @@ func TestHandle_AllChannelsSucceed(t *testing.T) {
 
 	metrics := mocks.NewMockMetrics(t)
 	metrics.EXPECT().
-		RecordAlertSent(mock.Anything, mock.Anything, true).
+		RecordAlertSent(mock.Anything, mock.Anything, true, mock.Anything).
 		Return().
 		Times(2)
 
@@ -99,7 +98,7 @@ func TestHandle_AllChannelsFail(t *testing.T) {
 
 	registry := mocks.NewMockChannelRegistry(t)
 	registry.EXPECT().
-		CreateSenderWithRetry(mock.Anything, mock.Anything).
+		CreateSender(mock.Anything, mock.Anything, mock.Anything).
 		Return(sender, nil).
 		Times(2)
 
@@ -107,7 +106,7 @@ func TestHandle_AllChannelsFail(t *testing.T) {
 
 	metrics := mocks.NewMockMetrics(t)
 	metrics.EXPECT().
-		RecordAlertSent(mock.Anything, mock.Anything, false).
+		RecordAlertSent(mock.Anything, mock.Anything, false, mock.Anything).
 		Return().
 		Times(2)
 	metrics.EXPECT().
@@ -134,28 +133,26 @@ func TestHandle_PartialFailure(t *testing.T) {
 		Return([]domain.NotificationChannel{ch1, ch2, ch3}, nil).
 		Once()
 
-	// Three separate senders: first succeeds, second fails, third succeeds.
-	sender1 := mocks.NewMockAlertSender(t)
-	sender1.EXPECT().Send(mock.Anything, event).Return(nil).Once()
+	// Three separate senders: telegram succeeds, email fails, webhook succeeds.
+	senderTG := mocks.NewMockAlertSender(t)
+	senderTG.EXPECT().Send(mock.Anything, event).Return(nil).Once()
 
-	sender2 := mocks.NewMockAlertSender(t)
-	sender2.EXPECT().Send(mock.Anything, event).Return(errors.New("email down")).Once()
+	senderEmail := mocks.NewMockAlertSender(t)
+	senderEmail.EXPECT().Send(mock.Anything, event).Return(errors.New("email down")).Once()
 
-	sender3 := mocks.NewMockAlertSender(t)
-	sender3.EXPECT().Send(mock.Anything, event).Return(nil).Once()
-
-	callIndex := 0
-	senders := []port.AlertSender{sender1, sender2, sender3}
+	senderWH := mocks.NewMockAlertSender(t)
+	senderWH.EXPECT().Send(mock.Anything, event).Return(nil).Once()
 
 	registry := mocks.NewMockChannelRegistry(t)
 	registry.EXPECT().
-		CreateSenderWithRetry(mock.Anything, mock.Anything).
-		RunAndReturn(func(_ domain.ChannelType, _ json.RawMessage) (port.AlertSender, error) {
-			s := senders[callIndex]
-			callIndex++
-			return s, nil
-		}).
-		Times(3)
+		CreateSender(domain.ChannelTelegram, mock.Anything, mock.Anything).
+		Return(senderTG, nil).Once()
+	registry.EXPECT().
+		CreateSender(domain.ChannelEmail, mock.Anything, mock.Anything).
+		Return(senderEmail, nil).Once()
+	registry.EXPECT().
+		CreateSender(domain.ChannelWebhook, mock.Anything, mock.Anything).
+		Return(senderWH, nil).Once()
 
 	failedAlerts := mocks.NewMockFailedAlertRepo(t)
 	failedAlerts.EXPECT().
@@ -167,11 +164,11 @@ func TestHandle_PartialFailure(t *testing.T) {
 
 	metrics := mocks.NewMockMetrics(t)
 	metrics.EXPECT().
-		RecordAlertSent(mock.Anything, mock.Anything, true).
+		RecordAlertSent(mock.Anything, mock.Anything, true, mock.Anything).
 		Return().
 		Times(2)
 	metrics.EXPECT().
-		RecordAlertSent(mock.Anything, mock.Anything, false).
+		RecordAlertSent(mock.Anything, mock.Anything, false, mock.Anything).
 		Return().
 		Once()
 	metrics.EXPECT().
@@ -247,7 +244,7 @@ func TestHandle_DisabledChannelsSkipped(t *testing.T) {
 
 	registry := mocks.NewMockChannelRegistry(t)
 	registry.EXPECT().
-		CreateSenderWithRetry(mock.Anything, mock.Anything).
+		CreateSender(mock.Anything, mock.Anything, mock.Anything).
 		Return(sender, nil).
 		Once()
 
@@ -255,7 +252,7 @@ func TestHandle_DisabledChannelsSkipped(t *testing.T) {
 
 	metrics := mocks.NewMockMetrics(t)
 	metrics.EXPECT().
-		RecordAlertSent(mock.Anything, mock.Anything, true).
+		RecordAlertSent(mock.Anything, mock.Anything, true, mock.Anything).
 		Return().
 		Once()
 

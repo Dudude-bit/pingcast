@@ -13,6 +13,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	natsadapter "github.com/kirillinakin/pingcast/internal/adapter/nats"
+	"github.com/kirillinakin/pingcast/internal/bootstrap"
 	"github.com/kirillinakin/pingcast/internal/adapter/postgres"
 	redisadapter "github.com/kirillinakin/pingcast/internal/adapter/redis"
 	"github.com/kirillinakin/pingcast/internal/app"
@@ -81,9 +82,14 @@ func main() {
 	}
 
 	// Repos
+	cipher, err := bootstrap.InitCipher(cfg.EncryptionConfig)
+	if err != nil {
+		slog.Error("failed to initialize encryption", "error", err)
+		os.Exit(1)
+	}
 	userRepo := postgres.NewUserRepo(queries)
-	monitorRepo := postgres.NewMonitorRepo(pool, queries)
-	channelRepo := postgres.NewChannelRepo(pool, queries)
+	monitorRepo := postgres.NewMonitorRepo(pool, queries, cipher)
+	channelRepo := postgres.NewChannelRepo(pool, queries, cipher)
 	checkResultRepo := postgres.NewCheckResultRepo(queries)
 	incidentRepo := postgres.NewIncidentRepo(queries)
 	uptimeRepo := postgres.NewUptimeRepo(queries)
@@ -103,7 +109,7 @@ func main() {
 	metrics := observability.NewMetrics()
 
 	// App service
-	monitoringSvc := app.NewMonitoringService(monitorRepo, channelRepo, checkResultRepo, incidentRepo, userRepo, uptimeRepo, txm, alertPub, registry, metrics)
+	monitoringSvc := app.NewMonitoringService(monitorRepo, channelRepo, checkResultRepo, incidentRepo, userRepo, uptimeRepo, txm, alertPub, nil, registry, metrics)
 
 	// Pull-based NATS consumer — stateless, scales horizontally
 	checkSub := natsadapter.NewCheckSubscriber(js)

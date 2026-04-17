@@ -3,13 +3,27 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
+	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/port"
 )
+
+// deliveryReason extracts the reason from a DeliveryError, or returns "unknown".
+func deliveryReason(err error) string {
+	var de *domain.DeliveryError
+	if errors.As(err, &de) {
+		return de.Reason
+	}
+	return "unknown"
+}
 
 type AlertService struct {
 	channels     port.ChannelRepo
@@ -52,36 +66,65 @@ func (s *AlertService) Handle(ctx context.Context, event *domain.AlertEvent) err
 		return nil
 	}
 
-	var sent, failed int
-	var failedIDs []uuid.UUID
+	var (
+		sent      int
+		failed    int
+		failedIDs []uuid.UUID
+		mu        sync.Mutex
+	)
+
+	groupCtx, groupCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer groupCancel()
+
+	g, gCtx := errgroup.WithContext(groupCtx)
+	g.SetLimit(10)
+
 	for _, ch := range channels {
 		if !ch.IsEnabled {
 			continue
 		}
-		sender, err := s.registry.CreateSenderWithRetry(ch.Type, ch.Config)
-		if err != nil {
-			slog.Error("failed to create sender", "channel_id", ch.ID, "type", ch.Type, "error", err)
-			if s.metrics != nil {
-				s.metrics.RecordAlertSent(ctx, string(ch.Type), false)
+		ch := ch
+		g.Go(func() error {
+			sender, err := s.registry.CreateSender(ch.Type, ch.ID, ch.Config)
+			if err != nil {
+				slog.Error("failed to create sender", "channel_id", ch.ID, "type", ch.Type, "error", err)
+				if s.metrics != nil {
+					s.metrics.RecordAlertSent(gCtx, string(ch.Type), false, "config_error")
+				}
+				mu.Lock()
+				failedIDs = append(failedIDs, ch.ID)
+				failed++
+				mu.Unlock()
+				return nil // don't abort other goroutines
 			}
-			failedIDs = append(failedIDs, ch.ID)
-			failed++
-			continue
-		}
-		if err := sender.Send(ctx, event); err != nil {
-			slog.Error("channel delivery failed", "channel_id", ch.ID, "type", ch.Type, "error", err)
-			if s.metrics != nil {
-				s.metrics.RecordAlertSent(ctx, string(ch.Type), false)
+
+			chCtx, chCancel := context.WithTimeout(gCtx, 10*time.Second)
+			defer chCancel()
+
+			if err := sender.Send(chCtx, event); err != nil {
+				reason := deliveryReason(err)
+				slog.Error("channel delivery failed", "channel_id", ch.ID, "type", ch.Type, "reason", reason, "error", err)
+				if s.metrics != nil {
+					s.metrics.RecordAlertSent(gCtx, string(ch.Type), false, reason)
+				}
+				mu.Lock()
+				failedIDs = append(failedIDs, ch.ID)
+				failed++
+				mu.Unlock()
+				return nil
 			}
-			failedIDs = append(failedIDs, ch.ID)
-			failed++
-			continue
-		}
-		if s.metrics != nil {
-			s.metrics.RecordAlertSent(ctx, string(ch.Type), true)
-		}
-		sent++
+
+			if s.metrics != nil {
+				s.metrics.RecordAlertSent(gCtx, string(ch.Type), true, "")
+			}
+			mu.Lock()
+			sent++
+			mu.Unlock()
+			return nil
+		})
 	}
+
+	_ = g.Wait()
 
 	// All channels failed → return error so NATS retries the entire event
 	if sent == 0 && failed > 0 {
@@ -104,8 +147,10 @@ func (s *AlertService) Handle(ctx context.Context, event *domain.AlertEvent) err
 	return nil
 }
 
-// writeToDLQ persists a partial-failure event to the failed_alerts table.
-// Errors are logged but never propagated — the alert is already Acked.
+// writeToDLQ persists a partial-failure event to the failed_alerts table
+// with retry (3 attempts, 1s/2s/4s backoff). Never returns error — the alert
+// is already Acked, and re-sending to successful channels is worse than
+// losing the audit record.
 func (s *AlertService) writeToDLQ(ctx context.Context, event *domain.AlertEvent, sent, failed int, failedIDs []uuid.UUID) {
 	eventJSON, err := json.Marshal(event)
 	if err != nil {
@@ -113,13 +158,30 @@ func (s *AlertService) writeToDLQ(ctx context.Context, event *domain.AlertEvent,
 		return
 	}
 	errMsg := fmt.Sprintf("%d/%d channels failed for monitor %s", failed, sent+failed, event.MonitorID)
-	if dlqErr := s.failedAlerts.Create(ctx, eventJSON, errMsg, failedIDs); dlqErr != nil {
-		slog.Error("failed to write to DLQ", "error", dlqErr)
+
+	delays := []time.Duration{1 * time.Second, 2 * time.Second, 4 * time.Second}
+	for attempt, delay := range delays {
+		if dlqErr := s.failedAlerts.Create(ctx, eventJSON, errMsg, failedIDs); dlqErr != nil {
+			slog.Error("DLQ write failed, retrying",
+				"attempt", attempt+1,
+				"max_attempts", len(delays),
+				"error", dlqErr,
+			)
+			time.Sleep(delay)
+			continue
+		}
+		if s.metrics != nil {
+			s.metrics.RecordAlertDeadLettered(ctx)
+		}
 		return
 	}
-	if s.metrics != nil {
-		s.metrics.RecordAlertDeadLettered(ctx)
-	}
+	slog.Error("DLQ write failed after all retries — partial failure metadata lost",
+		"monitor_id", event.MonitorID,
+		"sent", sent,
+		"failed", failed,
+		"failed_channel_ids", failedIDs,
+		"event", string(eventJSON),
+	)
 }
 
 // --- Channel CRUD ---

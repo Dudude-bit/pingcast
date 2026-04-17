@@ -16,7 +16,7 @@ type ChannelSenderFactory interface {
 
 type ChannelRegistry interface {
 	Get(channelType domain.ChannelType) (ChannelSenderFactory, error)
-	CreateSenderWithRetry(channelType domain.ChannelType, config json.RawMessage) (AlertSender, error)
+	CreateSender(channelType domain.ChannelType, channelID uuid.UUID, config json.RawMessage) (AlertSender, error)
 	Types() []ChannelTypeInfo
 	ValidateConfig(channelType domain.ChannelType, config json.RawMessage) error
 }

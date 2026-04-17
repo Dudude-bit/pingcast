@@ -56,12 +56,12 @@ func setupTestApp(t *testing.T) *testEnv {
 	authService := app.NewAuthService(userRepo, sessionRepo)
 	monitoringService := app.NewMonitoringService(
 		monitorRepo, channelRepo, checkResultRepo, incidentRepo,
-		userRepo, uptimeRepo, txManager, alertPub, checkerRegistry, metrics,
+		userRepo, uptimeRepo, txManager, alertPub, eventPub, checkerRegistry, metrics,
 	)
 	alertService := app.NewAlertService(channelRepo, monitorRepo, channelRegistry, failedAlertRepo, metrics)
 
 	pageHandler := NewPageHandler(authService, monitoringService, alertService, rateLimiter, apiKeyRepo)
-	server := NewServer(authService, monitoringService, alertService, eventPub, rateLimiter, apiKeyRepo)
+	server := NewServer(authService, monitoringService, alertService, rateLimiter, apiKeyRepo)
 	webhookHandler := NewWebhookHandler(authService, alertService, "test-secret")
 
 	healthChecker := &HealthChecker{}

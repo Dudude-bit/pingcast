@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -11,6 +12,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/kirillinakin/pingcast/internal/adapter/channel"
+	"github.com/kirillinakin/pingcast/internal/bootstrap"
 	natsadapter "github.com/kirillinakin/pingcast/internal/adapter/nats"
 	"github.com/kirillinakin/pingcast/internal/adapter/postgres"
 	smtpadapter "github.com/kirillinakin/pingcast/internal/adapter/smtp"
@@ -51,8 +53,13 @@ func main() {
 	defer pool.Close()
 
 	queries := sqlcgen.New(pool)
-	channelRepo := postgres.NewChannelRepo(pool, queries)
-	monitorRepo := postgres.NewMonitorRepo(pool, queries)
+	cipher, err := bootstrap.InitCipher(cfg.EncryptionConfig)
+	if err != nil {
+		slog.Error("failed to initialize encryption", "error", err)
+		os.Exit(1)
+	}
+	channelRepo := postgres.NewChannelRepo(pool, queries, cipher)
+	monitorRepo := postgres.NewMonitorRepo(pool, queries, cipher)
 	failedAlertRepo := postgres.NewFailedAlertRepo(queries)
 
 	// NATS
@@ -106,6 +113,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	// DLQ consumer: persist alerts that exhausted MaxDeliver (Issue 2.4)
+	dlqConsumer := natsadapter.NewDLQConsumer(nc)
+	if err := dlqConsumer.Subscribe(ctx, func(ctx context.Context, streamName, consumerName string, streamSeq uint64, data []byte) error {
+		errMsg := fmt.Sprintf("max deliveries exhausted: stream=%s consumer=%s seq=%d", streamName, consumerName, streamSeq)
+		return failedAlertRepo.Create(ctx, data, errMsg, nil)
+	}); err != nil {
+		slog.Error("failed to subscribe to DLQ advisories", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("DLQ consumer started for ALERTS stream")
+
 	slog.Info("notifier started")
 	<-ctx.Done()
 	slog.Info("notifier shutting down")
@@ -117,6 +135,7 @@ func main() {
 	done := make(chan struct{})
 	go func() {
 		alertSub.Stop()
+		dlqConsumer.Stop()
 		close(done)
 	}()
 	select {

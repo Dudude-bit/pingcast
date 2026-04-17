@@ -4,8 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	gosmtp "net/smtp"
+	"strconv"
+	"time"
 
+	"github.com/kirillinakin/pingcast/internal/adapter/httperr"
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/port"
 )
@@ -65,7 +69,7 @@ type sender struct {
 	port                       int
 }
 
-func (s *sender) Send(_ context.Context, event *domain.AlertEvent) error {
+func (s *sender) Send(ctx context.Context, event *domain.AlertEvent) error {
 	var subject, body string
 	switch event.Event {
 	case domain.AlertDown:
@@ -81,8 +85,56 @@ func (s *sender) Send(_ context.Context, event *domain.AlertEvent) error {
 	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s",
 		s.from, s.to, subject, body)
 
-	addr := fmt.Sprintf("%s:%d", s.host, s.port)
+	addr := net.JoinHostPort(s.host, strconv.Itoa(s.port))
 	auth := gosmtp.PlainAuth("", s.user, s.pass, s.host)
 
-	return gosmtp.SendMail(addr, auth, s.from, []string{s.to}, []byte(msg))
+	// Dial with context-derived timeout instead of unbounded gosmtp.SendMail.
+	deadline, hasDeadline := ctx.Deadline()
+	dialTimeout := 10 * time.Second
+	if hasDeadline {
+		remaining := time.Until(deadline)
+		if remaining < dialTimeout {
+			dialTimeout = remaining
+		}
+	}
+
+	conn, err := net.DialTimeout("tcp", addr, dialTimeout)
+	if err != nil {
+		return httperr.ClassifyNetError(fmt.Errorf("smtp dial: %w", err))
+	}
+
+	client, err := gosmtp.NewClient(conn, s.host)
+	if err != nil {
+		conn.Close()
+		return fmt.Errorf("smtp client: %w", err)
+	}
+	defer client.Close()
+
+	// Set a write deadline based on context.
+	if hasDeadline {
+		if tc, ok := conn.(*net.TCPConn); ok {
+			_ = tc.SetDeadline(deadline)
+		}
+	}
+
+	if err := client.Auth(auth); err != nil {
+		return domain.NewDeliveryError("auth_error", 0, fmt.Errorf("smtp auth: %w", err))
+	}
+	if err := client.Mail(s.from); err != nil {
+		return fmt.Errorf("smtp mail: %w", err)
+	}
+	if err := client.Rcpt(s.to); err != nil {
+		return fmt.Errorf("smtp rcpt: %w", err)
+	}
+	w, err := client.Data()
+	if err != nil {
+		return fmt.Errorf("smtp data: %w", err)
+	}
+	if _, err := w.Write([]byte(msg)); err != nil {
+		return fmt.Errorf("smtp write: %w", err)
+	}
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("smtp close data: %w", err)
+	}
+	return client.Quit()
 }

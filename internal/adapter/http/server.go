@@ -23,7 +23,6 @@ type Server struct {
 	auth        *app.AuthService
 	monitoring  *app.MonitoringService
 	alerts      *app.AlertService
-	events      port.MonitorEventPublisher
 	rateLimiter port.RateLimiter
 	apiKeys     port.APIKeyRepo
 }
@@ -32,7 +31,6 @@ func NewServer(
 	auth *app.AuthService,
 	monitoring *app.MonitoringService,
 	alerts *app.AlertService,
-	events port.MonitorEventPublisher,
 	rateLimiter port.RateLimiter,
 	apiKeys port.APIKeyRepo,
 ) *Server {
@@ -40,7 +38,6 @@ func NewServer(
 		auth:        auth,
 		monitoring:  monitoring,
 		alerts:      alerts,
-		events:      events,
 		rateLimiter: rateLimiter,
 		apiKeys:     apiKeys,
 	}
@@ -55,9 +52,19 @@ func (s *Server) Register(c *fiber.Ctx) error {
 		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid request body")})
 	}
 
+	// Rate limit by IP (Issue 4.7)
+	allowed, err := s.rateLimiter.Allow(c.UserContext(), c.IP())
+	if err != nil {
+		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("internal error")})
+	}
+	if !allowed {
+		return c.Status(429).JSON(apigen.ErrorResponse{Error: new("too many requests")})
+	}
+
 	user, sessionID, err := s.auth.Register(c.UserContext(), string(req.Email), req.Slug, req.Password)
 	if err != nil {
-		return c.Status(400).JSON(apigen.ErrorResponse{Error: new(err.Error())})
+		slog.Warn("registration failed", "error", err)
+		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("registration failed")})
 	}
 
 	setSessionCookie(c, sessionID)
@@ -121,7 +128,7 @@ func (s *Server) ListMonitors(c *fiber.Ctx) error {
 		uptimeF := float32(r.Uptime)
 		item, err := s.domainMonitorToAPIWithUptime(&r.Monitor, &uptimeF)
 		if err != nil {
-			return c.Status(500).JSON(apigen.ErrorResponse{Error: new(err.Error())})
+			return c.Status(500).JSON(apigen.ErrorResponse{Error: new("internal error")})
 		}
 		result = append(result, item)
 	}
@@ -162,16 +169,13 @@ func (s *Server) CreateMonitor(c *fiber.Ctx) error {
 
 	mon, err := s.monitoring.CreateMonitor(c.UserContext(), user, input)
 	if err != nil {
-		return c.Status(400).JSON(apigen.ErrorResponse{Error: new(err.Error())})
-	}
-
-	if s.events != nil {
-		s.events.PublishMonitorChanged(c.UserContext(), domain.ActionCreate, mon.ID, mon)
+		slog.Warn("create monitor failed", "error", err)
+		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("failed to create monitor")})
 	}
 
 	resp, err := s.domainMonitorToAPI(mon)
 	if err != nil {
-		return c.Status(500).JSON(apigen.ErrorResponse{Error: new(err.Error())})
+		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("internal error")})
 	}
 	return c.Status(201).JSON(resp)
 }
@@ -204,7 +208,7 @@ func (s *Server) GetMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 		nil, apiIncidents,
 	)
 	if err != nil {
-		return c.Status(500).JSON(apigen.ErrorResponse{Error: new(err.Error())})
+		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("internal error")})
 	}
 	return c.JSON(resp)
 }
@@ -237,16 +241,13 @@ func (s *Server) UpdateMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 
 	updated, err := s.monitoring.UpdateMonitor(c.UserContext(), user, uuid.UUID(id), input)
 	if err != nil {
-		return c.Status(400).JSON(apigen.ErrorResponse{Error: new(err.Error())})
-	}
-
-	if s.events != nil {
-		s.events.PublishMonitorChanged(c.UserContext(), domain.ActionUpdate, updated.ID, updated)
+		slog.Warn("update monitor failed", "error", err)
+		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("failed to update monitor")})
 	}
 
 	resp, err := s.domainMonitorToAPI(updated)
 	if err != nil {
-		return c.Status(500).JSON(apigen.ErrorResponse{Error: new(err.Error())})
+		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("internal error")})
 	}
 	return c.JSON(resp)
 }
@@ -255,10 +256,6 @@ func (s *Server) DeleteMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 	user := UserFromCtx(c)
 	if user == nil {
 		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
-	}
-
-	if s.events != nil {
-		s.events.PublishMonitorChanged(c.UserContext(), domain.ActionDelete, uuid.UUID(id), nil)
 	}
 
 	err := s.monitoring.DeleteMonitor(c.UserContext(), user.ID, uuid.UUID(id))
@@ -280,17 +277,9 @@ func (s *Server) ToggleMonitorPause(c *fiber.Ctx, id openapi_types.UUID) error {
 		return c.Status(404).JSON(apigen.ErrorResponse{Error: new("not found")})
 	}
 
-	if s.events != nil {
-		if updated.IsPaused {
-			s.events.PublishMonitorChanged(c.UserContext(), domain.ActionPause, updated.ID, nil)
-		} else {
-			s.events.PublishMonitorChanged(c.UserContext(), domain.ActionResume, updated.ID, updated)
-		}
-	}
-
 	resp, err := s.domainMonitorToAPI(updated)
 	if err != nil {
-		return c.Status(500).JSON(apigen.ErrorResponse{Error: new(err.Error())})
+		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("internal error")})
 	}
 	return c.JSON(resp)
 }
@@ -611,6 +600,9 @@ func domainChannelToAPI(ch *domain.NotificationChannel) apigen.NotificationChann
 
 func (s *Server) ListAPIKeys(c *fiber.Ctx) error {
 	user := UserFromCtx(c)
+	if user == nil {
+		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
+	}
 	keys, err := s.apiKeys.ListByUser(c.UserContext(), user.ID)
 	if err != nil {
 		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("failed to list api keys")})
@@ -624,6 +616,9 @@ func (s *Server) ListAPIKeys(c *fiber.Ctx) error {
 
 func (s *Server) CreateAPIKey(c *fiber.Ctx) error {
 	user := UserFromCtx(c)
+	if user == nil {
+		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
+	}
 	var req apigen.CreateAPIKeyJSONRequestBody
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid request body")})
@@ -674,6 +669,9 @@ func (s *Server) CreateAPIKey(c *fiber.Ctx) error {
 
 func (s *Server) RevokeAPIKey(c *fiber.Ctx, id openapi_types.UUID) error {
 	user := UserFromCtx(c)
+	if user == nil {
+		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
+	}
 	if err := s.apiKeys.Delete(c.UserContext(), uuid.UUID(id), user.ID); err != nil {
 		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("failed to revoke api key")})
 	}

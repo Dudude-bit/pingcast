@@ -5,10 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"time"
 
+	"github.com/kirillinakin/pingcast/internal/adapter/httperr"
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/port"
 )
@@ -90,12 +92,15 @@ func (s *sender) Send(ctx context.Context, event *domain.AlertEvent) error {
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("webhook request failed: %w", err)
+		return httperr.ClassifyNetError(err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}()
 
 	if resp.StatusCode >= 400 {
-		return fmt.Errorf("webhook returned status %d", resp.StatusCode)
+		return httperr.ClassifyHTTPStatus(resp.StatusCode, fmt.Errorf("webhook returned status %d", resp.StatusCode))
 	}
 	return nil
 }

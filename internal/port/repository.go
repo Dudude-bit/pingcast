@@ -34,7 +34,10 @@ type MonitorRepo interface {
 	ListActive(ctx context.Context) ([]domain.Monitor, error)
 	CountByUserID(ctx context.Context, userID uuid.UUID) (int, error)
 	Update(ctx context.Context, m *domain.Monitor) error
-	UpdateStatus(ctx context.Context, id uuid.UUID, status domain.MonitorStatus) error
+	// UpdateStatus atomically sets the new status and returns the previous one.
+	UpdateStatus(ctx context.Context, id uuid.UUID, status domain.MonitorStatus) (previousStatus domain.MonitorStatus, err error)
+	// TogglePause atomically flips is_paused and returns the full updated monitor.
+	TogglePause(ctx context.Context, id, userID uuid.UUID) (*domain.Monitor, error)
 	Delete(ctx context.Context, id, userID uuid.UUID) error
 }
 

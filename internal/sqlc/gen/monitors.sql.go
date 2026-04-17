@@ -301,6 +301,52 @@ func (q *Queries) ListPublicMonitorsByUserSlug(ctx context.Context, slug string)
 	return items, nil
 }
 
+const toggleMonitorPause = `-- name: ToggleMonitorPause :one
+UPDATE monitors SET is_paused = NOT is_paused
+WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
+RETURNING id, user_id, name, type, check_config, interval_seconds, alert_after_failures, is_paused, is_public, current_status, created_at, deleted_at
+`
+
+type ToggleMonitorPauseParams struct {
+	ID     uuid.UUID `json:"id"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+type ToggleMonitorPauseRow struct {
+	ID                 uuid.UUID          `json:"id"`
+	UserID             uuid.UUID          `json:"user_id"`
+	Name               string             `json:"name"`
+	Type               string             `json:"type"`
+	CheckConfig        []byte             `json:"check_config"`
+	IntervalSeconds    int32              `json:"interval_seconds"`
+	AlertAfterFailures int32              `json:"alert_after_failures"`
+	IsPaused           bool               `json:"is_paused"`
+	IsPublic           bool               `json:"is_public"`
+	CurrentStatus      string             `json:"current_status"`
+	CreatedAt          time.Time          `json:"created_at"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+}
+
+func (q *Queries) ToggleMonitorPause(ctx context.Context, arg ToggleMonitorPauseParams) (ToggleMonitorPauseRow, error) {
+	row := q.db.QueryRow(ctx, toggleMonitorPause, arg.ID, arg.UserID)
+	var i ToggleMonitorPauseRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.Type,
+		&i.CheckConfig,
+		&i.IntervalSeconds,
+		&i.AlertAfterFailures,
+		&i.IsPaused,
+		&i.IsPublic,
+		&i.CurrentStatus,
+		&i.CreatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const updateMonitor = `-- name: UpdateMonitor :exec
 UPDATE monitors
 SET name = $2, check_config = $3, interval_seconds = $4, alert_after_failures = $5, is_paused = $6, is_public = $7
@@ -332,8 +378,13 @@ func (q *Queries) UpdateMonitor(ctx context.Context, arg UpdateMonitorParams) er
 	return err
 }
 
-const updateMonitorStatus = `-- name: UpdateMonitorStatus :exec
-UPDATE monitors SET current_status = $2 WHERE id = $1 AND deleted_at IS NULL
+const updateMonitorStatus = `-- name: UpdateMonitorStatus :one
+WITH prev AS (
+    SELECT m.current_status FROM monitors m WHERE m.id = $1 AND m.deleted_at IS NULL
+)
+UPDATE monitors SET current_status = $2
+WHERE monitors.id = $1 AND monitors.deleted_at IS NULL
+RETURNING (SELECT prev.current_status FROM prev) AS previous_status
 `
 
 type UpdateMonitorStatusParams struct {
@@ -341,7 +392,9 @@ type UpdateMonitorStatusParams struct {
 	CurrentStatus string    `json:"current_status"`
 }
 
-func (q *Queries) UpdateMonitorStatus(ctx context.Context, arg UpdateMonitorStatusParams) error {
-	_, err := q.db.Exec(ctx, updateMonitorStatus, arg.ID, arg.CurrentStatus)
-	return err
+func (q *Queries) UpdateMonitorStatus(ctx context.Context, arg UpdateMonitorStatusParams) (string, error) {
+	row := q.db.QueryRow(ctx, updateMonitorStatus, arg.ID, arg.CurrentStatus)
+	var previous_status string
+	err := row.Scan(&previous_status)
+	return previous_status, err
 }

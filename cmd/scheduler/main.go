@@ -2,25 +2,28 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/go-redsync/redsync/v4"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/kirillinakin/pingcast/internal/adapter/checker"
+	"github.com/kirillinakin/pingcast/internal/bootstrap"
 	natsadapter "github.com/kirillinakin/pingcast/internal/adapter/nats"
 	"github.com/kirillinakin/pingcast/internal/adapter/postgres"
 	redisadapter "github.com/kirillinakin/pingcast/internal/adapter/redis"
 	"github.com/kirillinakin/pingcast/internal/config"
 	"github.com/kirillinakin/pingcast/internal/database"
 	"github.com/kirillinakin/pingcast/internal/domain"
+	"github.com/kirillinakin/pingcast/internal/port"
 	"github.com/kirillinakin/pingcast/internal/observability"
 	sqlcgen "github.com/kirillinakin/pingcast/internal/sqlc/gen"
 	"github.com/kirillinakin/pingcast/internal/version"
@@ -81,7 +84,12 @@ func main() {
 	}
 
 	// Repos (scheduler only needs monitor repo for loading active monitors)
-	monitorRepo := postgres.NewMonitorRepo(pool, queries)
+	cipher, err := bootstrap.InitCipher(cfg.EncryptionConfig)
+	if err != nil {
+		slog.Error("failed to initialize encryption", "error", err)
+		os.Exit(1)
+	}
+	monitorRepo := postgres.NewMonitorRepo(pool, queries, cipher)
 	checkResultRepo := postgres.NewCheckResultRepo(queries)
 
 	// Redsync for distributed locks
@@ -107,30 +115,42 @@ func main() {
 	}
 	slog.Info("loaded monitors", "count", len(activeMonitors))
 
-	// Start leader scheduler in background
-	go leaderScheduler.Run(ctx)
-
-	// Subscribe to monitor changes (add/remove/pause monitors dynamically)
+	// Subscribe to monitor changes BEFORE starting the scheduler (Issue 3.1).
+	// Subscribe buffers NATS messages while Run starts with complete state.
 	monitorSub := natsadapter.NewMonitorSubscriber(js)
-	if err := monitorSub.Subscribe(ctx, func(ctx context.Context, action domain.MonitorAction, monitorID uuid.UUID, monitor *domain.Monitor) error {
-		switch action {
+	if err := monitorSub.Subscribe(ctx, func(ctx context.Context, event port.MonitorChangedEvent) error {
+		switch event.Action {
 		case domain.ActionCreate, domain.ActionUpdate, domain.ActionResume:
-			if monitor != nil {
-				leaderScheduler.Add(monitor)
+			mon := &domain.Monitor{
+				ID:                 event.MonitorID,
+				Name:               event.Name,
+				Type:               event.Type,
+				CheckConfig:        event.CheckConfig,
+				IntervalSeconds:    event.IntervalSeconds,
+				AlertAfterFailures: event.AlertAfterFailures,
+				IsPaused:           event.IsPaused,
 			}
+			leaderScheduler.Add(mon)
 		case domain.ActionDelete, domain.ActionPause:
-			leaderScheduler.Remove(monitorID)
+			leaderScheduler.Remove(event.MonitorID)
 		}
-		slog.Info("processed monitor change", "action", action, "monitor_id", monitorID)
+		slog.Info("processed monitor change", "action", event.Action, "monitor_id", event.MonitorID)
 		return nil
 	}); err != nil {
 		slog.Error("failed to subscribe to monitor changes", "error", err)
 		os.Exit(1)
 	}
 
+	// Start leader scheduler AFTER subscribing (Issue 3.1)
+	go leaderScheduler.Run(ctx)
+
 	// Data retention cleanup + partition management (daily, with distributed lock)
+	// Tracked via WaitGroup so shutdown waits for completion (Issue 3.2).
+	var cleanupWg sync.WaitGroup
 	cleanupMutex := rs.NewMutex("lock:cleanup:retention", redsync.WithExpiry(1*time.Hour))
+	cleanupWg.Add(1)
 	go func() {
+		defer cleanupWg.Done()
 		ticker := time.NewTicker(24 * time.Hour)
 		defer ticker.Stop()
 		for {
@@ -139,7 +159,12 @@ func main() {
 				return
 			case <-ticker.C:
 				if err := cleanupMutex.Lock(); err != nil {
-					slog.Debug("cleanup lock held by another instance, skipping", "error", err)
+					// Differentiate lock contention (normal) from infrastructure errors (Issue 3.3)
+					if errors.Is(err, redsync.ErrFailed) {
+						slog.Debug("cleanup lock held by another instance, skipping")
+					} else {
+						slog.Warn("cleanup lock failed (infrastructure issue)", "error", err)
+					}
 					continue
 				}
 
@@ -179,5 +204,6 @@ func main() {
 
 	monitorSub.Stop()
 	leaderScheduler.Stop()
+	cleanupWg.Wait() // Wait for cleanup goroutine before closing DB pool (Issue 3.2)
 	slog.Info("scheduler shutdown complete")
 }

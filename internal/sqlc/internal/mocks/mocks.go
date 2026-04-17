@@ -3000,8 +3000,8 @@ func (_c *MockMetrics_RecordAlertDeadLettered_Call) RunAndReturn(run func(ctx co
 }
 
 // RecordAlertSent provides a mock function for the type MockMetrics
-func (_mock *MockMetrics) RecordAlertSent(ctx context.Context, channelType string, success bool, reason string) {
-	_mock.Called(ctx, channelType, success, reason)
+func (_mock *MockMetrics) RecordAlertSent(ctx context.Context, channelType string, success bool) {
+	_mock.Called(ctx, channelType, success)
 	return
 }
 
@@ -3014,12 +3014,11 @@ type MockMetrics_RecordAlertSent_Call struct {
 //   - ctx context.Context
 //   - channelType string
 //   - success bool
-//   - reason string
-func (_e *MockMetrics_Expecter) RecordAlertSent(ctx interface{}, channelType interface{}, success interface{}, reason interface{}) *MockMetrics_RecordAlertSent_Call {
-	return &MockMetrics_RecordAlertSent_Call{Call: _e.mock.On("RecordAlertSent", ctx, channelType, success, reason)}
+func (_e *MockMetrics_Expecter) RecordAlertSent(ctx interface{}, channelType interface{}, success interface{}) *MockMetrics_RecordAlertSent_Call {
+	return &MockMetrics_RecordAlertSent_Call{Call: _e.mock.On("RecordAlertSent", ctx, channelType, success)}
 }
 
-func (_c *MockMetrics_RecordAlertSent_Call) Run(run func(ctx context.Context, channelType string, success bool, reason string)) *MockMetrics_RecordAlertSent_Call {
+func (_c *MockMetrics_RecordAlertSent_Call) Run(run func(ctx context.Context, channelType string, success bool)) *MockMetrics_RecordAlertSent_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -3033,15 +3032,10 @@ func (_c *MockMetrics_RecordAlertSent_Call) Run(run func(ctx context.Context, ch
 		if args[2] != nil {
 			arg2 = args[2].(bool)
 		}
-		var arg3 string
-		if args[3] != nil {
-			arg3 = args[3].(string)
-		}
 		run(
 			arg0,
 			arg1,
 			arg2,
-			arg3,
 		)
 	})
 	return _c
@@ -3052,7 +3046,7 @@ func (_c *MockMetrics_RecordAlertSent_Call) Return() *MockMetrics_RecordAlertSen
 	return _c
 }
 
-func (_c *MockMetrics_RecordAlertSent_Call) RunAndReturn(run func(ctx context.Context, channelType string, success bool, reason string)) *MockMetrics_RecordAlertSent_Call {
+func (_c *MockMetrics_RecordAlertSent_Call) RunAndReturn(run func(ctx context.Context, channelType string, success bool)) *MockMetrics_RecordAlertSent_Call {
 	_c.Run(run)
 	return _c
 }
@@ -4394,80 +4388,6 @@ func (_c *MockMonitorRepo_ListPublicBySlug_Call) Return(monitors []domain.Monito
 }
 
 func (_c *MockMonitorRepo_ListPublicBySlug_Call) RunAndReturn(run func(ctx context.Context, slug string) ([]domain.Monitor, error)) *MockMonitorRepo_ListPublicBySlug_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// TogglePause provides a mock function for the type MockMonitorRepo
-func (_mock *MockMonitorRepo) TogglePause(ctx context.Context, id uuid.UUID, userID uuid.UUID) (*domain.Monitor, error) {
-	ret := _mock.Called(ctx, id, userID)
-
-	if len(ret) == 0 {
-		panic("no return value specified for TogglePause")
-	}
-
-	var r0 *domain.Monitor
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, uuid.UUID) (*domain.Monitor, error)); ok {
-		return returnFunc(ctx, id, userID)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, uuid.UUID) *domain.Monitor); ok {
-		r0 = returnFunc(ctx, id, userID)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*domain.Monitor)
-		}
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, uuid.UUID, uuid.UUID) error); ok {
-		r1 = returnFunc(ctx, id, userID)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockMonitorRepo_TogglePause_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'TogglePause'
-type MockMonitorRepo_TogglePause_Call struct {
-	*mock.Call
-}
-
-// TogglePause is a helper method to define mock.On call
-//   - ctx context.Context
-//   - id uuid.UUID
-//   - userID uuid.UUID
-func (_e *MockMonitorRepo_Expecter) TogglePause(ctx interface{}, id interface{}, userID interface{}) *MockMonitorRepo_TogglePause_Call {
-	return &MockMonitorRepo_TogglePause_Call{Call: _e.mock.On("TogglePause", ctx, id, userID)}
-}
-
-func (_c *MockMonitorRepo_TogglePause_Call) Run(run func(ctx context.Context, id uuid.UUID, userID uuid.UUID)) *MockMonitorRepo_TogglePause_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 uuid.UUID
-		if args[1] != nil {
-			arg1 = args[1].(uuid.UUID)
-		}
-		var arg2 uuid.UUID
-		if args[2] != nil {
-			arg2 = args[2].(uuid.UUID)
-		}
-		run(
-			arg0,
-			arg1,
-			arg2,
-		)
-	})
-	return _c
-}
-
-func (_c *MockMonitorRepo_TogglePause_Call) Return(monitor *domain.Monitor, err error) *MockMonitorRepo_TogglePause_Call {
-	_c.Call.Return(monitor, err)
-	return _c
-}
-
-func (_c *MockMonitorRepo_TogglePause_Call) RunAndReturn(run func(ctx context.Context, id uuid.UUID, userID uuid.UUID) (*domain.Monitor, error)) *MockMonitorRepo_TogglePause_Call {
 	_c.Call.Return(run)
 	return _c
 }

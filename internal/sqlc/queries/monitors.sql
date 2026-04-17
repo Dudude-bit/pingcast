@@ -30,8 +30,18 @@ UPDATE monitors
 SET name = $2, check_config = $3, interval_seconds = $4, alert_after_failures = $5, is_paused = $6, is_public = $7
 WHERE id = $1 AND user_id = $8 AND deleted_at IS NULL;
 
--- name: UpdateMonitorStatus :exec
-UPDATE monitors SET current_status = $2 WHERE id = $1 AND deleted_at IS NULL;
+-- name: UpdateMonitorStatus :one
+WITH prev AS (
+    SELECT m.current_status FROM monitors m WHERE m.id = $1 AND m.deleted_at IS NULL
+)
+UPDATE monitors SET current_status = $2
+WHERE monitors.id = $1 AND monitors.deleted_at IS NULL
+RETURNING (SELECT prev.current_status FROM prev) AS previous_status;
+
+-- name: ToggleMonitorPause :one
+UPDATE monitors SET is_paused = NOT is_paused
+WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
+RETURNING id, user_id, name, type, check_config, interval_seconds, alert_after_failures, is_paused, is_public, current_status, created_at, deleted_at;
 
 -- name: DeleteMonitor :exec
 UPDATE monitors SET deleted_at = NOW() WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL;

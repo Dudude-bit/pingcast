@@ -5,10 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/kirillinakin/pingcast/internal/adapter/httperr"
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/port"
 )
@@ -128,12 +130,15 @@ func (s *sender) Send(ctx context.Context, event *domain.AlertEvent) error {
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("send telegram message: %w", err)
+		return httperr.ClassifyNetError(err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("telegram API returned status %d", resp.StatusCode)
+		return httperr.ClassifyHTTPStatus(resp.StatusCode, fmt.Errorf("telegram API returned status %d", resp.StatusCode))
 	}
 	return nil
 }

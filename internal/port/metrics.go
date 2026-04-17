@@ -15,7 +15,8 @@ type Metrics interface {
 
 	// RecordAlertSent records a single alert delivery attempt.
 	// channelType is "telegram", "email", or "webhook"; success indicates whether delivery succeeded.
-	RecordAlertSent(ctx context.Context, channelType string, success bool)
+	// reason classifies the failure (empty string on success): "timeout", "auth_error", "rate_limited", "network_error", "unknown".
+	RecordAlertSent(ctx context.Context, channelType string, success bool, reason string)
 
 	// RecordAlertAllFailed records that all channels failed for a single alert event.
 	RecordAlertAllFailed(ctx context.Context)

@@ -66,6 +66,16 @@ func NewHTTPCheckerWithTimeout(timeoutSeconds int) *HTTPChecker {
 	}
 }
 
+// clientForTimeout creates an http.Client with the specified timeout.
+// Shares the default Transport — Client creation is trivially cheap.
+func (c *HTTPChecker) clientForTimeout(timeoutSecs int) *http.Client {
+	return &http.Client{
+		Timeout:       time.Duration(timeoutSecs) * time.Second,
+		CheckRedirect: c.httpClient.CheckRedirect,
+		Transport:     c.httpClient.Transport,
+	}
+}
+
 func (c *HTTPChecker) Check(ctx context.Context, monitor *domain.Monitor) *domain.CheckResult {
 	start := time.Now()
 	result := &domain.CheckResult{
@@ -108,11 +118,7 @@ func (c *HTTPChecker) Check(ctx context.Context, monitor *domain.Monitor) *domai
 
 	client := c.httpClient
 	if cfg.Timeout > 0 {
-		client = &http.Client{
-			Timeout:       time.Duration(cfg.Timeout) * time.Second,
-			CheckRedirect: c.httpClient.CheckRedirect,
-			Transport:     c.httpClient.Transport,
-		}
+		client = c.clientForTimeout(cfg.Timeout)
 	}
 
 	resp, err := client.Do(req)
@@ -124,7 +130,10 @@ func (c *HTTPChecker) Check(ctx context.Context, monitor *domain.Monitor) *domai
 		result.ErrorMessage = &errMsg
 		return result
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}()
 
 	statusCode := resp.StatusCode
 	result.StatusCode = &statusCode

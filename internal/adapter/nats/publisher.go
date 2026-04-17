@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/kirillinakin/pingcast/internal/domain"
@@ -24,20 +23,8 @@ func NewMonitorPublisher(js jetstream.JetStream) *MonitorPublisher {
 	return &MonitorPublisher{js: js}
 }
 
-type monitorChangedMessage struct {
-	Action    domain.MonitorAction `json:"action"`
-	MonitorID uuid.UUID            `json:"monitor_id"`
-	Monitor   *domain.Monitor      `json:"monitor"`
-}
-
-func (p *MonitorPublisher) PublishMonitorChanged(ctx context.Context, action domain.MonitorAction, monitorID uuid.UUID, monitor *domain.Monitor) error {
-	msg := monitorChangedMessage{
-		Action:    action,
-		MonitorID: monitorID,
-		Monitor:   monitor,
-	}
-
-	data, err := json.Marshal(msg)
+func (p *MonitorPublisher) PublishMonitorChanged(ctx context.Context, event port.MonitorChangedEvent) error {
+	data, err := json.Marshal(event)
 	if err != nil {
 		return fmt.Errorf("marshal monitor changed event: %w", err)
 	}

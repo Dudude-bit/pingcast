@@ -6,6 +6,13 @@ import (
 	"github.com/caarlos0/env/v11"
 )
 
+// EncryptionConfig is embedded in all service configs.
+type EncryptionConfig struct {
+	// Format: "1:base64key,2:base64key,3:base64key". Empty = encryption disabled.
+	EncryptionKeys           string `env:"ENCRYPTION_KEYS"`
+	EncryptionPrimaryVersion string `env:"ENCRYPTION_PRIMARY_VERSION" envDefault:"1"`
+}
+
 type APIConfig struct {
 	Port                      int    `env:"PORT"                        envDefault:"8080"`
 	DatabaseURL               string `env:"DATABASE_URL,required"`
@@ -15,8 +22,7 @@ type APIConfig struct {
 	OTelEndpoint              string `env:"OTEL_EXPORTER_OTLP_ENDPOINT"`
 	LemonSqueezyWebhookSecret string `env:"LEMONSQUEEZY_WEBHOOK_SECRET"`
 	BaseURL                   string `env:"BASE_URL"                    envDefault:"http://localhost:8080"`
-	EncryptionKey             string `env:"ENCRYPTION_KEY"`
-	EncryptionKeyOld          string `env:"ENCRYPTION_KEY_OLD"`
+	EncryptionConfig
 }
 
 type CheckerConfig struct {
@@ -29,6 +35,7 @@ type CheckerConfig struct {
 	HostConcurrency    int    `env:"HOST_CONCURRENCY"        envDefault:"3"`
 	RetentionDays      int    `env:"RETENTION_DAYS"          envDefault:"90"`
 	DefaultTimeoutSecs int    `env:"DEFAULT_TIMEOUT_SECS"    envDefault:"10"`
+	EncryptionConfig
 }
 
 type NotifierConfig struct {
@@ -42,6 +49,7 @@ type NotifierConfig struct {
 	SMTPUser      string `env:"SMTP_USER"`
 	SMTPPass      string `env:"SMTP_PASS"`
 	SMTPFrom      string `env:"SMTP_FROM"       envDefault:"noreply@pingcast.io"`
+	EncryptionConfig
 }
 
 func LoadAPI() (*APIConfig, error) {

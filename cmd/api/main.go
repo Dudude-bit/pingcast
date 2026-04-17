@@ -12,6 +12,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/kirillinakin/pingcast/internal/adapter/channel"
+	"github.com/kirillinakin/pingcast/internal/bootstrap"
 	"github.com/kirillinakin/pingcast/internal/adapter/checker"
 	httpadapter "github.com/kirillinakin/pingcast/internal/adapter/http"
 	natsadapter "github.com/kirillinakin/pingcast/internal/adapter/nats"
@@ -22,7 +23,6 @@ import (
 	"github.com/kirillinakin/pingcast/internal/adapter/webhook"
 	"github.com/kirillinakin/pingcast/internal/app"
 	"github.com/kirillinakin/pingcast/internal/config"
-	"github.com/kirillinakin/pingcast/internal/crypto"
 	"github.com/kirillinakin/pingcast/internal/database"
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/observability"
@@ -97,32 +97,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Encryption (optional — disabled if ENCRYPTION_KEY not set)
-	var enc *crypto.Encryptor
-	if cfg.EncryptionKey != "" {
-		var err error
-		enc, err = crypto.NewEncryptor(cfg.EncryptionKey, cfg.EncryptionKeyOld)
-		if err != nil {
-			slog.Error("failed to initialize encryption", "error", err)
-			os.Exit(1)
-		}
-		slog.Info("encryption enabled for config data")
-	} else {
-		slog.Warn("encryption disabled: ENCRYPTION_KEY not set")
+	// Encryption (optional — disabled if ENCRYPTION_KEYS not set)
+	cipher, err := bootstrap.InitCipher(cfg.EncryptionConfig)
+	if err != nil {
+		slog.Error("failed to initialize encryption", "error", err)
+		os.Exit(1)
 	}
 
 	// Postgres repos
 	userRepo := postgres.NewUserRepo(queries)
 	sessionRepo := redisadapter.NewSessionRepo(rdb)
-	var monitorRepo *postgres.MonitorRepo
-	var channelRepo *postgres.ChannelRepo
-	if enc != nil {
-		monitorRepo = postgres.NewMonitorRepoWithEncryption(pool, queries, enc)
-		channelRepo = postgres.NewChannelRepoWithEncryption(pool, queries, enc)
-	} else {
-		monitorRepo = postgres.NewMonitorRepo(pool, queries)
-		channelRepo = postgres.NewChannelRepo(pool, queries)
-	}
+	monitorRepo := postgres.NewMonitorRepo(pool, queries, cipher)
+	channelRepo := postgres.NewChannelRepo(pool, queries, cipher)
 	checkResultRepo := postgres.NewCheckResultRepo(queries)
 	incidentRepo := postgres.NewIncidentRepo(queries)
 	uptimeRepo := postgres.NewUptimeRepo(queries)
@@ -156,12 +142,12 @@ func main() {
 
 	// App services
 	authSvc := app.NewAuthService(userRepo, sessionRepo)
-	monitoringSvc := app.NewMonitoringService(monitorRepo, channelRepo, checkResultRepo, incidentRepo, userRepo, uptimeRepo, txm, alertPub, registry, metrics)
+	monitoringSvc := app.NewMonitoringService(monitorRepo, channelRepo, checkResultRepo, incidentRepo, userRepo, uptimeRepo, txm, alertPub, monitorPub, registry, metrics)
 	alertSvc := app.NewAlertService(channelRepo, monitorRepo, channelReg, failedAlertRepo, metrics)
 
 	// HTTP handlers
 	rateLimiter := redisadapter.NewRateLimiter(rdb, "login", 5, 15*time.Minute)
-	server := httpadapter.NewServer(authSvc, monitoringSvc, alertSvc, monitorPub, rateLimiter, apiKeyRepo)
+	server := httpadapter.NewServer(authSvc, monitoringSvc, alertSvc, rateLimiter, apiKeyRepo)
 	pageHandler := httpadapter.NewPageHandler(authSvc, monitoringSvc, alertSvc, rateLimiter, apiKeyRepo)
 	webhookHandler := httpadapter.NewWebhookHandler(authSvc, alertSvc, cfg.LemonSqueezyWebhookSecret)
 
