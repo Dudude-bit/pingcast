@@ -17,3 +17,14 @@ AND rn < COALESCE((SELECT rn FROM first_up), (SELECT COUNT(*) + 1 FROM ordered))
 
 -- name: DeleteCheckResultsOlderThan :execrows
 DELETE FROM check_results WHERE checked_at < $1;
+
+-- name: GetResponseTimeChart :many
+SELECT
+    date_trunc('hour', checked_at)::timestamptz AS bucket,
+    AVG(response_time_ms)::float AS avg_response_ms,
+    COUNT(*)::int AS check_count
+FROM check_results
+WHERE monitor_id = $1
+  AND checked_at >= $2
+GROUP BY bucket
+ORDER BY bucket;

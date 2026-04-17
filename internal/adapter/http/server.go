@@ -210,10 +210,22 @@ func (s *Server) GetMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 		apiIncidents = append(apiIncidents, domainIncidentToAPI(&inc))
 	}
 
+	apiChart := make([]apigen.ChartPoint, 0, len(detail.Chart24h))
+	for _, p := range detail.Chart24h {
+		ts := p.Timestamp
+		avg := float32(p.AvgResponseMs)
+		count := p.CheckCount
+		apiChart = append(apiChart, apigen.ChartPoint{
+			Timestamp:     &ts,
+			AvgResponseMs: &avg,
+			CheckCount:    &count,
+		})
+	}
+
 	resp, err := s.domainMonitorToAPIDetail(
 		&detail.Monitor,
 		detail.Uptime24h, detail.Uptime7d, detail.Uptime30d,
-		nil, apiIncidents,
+		apiChart, apiIncidents,
 	)
 	if err != nil {
 		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("internal error")})

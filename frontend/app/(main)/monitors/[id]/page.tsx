@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/features/monitors/status-badge";
 import { UptimeStats } from "@/components/features/monitors/uptime-stats";
 import { IncidentList } from "@/components/features/monitors/incident-list";
 import { DeleteMonitorDialog } from "@/components/features/monitors/delete-monitor-dialog";
+import { ResponseTimeChart } from "@/components/features/monitors/response-time-chart";
 
 export default function MonitorDetailPage({
   params,
@@ -85,10 +86,11 @@ export default function MonitorDetailPage({
       />
 
       <div className="rounded-lg border border-border/60 bg-card p-6">
-        <h3 className="text-sm font-semibold mb-3">Response time</h3>
-        <div className="h-40 flex items-center justify-center rounded-md bg-muted/30 text-sm text-muted-foreground">
-          Response-time chart — coming soon
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold">Response time</h3>
+          <span className="text-xs text-muted-foreground">Last 24 hours · hourly average</span>
         </div>
+        <ResponseTimeChart data={data.chart_data ?? []} />
       </div>
 
       <div>

@@ -37,3 +37,22 @@ func (r *CheckResultRepo) ConsecutiveFailures(ctx context.Context, monitorID uui
 func (r *CheckResultRepo) DeleteOlderThan(ctx context.Context, cutoff time.Time) (int64, error) {
 	return r.q.DeleteCheckResultsOlderThan(ctx, cutoff)
 }
+
+func (r *CheckResultRepo) GetResponseTimeChart(ctx context.Context, monitorID uuid.UUID, since time.Time) ([]domain.ChartPoint, error) {
+	rows, err := r.q.GetResponseTimeChart(ctx, gen.GetResponseTimeChartParams{
+		MonitorID: monitorID,
+		CheckedAt: since,
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.ChartPoint, len(rows))
+	for i, row := range rows {
+		out[i] = domain.ChartPoint{
+			Timestamp:     row.Bucket,
+			AvgResponseMs: row.AvgResponseMs,
+			CheckCount:    int(row.CheckCount),
+		}
+	}
+	return out, nil
+}

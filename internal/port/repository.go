@@ -45,6 +45,7 @@ type CheckResultRepo interface {
 	Insert(ctx context.Context, cr *domain.CheckResult) error
 	ConsecutiveFailures(ctx context.Context, monitorID uuid.UUID) (int, error)
 	DeleteOlderThan(ctx context.Context, cutoff time.Time) (int64, error)
+	GetResponseTimeChart(ctx context.Context, monitorID uuid.UUID, since time.Time) ([]domain.ChartPoint, error)
 }
 
 type UptimeRepo interface {

@@ -430,6 +430,7 @@ type MonitorDetail struct {
 	Uptime7d  float64
 	Uptime30d float64
 	Incidents []domain.Incident
+	Chart24h  []domain.ChartPoint
 }
 
 func (s *MonitoringService) GetMonitorDetail(ctx context.Context, monitorID uuid.UUID) (*MonitorDetail, error) {
@@ -457,12 +458,18 @@ func (s *MonitoringService) GetMonitorDetail(ctx context.Context, monitorID uuid
 		slog.Error("failed to list incidents", "monitor_id", monitorID, "error", err)
 	}
 
+	chart, err := s.checkResults.GetResponseTimeChart(ctx, monitorID, now.Add(-24*time.Hour))
+	if err != nil {
+		slog.Error("failed to get response-time chart", "monitor_id", monitorID, "error", err)
+	}
+
 	return &MonitorDetail{
 		Monitor:   *mon,
 		Uptime24h: u24,
 		Uptime7d:  u7,
 		Uptime30d: u30,
 		Incidents: incidents,
+		Chart24h:  chart,
 	}, nil
 }
 

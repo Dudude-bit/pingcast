@@ -45,6 +45,49 @@ func (q *Queries) DeleteCheckResultsOlderThan(ctx context.Context, checkedAt tim
 	return result.RowsAffected(), nil
 }
 
+const getResponseTimeChart = `-- name: GetResponseTimeChart :many
+SELECT
+    date_trunc('hour', checked_at)::timestamptz AS bucket,
+    AVG(response_time_ms)::float AS avg_response_ms,
+    COUNT(*)::int AS check_count
+FROM check_results
+WHERE monitor_id = $1
+  AND checked_at >= $2
+GROUP BY bucket
+ORDER BY bucket
+`
+
+type GetResponseTimeChartParams struct {
+	MonitorID uuid.UUID `json:"monitor_id"`
+	CheckedAt time.Time `json:"checked_at"`
+}
+
+type GetResponseTimeChartRow struct {
+	Bucket        time.Time `json:"bucket"`
+	AvgResponseMs float64   `json:"avg_response_ms"`
+	CheckCount    int32     `json:"check_count"`
+}
+
+func (q *Queries) GetResponseTimeChart(ctx context.Context, arg GetResponseTimeChartParams) ([]GetResponseTimeChartRow, error) {
+	rows, err := q.db.Query(ctx, getResponseTimeChart, arg.MonitorID, arg.CheckedAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetResponseTimeChartRow{}
+	for rows.Next() {
+		var i GetResponseTimeChartRow
+		if err := rows.Scan(&i.Bucket, &i.AvgResponseMs, &i.CheckCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertCheckResult = `-- name: InsertCheckResult :one
 INSERT INTO check_results (monitor_id, status, status_code, response_time_ms, error_message, checked_at)
 VALUES ($1, $2, $3, $4, $5, $6)

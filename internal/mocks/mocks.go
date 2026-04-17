@@ -4760,6 +4760,80 @@ func (_c *MockCheckResultRepo_DeleteOlderThan_Call) RunAndReturn(run func(ctx co
 	return _c
 }
 
+// GetResponseTimeChart provides a mock function for the type MockCheckResultRepo
+func (_mock *MockCheckResultRepo) GetResponseTimeChart(ctx context.Context, monitorID uuid.UUID, since time.Time) ([]domain.ChartPoint, error) {
+	ret := _mock.Called(ctx, monitorID, since)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetResponseTimeChart")
+	}
+
+	var r0 []domain.ChartPoint
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, time.Time) ([]domain.ChartPoint, error)); ok {
+		return returnFunc(ctx, monitorID, since)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, time.Time) []domain.ChartPoint); ok {
+		r0 = returnFunc(ctx, monitorID, since)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]domain.ChartPoint)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uuid.UUID, time.Time) error); ok {
+		r1 = returnFunc(ctx, monitorID, since)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCheckResultRepo_GetResponseTimeChart_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetResponseTimeChart'
+type MockCheckResultRepo_GetResponseTimeChart_Call struct {
+	*mock.Call
+}
+
+// GetResponseTimeChart is a helper method to define mock.On call
+//   - ctx context.Context
+//   - monitorID uuid.UUID
+//   - since time.Time
+func (_e *MockCheckResultRepo_Expecter) GetResponseTimeChart(ctx interface{}, monitorID interface{}, since interface{}) *MockCheckResultRepo_GetResponseTimeChart_Call {
+	return &MockCheckResultRepo_GetResponseTimeChart_Call{Call: _e.mock.On("GetResponseTimeChart", ctx, monitorID, since)}
+}
+
+func (_c *MockCheckResultRepo_GetResponseTimeChart_Call) Run(run func(ctx context.Context, monitorID uuid.UUID, since time.Time)) *MockCheckResultRepo_GetResponseTimeChart_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uuid.UUID
+		if args[1] != nil {
+			arg1 = args[1].(uuid.UUID)
+		}
+		var arg2 time.Time
+		if args[2] != nil {
+			arg2 = args[2].(time.Time)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCheckResultRepo_GetResponseTimeChart_Call) Return(chartPoints []domain.ChartPoint, err error) *MockCheckResultRepo_GetResponseTimeChart_Call {
+	_c.Call.Return(chartPoints, err)
+	return _c
+}
+
+func (_c *MockCheckResultRepo_GetResponseTimeChart_Call) RunAndReturn(run func(ctx context.Context, monitorID uuid.UUID, since time.Time) ([]domain.ChartPoint, error)) *MockCheckResultRepo_GetResponseTimeChart_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Insert provides a mock function for the type MockCheckResultRepo
 func (_mock *MockCheckResultRepo) Insert(ctx context.Context, cr *domain.CheckResult) error {
 	ret := _mock.Called(ctx, cr)
