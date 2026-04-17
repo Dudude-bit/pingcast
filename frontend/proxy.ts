@@ -31,7 +31,8 @@ export function proxy(req: NextRequest) {
 
 export const config = {
   matcher: [
-    // Exclude static files and API routes. Next.js docs idiom.
-    "/((?!_next/static|_next/image|favicon.svg|favicon.png|api).*)",
+    // Exclude Next.js statics, favicons, and the /api/* proxy (but NOT
+    // user-facing paths like /api-keys, which is a dashboard route).
+    "/((?!_next/static|_next/image|favicon\\.svg|favicon\\.png|api/).*)",
   ],
 };

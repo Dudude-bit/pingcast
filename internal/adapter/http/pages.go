@@ -25,23 +25,9 @@ type PageHandler struct {
 func NewPageHandler(auth *app.AuthService, monitoring *app.MonitoringService, alerts *app.AlertService, rateLimiter port.RateLimiter, apiKeyRepo port.APIKeyRepo) *PageHandler {
 	tmplFS, _ := fs.Sub(web.FS, "templates")
 
-	// Parse each page template paired with layout.
-	// This is required because Go's html/template only keeps the last {{define "content"}}
-	// when all pages are parsed together.
-	pages := []string{
-		"dashboard.html", "monitor_detail.html", "monitor_form.html",
-		"channels.html", "channel_form.html",
-		"api_keys.html", "api_key_form.html",
-	}
-
-	templates := make(map[string]*template.Template, len(pages)+2)
-	for _, page := range pages {
-		templates[page] = template.Must(template.ParseFS(tmplFS, "layout.html", page))
-	}
-	// Statuspage is standalone (no layout)
+	templates := make(map[string]*template.Template, 1)
+	// Statuspage is the only remaining Go-rendered HTML page (migrates in C4).
 	templates["statuspage.html"] = template.Must(template.ParseFS(tmplFS, "statuspage.html"))
-	// Config fields partial (standalone, no layout)
-	templates["monitor_config_fields.html"] = template.Must(template.ParseFS(tmplFS, "monitor_config_fields.html"))
 
 	return &PageHandler{
 		auth:        auth,
