@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Navbar } from "@/components/site/navbar";
-import { Footer } from "@/components/site/footer";
 import { Providers } from "./providers";
+import NextTopLoader from "nextjs-toploader";
 
 export const metadata: Metadata = {
   title: {
@@ -29,13 +28,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full antialiased">
+    <html lang="en" className="h-full antialiased" suppressHydrationWarning>
       <body className="min-h-full flex flex-col bg-background font-sans">
-        <Providers>
-          <Navbar />
-          <main className="flex-1">{children}</main>
-          <Footer />
-        </Providers>
+        <NextTopLoader
+          color="hsl(221 83% 53%)"
+          height={2}
+          showSpinner={false}
+        />
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
