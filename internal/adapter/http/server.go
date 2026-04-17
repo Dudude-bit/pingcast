@@ -119,9 +119,9 @@ func (s *Server) Logout(c *fiber.Ctx) error {
 }
 
 func (s *Server) ListMonitors(c *fiber.Ctx) error {
-	user := UserFromCtx(c)
+	user := requireUser(c)
 	if user == nil {
-		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
+		return nil
 	}
 
 	rows, err := s.monitoring.ListMonitorsWithUptime(c.UserContext(), user.ID)
@@ -143,9 +143,9 @@ func (s *Server) ListMonitors(c *fiber.Ctx) error {
 }
 
 func (s *Server) CreateMonitor(c *fiber.Ctx) error {
-	user := UserFromCtx(c)
+	user := requireUser(c)
 	if user == nil {
-		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
+		return nil
 	}
 
 	var req apigen.CreateMonitorRequest
@@ -193,9 +193,9 @@ func (s *Server) ListMonitorTypes(c *fiber.Ctx) error {
 }
 
 func (s *Server) GetMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
-	user := UserFromCtx(c)
+	user := requireUser(c)
 	if user == nil {
-		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
+		return nil
 	}
 
 	detail, err := s.monitoring.GetMonitorDetail(c.UserContext(), uuid.UUID(id))
@@ -220,9 +220,9 @@ func (s *Server) GetMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 }
 
 func (s *Server) UpdateMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
-	user := UserFromCtx(c)
+	user := requireUser(c)
 	if user == nil {
-		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
+		return nil
 	}
 
 	var req apigen.UpdateMonitorRequest
@@ -259,9 +259,9 @@ func (s *Server) UpdateMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 }
 
 func (s *Server) DeleteMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
-	user := UserFromCtx(c)
+	user := requireUser(c)
 	if user == nil {
-		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
+		return nil
 	}
 
 	err := s.monitoring.DeleteMonitor(c.UserContext(), user.ID, uuid.UUID(id))
@@ -273,9 +273,9 @@ func (s *Server) DeleteMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 }
 
 func (s *Server) ToggleMonitorPause(c *fiber.Ctx, id openapi_types.UUID) error {
-	user := UserFromCtx(c)
+	user := requireUser(c)
 	if user == nil {
-		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
+		return nil
 	}
 
 	updated, err := s.monitoring.TogglePause(c.UserContext(), user, uuid.UUID(id))
@@ -476,9 +476,9 @@ func (s *Server) ListChannelTypes(c *fiber.Ctx) error {
 }
 
 func (s *Server) ListChannels(c *fiber.Ctx) error {
-	user := UserFromCtx(c)
+	user := requireUser(c)
 	if user == nil {
-		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
+		return nil
 	}
 	channels, err := s.alerts.ListChannels(c.UserContext(), user.ID)
 	if err != nil {
@@ -492,9 +492,9 @@ func (s *Server) ListChannels(c *fiber.Ctx) error {
 }
 
 func (s *Server) CreateChannel(c *fiber.Ctx) error {
-	user := UserFromCtx(c)
+	user := requireUser(c)
 	if user == nil {
-		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
+		return nil
 	}
 	var req apigen.CreateChannelRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -518,9 +518,9 @@ func (s *Server) CreateChannel(c *fiber.Ctx) error {
 }
 
 func (s *Server) UpdateChannel(c *fiber.Ctx, id openapi_types.UUID) error {
-	user := UserFromCtx(c)
+	user := requireUser(c)
 	if user == nil {
-		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
+		return nil
 	}
 	var req apigen.UpdateChannelRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -552,9 +552,9 @@ func (s *Server) UpdateChannel(c *fiber.Ctx, id openapi_types.UUID) error {
 }
 
 func (s *Server) DeleteChannel(c *fiber.Ctx, id openapi_types.UUID) error {
-	user := UserFromCtx(c)
+	user := requireUser(c)
 	if user == nil {
-		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
+		return nil
 	}
 	if err := s.alerts.DeleteChannel(c.UserContext(), user.ID, uuid.UUID(id)); err != nil {
 		slog.Warn("channel handler error", "path", c.Path(), "error", err)
@@ -565,9 +565,9 @@ func (s *Server) DeleteChannel(c *fiber.Ctx, id openapi_types.UUID) error {
 }
 
 func (s *Server) BindChannel(c *fiber.Ctx, id openapi_types.UUID) error {
-	user := UserFromCtx(c)
+	user := requireUser(c)
 	if user == nil {
-		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
+		return nil
 	}
 	var req struct {
 		ChannelID uuid.UUID `json:"channel_id"`
@@ -584,9 +584,9 @@ func (s *Server) BindChannel(c *fiber.Ctx, id openapi_types.UUID) error {
 }
 
 func (s *Server) UnbindChannel(c *fiber.Ctx, id openapi_types.UUID, channelId openapi_types.UUID) error {
-	user := UserFromCtx(c)
+	user := requireUser(c)
 	if user == nil {
-		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
+		return nil
 	}
 	if err := s.alerts.UnbindChannel(c.UserContext(), user.ID, uuid.UUID(id), uuid.UUID(channelId)); err != nil {
 		slog.Warn("channel handler error", "path", c.Path(), "error", err)
@@ -615,9 +615,9 @@ func domainChannelToAPI(ch *domain.NotificationChannel) apigen.NotificationChann
 // --- API Key JSON endpoints ---
 
 func (s *Server) ListAPIKeys(c *fiber.Ctx) error {
-	user := UserFromCtx(c)
+	user := requireUser(c)
 	if user == nil {
-		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
+		return nil
 	}
 	keys, err := s.apiKeys.ListByUser(c.UserContext(), user.ID)
 	if err != nil {
@@ -631,9 +631,9 @@ func (s *Server) ListAPIKeys(c *fiber.Ctx) error {
 }
 
 func (s *Server) CreateAPIKey(c *fiber.Ctx) error {
-	user := UserFromCtx(c)
+	user := requireUser(c)
 	if user == nil {
-		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
+		return nil
 	}
 	var req apigen.CreateAPIKeyJSONRequestBody
 	if err := c.BodyParser(&req); err != nil {
@@ -684,9 +684,9 @@ func (s *Server) CreateAPIKey(c *fiber.Ctx) error {
 }
 
 func (s *Server) RevokeAPIKey(c *fiber.Ctx, id openapi_types.UUID) error {
-	user := UserFromCtx(c)
+	user := requireUser(c)
 	if user == nil {
-		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
+		return nil
 	}
 	if err := s.apiKeys.Delete(c.UserContext(), uuid.UUID(id), user.ID); err != nil {
 		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("failed to revoke api key")})

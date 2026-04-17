@@ -16,6 +16,11 @@ import (
 
 const userCtxKey = "auth.user"
 
+// touchSem bounds concurrent API-key Touch goroutines. On saturation, the
+// current request's Touch is skipped with a Warn log — the trade-off is
+// preferred over unbounded goroutine fanout under auth load.
+var touchSem = make(chan struct{}, 50)
+
 // AuthMiddleware returns a Fiber handler that validates the session cookie
 // or API key and stores *domain.User in Locals. Returns 401 JSON on failure.
 func AuthMiddleware(auth *app.AuthService, apiKeyRepo port.APIKeyRepo) fiber.Handler {
@@ -89,14 +94,23 @@ func authenticateWithAPIKey(c *fiber.Ctx, auth *app.AuthService, apiKeyRepo port
 	}
 
 	// Touch last_used_at in background with detached context (Issue 4.5).
-	// Request context may be cancelled before goroutine executes.
-	touchCtx, touchCancel := xcontext.Detached(c.UserContext(), 5*time.Second, "api-key.touch")
-	go func() {
-		defer touchCancel()
-		if err := apiKeyRepo.Touch(touchCtx, apiKey.ID); err != nil {
-			slog.Warn("failed to touch api key", "key_id", apiKey.ID, "error", err)
-		}
-	}()
+	// Request context may be cancelled before goroutine executes. Semaphore
+	// bounds concurrent goroutines; saturation → skip with a Warn.
+	select {
+	case touchSem <- struct{}{}:
+		touchCtx, touchCancel := xcontext.Detached(c.UserContext(), 5*time.Second, "api-key.touch")
+		go func() {
+			defer func() {
+				<-touchSem
+				touchCancel()
+			}()
+			if err := apiKeyRepo.Touch(touchCtx, apiKey.ID); err != nil {
+				slog.Warn("failed to touch api key", "key_id", apiKey.ID, "error", err)
+			}
+		}()
+	default:
+		slog.Warn("api-key touch skipped — semaphore full", "key_id", apiKey.ID)
+	}
 
 	c.Locals(userCtxKey, user)
 	return c.Next()
@@ -125,5 +139,21 @@ func PageMiddleware(auth *app.AuthService) fiber.Handler {
 // UserFromCtx extracts the authenticated *domain.User from fiber.Locals.
 func UserFromCtx(c *fiber.Ctx) *domain.User {
 	user, _ := c.Locals(userCtxKey).(*domain.User)
+	return user
+}
+
+// requireUser extracts the authenticated user from context. If absent, it
+// writes a 401 JSON response and returns nil. Callers should do:
+//
+//	user := requireUser(c)
+//	if user == nil {
+//	    return nil // response already written
+//	}
+func requireUser(c *fiber.Ctx) *domain.User {
+	user := UserFromCtx(c)
+	if user == nil {
+		_ = c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
+		return nil
+	}
 	return user
 }

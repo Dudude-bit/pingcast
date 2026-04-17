@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/kirillinakin/pingcast/internal/domain"
@@ -42,7 +43,8 @@ type HTTPCheckConfig struct {
 }
 
 type HTTPChecker struct {
-	httpClient *http.Client
+	httpClient  *http.Client
+	clientByTTL sync.Map // map[int]*http.Client, cached by timeout seconds
 }
 
 func NewHTTPChecker() *HTTPChecker {
@@ -66,14 +68,20 @@ func NewHTTPCheckerWithTimeout(timeoutSeconds int) *HTTPChecker {
 	}
 }
 
-// clientForTimeout creates an http.Client with the specified timeout.
-// Shares the default Transport — Client creation is trivially cheap.
+// clientForTimeout returns a cached *http.Client with the specified timeout.
+// Transport is shared across all clients; the wrapper struct is cached per
+// distinct timeout value to avoid per-check allocations.
 func (c *HTTPChecker) clientForTimeout(timeoutSecs int) *http.Client {
-	return &http.Client{
+	if v, ok := c.clientByTTL.Load(timeoutSecs); ok {
+		return v.(*http.Client)
+	}
+	client := &http.Client{
 		Timeout:       time.Duration(timeoutSecs) * time.Second,
 		CheckRedirect: c.httpClient.CheckRedirect,
 		Transport:     c.httpClient.Transport,
 	}
+	actual, _ := c.clientByTTL.LoadOrStore(timeoutSecs, client)
+	return actual.(*http.Client)
 }
 
 func (c *HTTPChecker) Check(ctx context.Context, monitor *domain.Monitor) *domain.CheckResult {

@@ -242,17 +242,13 @@ func (h *PageHandler) MonitorUpdate(c *fiber.Ctx) error {
 	monType := domain.MonitorType(c.FormValue("type"))
 	checkConfig := h.buildCheckConfigFromForm(c, monType)
 
-	interval := 300
-	if v := c.FormValue("interval_seconds"); v != "" {
-		if parsed, err := strconv.Atoi(v); err == nil && parsed >= 30 && parsed <= 86400 {
-			interval = parsed
-		}
+	interval, err := parseIntInRange(c, formRange{field: "interval_seconds", min: 30, max: 86400}, 300)
+	if err != nil {
+		return h.renderMonitorFormError(c, user, err.Error())
 	}
-	alertAfter := 3
-	if v := c.FormValue("alert_after_failures"); v != "" {
-		if parsed, err := strconv.Atoi(v); err == nil && parsed >= 1 && parsed <= 10 {
-			alertAfter = parsed
-		}
+	alertAfter, err := parseIntInRange(c, formRange{field: "alert_after_failures", min: 1, max: 10}, 3)
+	if err != nil {
+		return h.renderMonitorFormError(c, user, err.Error())
 	}
 
 	name := c.FormValue("name")
@@ -330,18 +326,13 @@ func (h *PageHandler) MonitorEditForm(c *fiber.Ctx) error {
 func (h *PageHandler) MonitorCreate(c *fiber.Ctx) error {
 	user := UserFromCtx(c)
 
-	interval := 300
-	if v := c.FormValue("interval_seconds"); v != "" {
-		if parsed, err := strconv.Atoi(v); err == nil && parsed >= 30 && parsed <= 86400 {
-			interval = parsed
-		}
+	interval, err := parseIntInRange(c, formRange{field: "interval_seconds", min: 30, max: 86400}, 300)
+	if err != nil {
+		return h.renderMonitorFormError(c, user, err.Error())
 	}
-
-	alertAfter := 3
-	if v := c.FormValue("alert_after_failures"); v != "" {
-		if parsed, err := strconv.Atoi(v); err == nil && parsed >= 1 && parsed <= 10 {
-			alertAfter = parsed
-		}
+	alertAfter, err := parseIntInRange(c, formRange{field: "alert_after_failures", min: 1, max: 10}, 3)
+	if err != nil {
+		return h.renderMonitorFormError(c, user, err.Error())
 	}
 
 	monType := domain.MonitorType(c.FormValue("type"))
@@ -365,7 +356,7 @@ func (h *PageHandler) MonitorCreate(c *fiber.Ctx) error {
 		ChannelIDs:         channelIDs,
 	}
 
-	_, err := h.monitoring.CreateMonitor(c.UserContext(), user, input)
+	_, err = h.monitoring.CreateMonitor(c.UserContext(), user, input)
 	if err != nil {
 		channels, chErr := h.alerts.ListChannels(c.UserContext(), user.ID)
 		if chErr != nil {
