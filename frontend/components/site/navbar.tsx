@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { sessionCookie } from "@/lib/session";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { ThemeToggle } from "./theme-toggle";
 
 export async function Navbar() {
   const isLoggedIn = Boolean(await sessionCookie());
@@ -13,6 +14,7 @@ export async function Navbar() {
         </Link>
 
         <div className="flex items-center gap-4">
+          <ThemeToggle />
           {isLoggedIn ? (
             <>
               <Link
