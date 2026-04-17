@@ -42,3 +42,21 @@ export function useChannels() {
     queryFn: () => apiFetch<Channel[]>("/channels"),
   });
 }
+
+export type ChannelTypeInfo = components["schemas"]["ChannelTypeInfo"];
+export type APIKey = components["schemas"]["APIKey"];
+
+export function useChannelTypes() {
+  return useQuery({
+    queryKey: ["channel-types"],
+    queryFn: () => apiFetch<ChannelTypeInfo[]>("/channel-types"),
+    staleTime: Infinity,
+  });
+}
+
+export function useAPIKeys() {
+  return useQuery({
+    queryKey: ["api-keys"],
+    queryFn: () => apiFetch<APIKey[]>("/api-keys"),
+  });
+}

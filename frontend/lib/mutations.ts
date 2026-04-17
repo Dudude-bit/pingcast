@@ -61,3 +61,76 @@ export function useTogglePause() {
     onError: (e: Error) => toast.error(`Toggle failed: ${e.message}`),
   });
 }
+
+// --- Channels ---
+type Channel = components["schemas"]["NotificationChannel"];
+type CreateChannelReq = components["schemas"]["CreateChannelRequest"];
+type UpdateChannelReq = components["schemas"]["UpdateChannelRequest"];
+
+export function useCreateChannel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateChannelReq) =>
+      apiFetch<Channel>("/channels", { method: "POST", body }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["channels"] });
+      toast.success("Channel created");
+    },
+    onError: (e: Error) => toast.error(`Create failed: ${e.message}`),
+  });
+}
+
+export function useUpdateChannel(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: UpdateChannelReq) =>
+      apiFetch<Channel>(`/channels/${id}`, { method: "PUT", body }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["channels"] });
+      toast.success("Channel updated");
+    },
+    onError: (e: Error) => toast.error(`Update failed: ${e.message}`),
+  });
+}
+
+export function useDeleteChannel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<void>(`/channels/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["channels"] });
+      toast.success("Channel deleted");
+    },
+    onError: (e: Error) => toast.error(`Delete failed: ${e.message}`),
+  });
+}
+
+// --- API Keys ---
+type CreateAPIKeyReq = components["schemas"]["CreateAPIKeyRequest"];
+type APIKeyCreated = components["schemas"]["APIKeyCreated"];
+
+export function useCreateAPIKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateAPIKeyReq) =>
+      apiFetch<APIKeyCreated>("/api-keys", { method: "POST", body }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["api-keys"] });
+    },
+    onError: (e: Error) => toast.error(`Create failed: ${e.message}`),
+  });
+}
+
+export function useRevokeAPIKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<void>(`/api-keys/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["api-keys"] });
+      toast.success("API key revoked");
+    },
+    onError: (e: Error) => toast.error(`Revoke failed: ${e.message}`),
+  });
+}
