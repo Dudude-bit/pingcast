@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"regexp"
@@ -25,7 +26,21 @@ var (
 		"pricing": true, "docs": true, "app": true, "dashboard": true,
 		"settings": true, "billing": true,
 	}
+
+	// dummyHash is precomputed once at startup and used to equalise Login
+	// response time when the email does not exist. Comparison always fails;
+	// result is discarded. Prevents user-enumeration via response-latency
+	// side channel.
+	dummyHash = mustHashPassword("pingcast-dummy-timing-never-matches")
 )
+
+func mustHashPassword(p string) string {
+	h, err := HashPassword(p)
+	if err != nil {
+		panic(fmt.Errorf("precompute dummy hash: %w", err))
+	}
+	return h
+}
 
 type AuthService struct {
 	users    port.UserRepo
@@ -54,6 +69,9 @@ func (s *AuthService) Register(ctx context.Context, email, slug, password string
 
 	user, err := s.users.Create(ctx, email, slug, hash)
 	if err != nil {
+		if errors.Is(err, domain.ErrUserExists) {
+			return nil, "", err
+		}
 		return nil, "", fmt.Errorf("create user: %w", err)
 	}
 
@@ -68,6 +86,9 @@ func (s *AuthService) Register(ctx context.Context, email, slug, password string
 func (s *AuthService) Login(ctx context.Context, email, password string) (*domain.User, string, error) {
 	user, hash, err := s.users.GetByEmail(ctx, email)
 	if err != nil {
+		// Equalise timing so response latency does not reveal whether the
+		// email is registered. Result is discarded.
+		_ = CheckPassword(dummyHash, password)
 		return nil, "", fmt.Errorf("invalid email or password")
 	}
 

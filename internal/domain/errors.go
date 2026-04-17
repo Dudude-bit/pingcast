@@ -6,11 +6,12 @@ import (
 )
 
 var (
-	ErrNotFound        = errors.New("not found")
-	ErrForbidden       = errors.New("forbidden")
-	ErrValidation      = errors.New("validation error")
-	ErrConflict        = errors.New("conflict")
-	ErrIncidentExists  = errors.New("active incident already exists for this monitor")
+	ErrNotFound       = errors.New("not found")
+	ErrForbidden      = errors.New("forbidden")
+	ErrValidation     = errors.New("validation error")
+	ErrConflict       = errors.New("conflict")
+	ErrIncidentExists = errors.New("active incident already exists for this monitor")
+	ErrUserExists     = errors.New("user already exists")
 )
 
 // DomainError wraps a sentinel error with a human-readable message and machine-readable code.

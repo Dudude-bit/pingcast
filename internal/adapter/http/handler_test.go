@@ -76,20 +76,6 @@ func setupTestApp(t *testing.T) *testEnv {
 	}
 }
 
-// createSessionForUser sets up mock expectations so that the given sessionID
-// is recognised by the session repo, and returns the cookie header value.
-func (te *testEnv) createSessionForUser(t *testing.T, user *domain.User) string {
-	t.Helper()
-	sessionID := uuid.New().String()
-
-	// The auth middleware calls GetUserID and then GetByID + Touch.
-	te.sessionRepo.EXPECT().GetUserID(mock.Anything, sessionID).Return(user.ID, nil).Maybe()
-	te.userRepo.EXPECT().GetByID(mock.Anything, user.ID).Return(user, nil).Maybe()
-	te.sessionRepo.EXPECT().Touch(mock.Anything, sessionID, mock.Anything).Return(nil).Maybe()
-
-	return fmt.Sprintf("session_id=%s", sessionID)
-}
-
 // ---------------------------------------------------------------------------
 // 1. TestHealthz_AllHealthy
 // ---------------------------------------------------------------------------

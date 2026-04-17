@@ -27,6 +27,9 @@ func (r *UserRepo) Create(ctx context.Context, email, slug, passwordHash string)
 		PasswordHash: passwordHash,
 	})
 	if err != nil {
+		if isUniqueViolation(err) {
+			return nil, domain.ErrUserExists
+		}
 		return nil, err
 	}
 	return userFromCreateRow(row), nil

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io/fs"
@@ -108,7 +109,7 @@ func (h *PageHandler) LoginSubmit(c *fiber.Ctx) error {
 	}
 
 	if err := h.rateLimiter.Reset(c.UserContext(), email); err != nil {
-		// Non-blocking: login succeeded, just log
+		slog.Warn("rate limiter reset failed after successful login", "email", email, "error", err)
 	}
 	setSessionCookie(c, sessionID)
 	return c.Redirect("/dashboard")
@@ -131,7 +132,12 @@ func (h *PageHandler) RegisterSubmit(c *fiber.Ctx) error {
 
 	_, sessionID, err := h.auth.Register(c.UserContext(), email, slug, password)
 	if err != nil {
-		return h.render(c, "register.html", fiber.Map{"Error": err.Error()})
+		if errors.Is(err, domain.ErrUserExists) {
+			slog.Info("duplicate registration attempt", "email", email)
+		} else {
+			slog.Warn("registration failed", "error", err)
+		}
+		return h.render(c, "register.html", fiber.Map{"Error": "Registration failed"})
 	}
 
 	setSessionCookie(c, sessionID)
@@ -194,7 +200,6 @@ func (h *PageHandler) MonitorDetail(c *fiber.Ctx) error {
 		return c.Redirect("/dashboard")
 	}
 
-	chartJSON, _ := json.Marshal([]struct{}{}) // empty for now
 	target, err := h.monitoring.Registry().Target(detail.Monitor.Type, detail.Monitor.CheckConfig)
 	if err != nil {
 		return h.render(c, "monitor_detail.html", fiber.Map{
@@ -209,7 +214,6 @@ func (h *PageHandler) MonitorDetail(c *fiber.Ctx) error {
 		"Uptime24h": detail.Uptime24h,
 		"Uptime7d":  detail.Uptime7d,
 		"Uptime30d": detail.Uptime30d,
-		"ChartData": template.JS(chartJSON),
 		"Incidents": detail.Incidents,
 	})
 }

@@ -5,6 +5,7 @@ import (
 	sha256Hash "crypto/sha256"
 	"encoding/json"
 	hexEncoding "encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	apigen "github.com/kirillinakin/pingcast/internal/api/gen"
+	"github.com/kirillinakin/pingcast/internal/adapter/httperr"
 	"github.com/kirillinakin/pingcast/internal/app"
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/port"
@@ -63,7 +65,11 @@ func (s *Server) Register(c *fiber.Ctx) error {
 
 	user, sessionID, err := s.auth.Register(c.UserContext(), string(req.Email), req.Slug, req.Password)
 	if err != nil {
-		slog.Warn("registration failed", "error", err)
+		if errors.Is(err, domain.ErrUserExists) {
+			slog.Info("duplicate registration attempt", "email", string(req.Email))
+		} else {
+			slog.Warn("registration failed", "error", err)
+		}
 		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("registration failed")})
 	}
 
@@ -504,7 +510,9 @@ func (s *Server) CreateChannel(c *fiber.Ctx) error {
 		Config: configJSON,
 	})
 	if err != nil {
-		return c.Status(400).JSON(apigen.ErrorResponse{Error: new(err.Error())})
+		slog.Warn("channel handler error", "path", c.Path(), "error", err)
+		status, msg := httperr.ClassifyHTTPError(err)
+		return c.Status(status).JSON(apigen.ErrorResponse{Error: new(msg)})
 	}
 	return c.Status(201).JSON(domainChannelToAPI(ch))
 }
@@ -536,7 +544,9 @@ func (s *Server) UpdateChannel(c *fiber.Ctx, id openapi_types.UUID) error {
 	}
 	ch, err := s.alerts.UpdateChannel(c.UserContext(), user.ID, uuid.UUID(id), name, configJSON, isEnabled)
 	if err != nil {
-		return c.Status(400).JSON(apigen.ErrorResponse{Error: new(err.Error())})
+		slog.Warn("channel handler error", "path", c.Path(), "error", err)
+		status, msg := httperr.ClassifyHTTPError(err)
+		return c.Status(status).JSON(apigen.ErrorResponse{Error: new(msg)})
 	}
 	return c.JSON(domainChannelToAPI(ch))
 }
@@ -547,7 +557,9 @@ func (s *Server) DeleteChannel(c *fiber.Ctx, id openapi_types.UUID) error {
 		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
 	}
 	if err := s.alerts.DeleteChannel(c.UserContext(), user.ID, uuid.UUID(id)); err != nil {
-		return c.Status(400).JSON(apigen.ErrorResponse{Error: new(err.Error())})
+		slog.Warn("channel handler error", "path", c.Path(), "error", err)
+		status, msg := httperr.ClassifyHTTPError(err)
+		return c.Status(status).JSON(apigen.ErrorResponse{Error: new(msg)})
 	}
 	return c.SendStatus(204)
 }
@@ -564,7 +576,9 @@ func (s *Server) BindChannel(c *fiber.Ctx, id openapi_types.UUID) error {
 		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid request body")})
 	}
 	if err := s.alerts.BindChannel(c.UserContext(), user.ID, uuid.UUID(id), req.ChannelID); err != nil {
-		return c.Status(400).JSON(apigen.ErrorResponse{Error: new(err.Error())})
+		slog.Warn("channel handler error", "path", c.Path(), "error", err)
+		status, msg := httperr.ClassifyHTTPError(err)
+		return c.Status(status).JSON(apigen.ErrorResponse{Error: new(msg)})
 	}
 	return c.SendStatus(200)
 }
@@ -575,7 +589,9 @@ func (s *Server) UnbindChannel(c *fiber.Ctx, id openapi_types.UUID, channelId op
 		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("unauthorized")})
 	}
 	if err := s.alerts.UnbindChannel(c.UserContext(), user.ID, uuid.UUID(id), uuid.UUID(channelId)); err != nil {
-		return c.Status(400).JSON(apigen.ErrorResponse{Error: new(err.Error())})
+		slog.Warn("channel handler error", "path", c.Path(), "error", err)
+		status, msg := httperr.ClassifyHTTPError(err)
+		return c.Status(status).JSON(apigen.ErrorResponse{Error: new(msg)})
 	}
 	return c.SendStatus(204)
 }

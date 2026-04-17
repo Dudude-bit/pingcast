@@ -2,19 +2,14 @@ package postgres
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/port"
 	"github.com/kirillinakin/pingcast/internal/sqlc/gen"
 )
-
-// pgUniqueViolation is the Postgres error code for a unique constraint violation.
-const pgUniqueViolation = "23505"
 
 var _ port.IncidentRepo = (*IncidentRepo)(nil)
 
@@ -35,8 +30,7 @@ func (r *IncidentRepo) Create(ctx context.Context, monitorID uuid.UUID, cause st
 		// Partial unique index (migration 016) — concurrent Create on a monitor
 		// that already has an active incident hits idx_incidents_active_monitor.
 		// Treat as cooldown-active (Issue 4.6), not an error.
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation {
+		if isUniqueViolation(err) {
 			return nil, domain.ErrIncidentExists
 		}
 		return nil, err

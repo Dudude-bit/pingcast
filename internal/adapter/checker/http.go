@@ -60,7 +60,7 @@ func NewHTTPCheckerWithTimeout(timeoutSeconds int) *HTTPChecker {
 				return nil
 			},
 			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{},
+				TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
 			},
 		},
 	}

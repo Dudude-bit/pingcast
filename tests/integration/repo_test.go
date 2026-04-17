@@ -484,3 +484,23 @@ func TestEncryption_Roundtrip(t *testing.T) {
 	assert.NotContains(t, string(rawConfig), "Bearer",
 		"raw DB value should NOT contain plaintext Bearer token")
 }
+
+func TestUserRepo_Create_DuplicateEmailReturnsErrUserExists(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup := SetupTestDB(t)
+	defer cleanup()
+
+	q := gen.New(pool)
+	repo := postgres.NewUserRepo(q)
+
+	uniq := uuid.New().String()[:8]
+	email := fmt.Sprintf("dup-%s@example.com", uniq)
+
+	_, err := repo.Create(ctx, email, fmt.Sprintf("slug1-%s", uniq), "hash1")
+	require.NoError(t, err, "first create")
+
+	_, err = repo.Create(ctx, email, fmt.Sprintf("slug2-%s", uniq), "hash2")
+	require.Error(t, err, "duplicate email should error")
+	require.ErrorIs(t, err, domain.ErrUserExists,
+		"expected domain.ErrUserExists, got %v", err)
+}
