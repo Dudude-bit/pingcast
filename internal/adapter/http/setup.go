@@ -130,19 +130,8 @@ func SetupApp(
 	// /api/monitor-types is registered by oapi-codegen — no manual registration needed
 	// /dashboard, /monitors/* HTML pages are served by the Next.js frontend (C2).
 
-	// Authenticated HTML pages (channels + api-keys still Go until C3)
-	authed := app.Group("", PageMiddleware(authService))
-	authed.Get("/channels", pageHandler.ChannelList)
-	authed.Get("/channels/new", pageHandler.ChannelNewForm)
-	authed.Post("/channels", pageHandler.ChannelCreate)
-	authed.Get("/channels/:id/edit", pageHandler.ChannelEditForm)
-	authed.Post("/channels/:id", pageHandler.ChannelUpdate)
-	authed.Post("/channels/:id/delete", pageHandler.ChannelDelete)
-	authed.Get("/channels/config-fields", pageHandler.ChannelConfigFields)
-	authed.Get("/api-keys", pageHandler.APIKeyList)
-	authed.Get("/api-keys/new", pageHandler.APIKeyCreate)
-	authed.Post("/api-keys", pageHandler.APIKeyCreateSubmit)
-	authed.Post("/api-keys/:id/revoke", pageHandler.APIKeyRevoke)
+	// Authenticated HTML pages — all migrated to Next.js (C3).
+	// Only the public status page and logout POST remain on Go.
 
 	return app
 }
