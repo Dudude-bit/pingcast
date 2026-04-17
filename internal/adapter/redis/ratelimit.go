@@ -21,11 +21,13 @@ type RateLimiter struct {
 }
 
 // NewRateLimiter creates a Redis-based rate limiter.
+// redis_rate.Limit{Rate, Burst, Period} means "up to Rate requests per Period,
+// bursting up to Burst". For our "5 attempts per 15 minutes" usage we want
+// Rate=maxAttempts and Period=window — NOT per-second rate.
 func NewRateLimiter(client *goredis.Client, prefix string, maxAttempts int, window time.Duration) *RateLimiter {
-	rate := float64(maxAttempts) / window.Seconds()
 	return &RateLimiter{
 		limiter: redis_rate.NewLimiter(client),
-		limit:   redis_rate.Limit{Rate: int(rate), Burst: maxAttempts, Period: window},
+		limit:   redis_rate.Limit{Rate: maxAttempts, Burst: maxAttempts, Period: window},
 		prefix:  prefix,
 	}
 }
