@@ -9,6 +9,10 @@
 docker-compose.override.yml
 .superpowers/
 
+# Draft marketing articles — authored but not yet published; keep
+# out of the repo until final draft is ready.
+docs/articles/
+
 # Next.js frontend
 frontend/node_modules/
 frontend/.next/

@@ -147,7 +147,10 @@ func main() {
 	alertSvc := app.NewAlertService(channelRepo, monitorRepo, channelReg, failedAlertRepo, metrics)
 
 	// HTTP handlers
-	rateLimiter := redisadapter.NewRateLimiter(rdb, "login", 5, 15*time.Minute)
+	// Shared rate-limit bucket for /api/auth/login and /api/auth/register:
+	// 5 attempts per 15 minutes per IP. Keyed by IP for register (Issue 4.7),
+	// by email for login.
+	rateLimiter := redisadapter.NewRateLimiter(rdb, "auth", 5, 15*time.Minute)
 	server := httpadapter.NewServer(authSvc, monitoringSvc, alertSvc, rateLimiter, apiKeyRepo)
 	pageHandler := httpadapter.NewPageHandler(authSvc, monitoringSvc, alertSvc, rateLimiter, apiKeyRepo)
 	webhookHandler := httpadapter.NewWebhookHandler(authSvc, alertSvc, cfg.LemonSqueezyWebhookSecret)
