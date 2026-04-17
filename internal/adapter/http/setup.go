@@ -2,13 +2,10 @@ package httpadapter
 
 import (
 	"errors"
-	"io/fs"
 	"log/slog"
-	"net/http"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/csrf"
-	"github.com/gofiber/fiber/v2/middleware/filesystem"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
@@ -17,7 +14,6 @@ import (
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/observability"
 	"github.com/kirillinakin/pingcast/internal/port"
-	"github.com/kirillinakin/pingcast/internal/web"
 )
 
 func SetupApp(
@@ -98,22 +94,13 @@ func SetupApp(
 		},
 	}))
 
-	// Static files
-	staticFS, _ := fs.Sub(web.FS, "static")
-	app.Use("/static", filesystem.New(filesystem.Config{
-		Root: http.FS(staticFS),
-	}))
-
 	// Health / readiness
 	app.Get("/health", server.HealthCheck)
 	app.Get("/healthz", healthChecker.Healthz)
 	app.Get("/readyz", healthChecker.Readyz)
 
-	// Public pages (landing/login/register now served by Next.js frontend; C1).
+	// Logout form-POST (still Go-side because it must clear the session cookie).
 	app.Post("/logout", pageHandler.Logout)
-
-	// Public status page (HTML)
-	app.Get("/status/:slug", pageHandler.StatusPage)
 
 	// Webhooks (no auth)
 	app.Post("/webhook/lemonsqueezy", webhookHandler.HandleLemonSqueezy)
