@@ -147,7 +147,9 @@ func (h *PageHandler) RegisterSubmit(c *fiber.Ctx) error {
 func (h *PageHandler) Logout(c *fiber.Ctx) error {
 	sessionID := c.Cookies("session_id")
 	if sessionID != "" {
-		h.auth.Logout(c.UserContext(), sessionID)
+		if err := h.auth.Logout(c.UserContext(), sessionID); err != nil {
+			slog.Warn("logout failed — session will expire via Redis TTL", "error", err)
+		}
 	}
 	c.ClearCookie("session_id")
 	return c.Redirect("/")
@@ -286,7 +288,9 @@ func (h *PageHandler) MonitorDelete(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Redirect("/dashboard")
 	}
-	h.monitoring.DeleteMonitor(c.UserContext(), user.ID, monID)
+	if err := h.monitoring.DeleteMonitor(c.UserContext(), user.ID, monID); err != nil {
+		slog.Warn("failed to delete monitor", "monitor_id", monID, "user_id", user.ID, "error", err)
+	}
 	return c.Redirect("/dashboard")
 }
 
@@ -296,7 +300,9 @@ func (h *PageHandler) MonitorTogglePause(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Redirect("/dashboard")
 	}
-	h.monitoring.TogglePause(c.UserContext(), user, monID)
+	if _, pauseErr := h.monitoring.TogglePause(c.UserContext(), user, monID); pauseErr != nil {
+		slog.Warn("failed to toggle monitor pause", "monitor_id", monID, "user_id", user.ID, "error", pauseErr)
+	}
 	return c.Redirect("/dashboard")
 }
 
@@ -341,7 +347,7 @@ func (h *PageHandler) MonitorCreate(c *fiber.Ctx) error {
 	// Parse selected channel IDs
 	var channelIDs []uuid.UUID
 	for _, cidBytes := range c.Context().PostArgs().PeekMulti("channel_ids") {
-		if cid, err := uuid.Parse(string(cidBytes)); err == nil {
+		if cid, parseErr := uuid.Parse(string(cidBytes)); parseErr == nil {
 			channelIDs = append(channelIDs, cid)
 		}
 	}
@@ -544,7 +550,9 @@ func (h *PageHandler) ChannelDelete(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Redirect("/channels")
 	}
-	h.alerts.DeleteChannel(c.UserContext(), user.ID, chID)
+	if err := h.alerts.DeleteChannel(c.UserContext(), user.ID, chID); err != nil {
+		slog.Warn("failed to delete channel", "channel_id", chID, "user_id", user.ID, "error", err)
+	}
 	return c.Redirect("/channels")
 }
 
@@ -688,7 +696,9 @@ func (h *PageHandler) APIKeyRevoke(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Redirect("/api-keys")
 	}
-	h.apiKeyRepo.Delete(c.UserContext(), keyID, user.ID)
+	if err := h.apiKeyRepo.Delete(c.UserContext(), keyID, user.ID); err != nil {
+		slog.Warn("failed to delete api key", "key_id", keyID, "user_id", user.ID, "error", err)
+	}
 	return c.Redirect("/api-keys")
 }
 

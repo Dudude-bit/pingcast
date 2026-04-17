@@ -23,7 +23,7 @@ func BeginWithUserScope(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUI
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 	if err := WithUserScope(ctx, tx, userID); err != nil {
-		tx.Rollback(ctx)
+		_ = tx.Rollback(ctx)
 		return nil, fmt.Errorf("set user scope: %w", err)
 	}
 	return tx, nil

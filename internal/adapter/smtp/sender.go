@@ -117,14 +117,14 @@ func (s *sender) Send(ctx context.Context, event *domain.AlertEvent) error {
 		}
 	}
 
-	if err := client.Auth(auth); err != nil {
-		return domain.NewDeliveryError("auth_error", 0, fmt.Errorf("smtp auth: %w", err))
+	if authErr := client.Auth(auth); authErr != nil {
+		return domain.NewDeliveryError("auth_error", 0, fmt.Errorf("smtp auth: %w", authErr))
 	}
-	if err := client.Mail(s.from); err != nil {
-		return fmt.Errorf("smtp mail: %w", err)
+	if mailErr := client.Mail(s.from); mailErr != nil {
+		return fmt.Errorf("smtp mail: %w", mailErr)
 	}
-	if err := client.Rcpt(s.to); err != nil {
-		return fmt.Errorf("smtp rcpt: %w", err)
+	if rcptErr := client.Rcpt(s.to); rcptErr != nil {
+		return fmt.Errorf("smtp rcpt: %w", rcptErr)
 	}
 	w, err := client.Data()
 	if err != nil {

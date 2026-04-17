@@ -40,8 +40,8 @@ func (s *MonitorSubscriber) Subscribe(ctx context.Context, handler func(ctx cont
 
 	cons, err := consumer.Consume(func(msg jetstream.Msg) {
 		var event port.MonitorChangedEvent
-		if err := json.Unmarshal(msg.Data(), &event); err != nil {
-			slog.Error("unmarshal monitor changed event — discarding malformed message", "error", err)
+		if umErr := json.Unmarshal(msg.Data(), &event); umErr != nil {
+			slog.Error("unmarshal monitor changed event — discarding malformed message", "error", umErr)
 			_ = msg.Ack()
 			return
 		}
@@ -49,8 +49,8 @@ func (s *MonitorSubscriber) Subscribe(ctx context.Context, handler func(ctx cont
 		msgCtx, cancel := xcontext.Detached(ctx, 5*time.Second, "nats.monitor.handle")
 		defer cancel()
 
-		if err := handler(msgCtx, event); err != nil {
-			slog.Error("handle monitor changed event", "error", err)
+		if hErr := handler(msgCtx, event); hErr != nil {
+			slog.Error("handle monitor changed event", "error", hErr)
 			_ = msg.Nak()
 			return
 		}
@@ -98,8 +98,8 @@ func (s *AlertSubscriber) Subscribe(ctx context.Context, handler func(ctx contex
 
 	cons, err := consumer.Consume(func(msg jetstream.Msg) {
 		var event domain.AlertEvent
-		if err := json.Unmarshal(msg.Data(), &event); err != nil {
-			slog.Error("unmarshal alert event — discarding malformed message", "error", err)
+		if umErr := json.Unmarshal(msg.Data(), &event); umErr != nil {
+			slog.Error("unmarshal alert event — discarding malformed message", "error", umErr)
 			_ = msg.Ack()
 			return
 		}
@@ -107,8 +107,8 @@ func (s *AlertSubscriber) Subscribe(ctx context.Context, handler func(ctx contex
 		msgCtx, cancel := xcontext.Detached(ctx, 30*time.Second, "nats.alert.handle")
 		defer cancel()
 
-		if err := handler(msgCtx, &event); err != nil {
-			slog.Error("handle alert event", "error", err)
+		if hErr := handler(msgCtx, &event); hErr != nil {
+			slog.Error("handle alert event", "error", hErr)
 			_ = msg.Nak()
 			return
 		}

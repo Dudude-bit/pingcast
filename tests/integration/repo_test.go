@@ -392,18 +392,18 @@ func TestUptimeRepo_RecordAndQuery(t *testing.T) {
 
 	// Record checks for m1: 7 success, 3 failure = 70% uptime
 	for i := 0; i < 7; i++ {
-		err := uptimeRepo.RecordCheck(ctx, m1.ID, now, true)
-		require.NoError(t, err)
+		rcErr := uptimeRepo.RecordCheck(ctx, m1.ID, now, true)
+		require.NoError(t, rcErr)
 	}
 	for i := 0; i < 3; i++ {
-		err := uptimeRepo.RecordCheck(ctx, m1.ID, now, false)
-		require.NoError(t, err)
+		rcErr := uptimeRepo.RecordCheck(ctx, m1.ID, now, false)
+		require.NoError(t, rcErr)
 	}
 
 	// Record checks for m2: 10 success, 0 failure = 100% uptime
 	for i := 0; i < 10; i++ {
-		err := uptimeRepo.RecordCheck(ctx, m2.ID, now, true)
-		require.NoError(t, err)
+		rcErr := uptimeRepo.RecordCheck(ctx, m2.ID, now, true)
+		require.NoError(t, rcErr)
 	}
 
 	since := now.Add(-1 * time.Hour)

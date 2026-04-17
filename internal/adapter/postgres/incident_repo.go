@@ -62,7 +62,8 @@ func (r *IncidentRepo) IsInCooldown(ctx context.Context, monitorID uuid.UUID) (b
 func (r *IncidentRepo) ListByMonitorID(ctx context.Context, monitorID uuid.UUID, limit int) ([]domain.Incident, error) {
 	rows, err := r.q.ListIncidentsByMonitorID(ctx, gen.ListIncidentsByMonitorIDParams{
 		MonitorID: monitorID,
-		Limit:     int32(limit),
+		//nolint:gosec // G115: list limit comes from constant call sites (5, 10), always small positive
+		Limit: int32(limit),
 	})
 	if err != nil {
 		return nil, err

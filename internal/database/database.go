@@ -78,7 +78,8 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 		}
 
 		version := 0
-		fmt.Sscanf(entry.Name(), "%d_", &version)
+		// Sscanf error is ignored: unparseable names yield version=0, filtered below.
+		_, _ = fmt.Sscanf(entry.Name(), "%d_", &version)
 		if version == 0 {
 			continue
 		}
@@ -103,12 +104,12 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 		}
 
 		if _, err := tx.Exec(ctx, string(content)); err != nil {
-			tx.Rollback(ctx)
+			_ = tx.Rollback(ctx)
 			return fmt.Errorf("execute migration %d: %w", version, err)
 		}
 
 		if _, err := tx.Exec(ctx, "INSERT INTO schema_migrations (version) VALUES ($1)", version); err != nil {
-			tx.Rollback(ctx)
+			_ = tx.Rollback(ctx)
 			return fmt.Errorf("record migration %d: %w", version, err)
 		}
 

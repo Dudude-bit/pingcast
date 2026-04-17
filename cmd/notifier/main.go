@@ -45,6 +45,7 @@ func main() {
 	// PostgreSQL (for channel lookup)
 	devMode := os.Getenv("DEV_MODE") == "true"
 	slowQueryTracer := observability.NewSlowQueryTracer(100*time.Millisecond, devMode)
+	//nolint:gosec // G115: MaxDBConns from env config, typical 5-15, far below int32 max
 	pool, err := database.Connect(ctx, cfg.DatabaseURL, int32(cfg.MaxDBConns), database.WithTracer(slowQueryTracer))
 	if err != nil {
 		slog.Error("failed to connect to database", "error", err)
@@ -68,7 +69,7 @@ func main() {
 		slog.Error("failed to connect to nats", "error", err)
 		os.Exit(1)
 	}
-	defer nc.Drain()
+	defer func() { _ = nc.Drain() }()
 
 	js, err := jetstream.New(nc)
 	if err != nil {
@@ -76,8 +77,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := natsadapter.SetupStreams(ctx, js); err != nil {
-		slog.Error("failed to setup nats streams", "error", err)
+	if streamsErr := natsadapter.SetupStreams(ctx, js); streamsErr != nil {
+		slog.Error("failed to setup nats streams", "error", streamsErr)
 		os.Exit(1)
 	}
 

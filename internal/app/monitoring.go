@@ -102,11 +102,11 @@ func (s *MonitoringService) CreateMonitor(ctx context.Context, user *domain.User
 		alertAfter = 3
 	}
 
-	if err := domain.ValidateMonitorInput(input.Name, interval, alertAfter); err != nil {
-		return nil, err
+	if vErr := domain.ValidateMonitorInput(input.Name, interval, alertAfter); vErr != nil {
+		return nil, vErr
 	}
-	if err := s.registry.ValidateConfig(input.Type, input.CheckConfig); err != nil {
-		return nil, fmt.Errorf("invalid check config: %w", err)
+	if cfgErr := s.registry.ValidateConfig(input.Type, input.CheckConfig); cfgErr != nil {
+		return nil, fmt.Errorf("invalid check config: %w", cfgErr)
 	}
 
 	mon := &domain.Monitor{
@@ -122,15 +122,15 @@ func (s *MonitoringService) CreateMonitor(ctx context.Context, user *domain.User
 
 	// No channels to bind — simple create without transaction
 	if len(input.ChannelIDs) == 0 {
-		created, err := s.monitors.Create(ctx, mon)
-		if err != nil {
-			return nil, err
+		created, createErr := s.monitors.Create(ctx, mon)
+		if createErr != nil {
+			return nil, createErr
 		}
 		if s.metrics != nil {
 			s.metrics.MonitorCreated(ctx)
 		}
-		if err := s.publishMonitorEvent(ctx, domain.ActionCreate, created); err != nil {
-			return created, fmt.Errorf("%w: %w", ErrEventPublishFailed, err)
+		if pubErr := s.publishMonitorEvent(ctx, domain.ActionCreate, created); pubErr != nil {
+			return created, fmt.Errorf("%w: %w", ErrEventPublishFailed, pubErr)
 		}
 		return created, nil
 	}
@@ -140,14 +140,14 @@ func (s *MonitoringService) CreateMonitor(ctx context.Context, user *domain.User
 	// ctx carries the active tx — repos extract it transparently.
 	var created *domain.Monitor
 	err = s.txm.Do(ctx, func(txCtx context.Context) error {
-		var err error
-		created, err = s.monitors.Create(txCtx, mon)
-		if err != nil {
-			return fmt.Errorf("create monitor: %w", err)
+		var createErr error
+		created, createErr = s.monitors.Create(txCtx, mon)
+		if createErr != nil {
+			return fmt.Errorf("create monitor: %w", createErr)
 		}
 		for _, cid := range input.ChannelIDs {
-			if err := s.channels.BindToMonitor(txCtx, created.ID, cid); err != nil {
-				return fmt.Errorf("bind channel %s: %w", cid, err)
+			if bindErr := s.channels.BindToMonitor(txCtx, created.ID, cid); bindErr != nil {
+				return fmt.Errorf("bind channel %s: %w", cid, bindErr)
 			}
 		}
 		return nil
@@ -158,8 +158,8 @@ func (s *MonitoringService) CreateMonitor(ctx context.Context, user *domain.User
 	if s.metrics != nil {
 		s.metrics.MonitorCreated(ctx)
 	}
-	if err := s.publishMonitorEvent(ctx, domain.ActionCreate, created); err != nil {
-		return created, fmt.Errorf("%w: %w", ErrEventPublishFailed, err)
+	if pubErr := s.publishMonitorEvent(ctx, domain.ActionCreate, created); pubErr != nil {
+		return created, fmt.Errorf("%w: %w", ErrEventPublishFailed, pubErr)
 	}
 	return created, nil
 }

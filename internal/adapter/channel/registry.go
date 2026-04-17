@@ -74,6 +74,7 @@ func (r *Registry) getOrCreateCB(t domain.ChannelType, channelID uuid.UUID) *gob
 	now := time.Now().Unix()
 
 	if v, ok := r.cbs.Load(key); ok {
+		//nolint:errcheck // type assertion safe: only *cbEntry is Stored into r.cbs
 		e := v.(*cbEntry)
 		e.lastAccess.Store(now)
 		return e.cb
@@ -83,6 +84,7 @@ func (r *Registry) getOrCreateCB(t domain.ChannelType, channelID uuid.UUID) *gob
 	e := &cbEntry{cb: cb}
 	e.lastAccess.Store(now)
 	actual, _ := r.cbs.LoadOrStore(key, e)
+	//nolint:errcheck // type assertion safe: only *cbEntry is Stored into r.cbs
 	return actual.(*cbEntry).cb
 }
 
@@ -96,6 +98,7 @@ func (r *Registry) evictLoop() {
 		case <-ticker.C:
 			cutoff := time.Now().Add(-r.cbTTL).Unix()
 			r.cbs.Range(func(key, value any) bool {
+				//nolint:errcheck // type assertion safe: only *cbEntry is Stored into r.cbs
 				if e := value.(*cbEntry); e.lastAccess.Load() < cutoff {
 					r.cbs.Delete(key)
 				}

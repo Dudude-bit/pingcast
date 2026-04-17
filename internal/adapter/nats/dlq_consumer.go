@@ -66,6 +66,6 @@ func (d *DLQConsumer) Subscribe(ctx context.Context, handler func(ctx context.Co
 
 func (d *DLQConsumer) Stop() {
 	if d.sub != nil {
-		d.sub.Unsubscribe()
+		_ = d.sub.Unsubscribe()
 	}
 }

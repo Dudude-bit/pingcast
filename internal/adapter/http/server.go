@@ -112,7 +112,9 @@ func (s *Server) Login(c *fiber.Ctx) error {
 func (s *Server) Logout(c *fiber.Ctx) error {
 	sessionID := c.Cookies("session_id")
 	if sessionID != "" {
-		s.auth.Logout(c.UserContext(), sessionID)
+		if err := s.auth.Logout(c.UserContext(), sessionID); err != nil {
+			slog.Warn("logout failed — session will expire via Redis TTL", "error", err)
+		}
 	}
 	c.ClearCookie("session_id")
 	return c.SendStatus(200)
@@ -512,7 +514,7 @@ func (s *Server) CreateChannel(c *fiber.Ctx) error {
 	if err != nil {
 		slog.Warn("channel handler error", "path", c.Path(), "error", err)
 		status, msg := httperr.ClassifyHTTPError(err)
-		return c.Status(status).JSON(apigen.ErrorResponse{Error: new(msg)})
+		return c.Status(status).JSON(apigen.ErrorResponse{Error: &msg})
 	}
 	return c.Status(201).JSON(domainChannelToAPI(ch))
 }
@@ -546,7 +548,7 @@ func (s *Server) UpdateChannel(c *fiber.Ctx, id openapi_types.UUID) error {
 	if err != nil {
 		slog.Warn("channel handler error", "path", c.Path(), "error", err)
 		status, msg := httperr.ClassifyHTTPError(err)
-		return c.Status(status).JSON(apigen.ErrorResponse{Error: new(msg)})
+		return c.Status(status).JSON(apigen.ErrorResponse{Error: &msg})
 	}
 	return c.JSON(domainChannelToAPI(ch))
 }
@@ -559,7 +561,7 @@ func (s *Server) DeleteChannel(c *fiber.Ctx, id openapi_types.UUID) error {
 	if err := s.alerts.DeleteChannel(c.UserContext(), user.ID, uuid.UUID(id)); err != nil {
 		slog.Warn("channel handler error", "path", c.Path(), "error", err)
 		status, msg := httperr.ClassifyHTTPError(err)
-		return c.Status(status).JSON(apigen.ErrorResponse{Error: new(msg)})
+		return c.Status(status).JSON(apigen.ErrorResponse{Error: &msg})
 	}
 	return c.SendStatus(204)
 }
@@ -578,7 +580,7 @@ func (s *Server) BindChannel(c *fiber.Ctx, id openapi_types.UUID) error {
 	if err := s.alerts.BindChannel(c.UserContext(), user.ID, uuid.UUID(id), req.ChannelID); err != nil {
 		slog.Warn("channel handler error", "path", c.Path(), "error", err)
 		status, msg := httperr.ClassifyHTTPError(err)
-		return c.Status(status).JSON(apigen.ErrorResponse{Error: new(msg)})
+		return c.Status(status).JSON(apigen.ErrorResponse{Error: &msg})
 	}
 	return c.SendStatus(200)
 }
@@ -591,7 +593,7 @@ func (s *Server) UnbindChannel(c *fiber.Ctx, id openapi_types.UUID, channelId op
 	if err := s.alerts.UnbindChannel(c.UserContext(), user.ID, uuid.UUID(id), uuid.UUID(channelId)); err != nil {
 		slog.Warn("channel handler error", "path", c.Path(), "error", err)
 		status, msg := httperr.ClassifyHTTPError(err)
-		return c.Status(status).JSON(apigen.ErrorResponse{Error: new(msg)})
+		return c.Status(status).JSON(apigen.ErrorResponse{Error: &msg})
 	}
 	return c.SendStatus(204)
 }

@@ -19,10 +19,9 @@ import (
 var _ port.MonitorChecker = (*HTTPChecker)(nil)
 
 const (
-	defaultTimeout = 10 * time.Second
-	maxBodyRead    = 1 << 20 // 1MB
-	maxRedirects   = 5
-	userAgent      = "PingCast/1.0 (uptime monitor; https://pingcast.io)"
+	maxBodyRead  = 1 << 20 // 1MB
+	maxRedirects = 5
+	userAgent    = "PingCast/1.0 (uptime monitor; https://pingcast.io)"
 )
 
 type HTTPMethod string
@@ -73,6 +72,7 @@ func NewHTTPCheckerWithTimeout(timeoutSeconds int) *HTTPChecker {
 // distinct timeout value to avoid per-check allocations.
 func (c *HTTPChecker) clientForTimeout(timeoutSecs int) *http.Client {
 	if v, ok := c.clientByTTL.Load(timeoutSecs); ok {
+		//nolint:errcheck // type assertion safe: only *http.Client is Stored into c.clientByTTL
 		return v.(*http.Client)
 	}
 	client := &http.Client{
@@ -81,6 +81,7 @@ func (c *HTTPChecker) clientForTimeout(timeoutSecs int) *http.Client {
 		Transport:     c.httpClient.Transport,
 	}
 	actual, _ := c.clientByTTL.LoadOrStore(timeoutSecs, client)
+	//nolint:errcheck // type assertion safe: only *http.Client is Stored into c.clientByTTL
 	return actual.(*http.Client)
 }
 

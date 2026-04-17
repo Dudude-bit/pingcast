@@ -30,6 +30,7 @@ func intToPgtypeInt4(v *int) pgtype.Int4 {
 	if v == nil {
 		return pgtype.Int4{}
 	}
+	//nolint:gosec // G115: CheckResult.StatusCode is an HTTP status (0..599), always fits int32
 	return pgtype.Int4{Int32: int32(*v), Valid: true}
 }
 
@@ -138,11 +139,13 @@ func monitorFromListActiveRow(r gen.ListActiveMonitorsRow) domain.Monitor {
 
 func monitorToCreateParams(m *domain.Monitor) gen.CreateMonitorParams {
 	return gen.CreateMonitorParams{
-		UserID:             m.UserID,
-		Name:               m.Name,
-		Type:               string(m.Type),
-		CheckConfig:        []byte(m.CheckConfig),
-		IntervalSeconds:    int32(m.IntervalSeconds),
+		UserID: m.UserID,
+		Name:   m.Name,
+		Type:   string(m.Type),
+		CheckConfig: []byte(m.CheckConfig),
+		//nolint:gosec // G115: IntervalSeconds bounded 30..86400 by domain.ValidateMonitorInput
+		IntervalSeconds: int32(m.IntervalSeconds),
+		//nolint:gosec // G115: AlertAfterFailures bounded 1..10 by domain.ValidateMonitorInput
 		AlertAfterFailures: int32(m.AlertAfterFailures),
 		IsPaused:           m.IsPaused,
 		IsPublic:           m.IsPublic,
@@ -151,11 +154,13 @@ func monitorToCreateParams(m *domain.Monitor) gen.CreateMonitorParams {
 
 func monitorToUpdateParams(m *domain.Monitor) gen.UpdateMonitorParams {
 	return gen.UpdateMonitorParams{
-		ID:                 m.ID,
-		UserID:             m.UserID,
-		Name:               m.Name,
-		CheckConfig:        []byte(m.CheckConfig),
-		IntervalSeconds:    int32(m.IntervalSeconds),
+		ID:          m.ID,
+		UserID:      m.UserID,
+		Name:        m.Name,
+		CheckConfig: []byte(m.CheckConfig),
+		//nolint:gosec // G115: IntervalSeconds bounded 30..86400 by domain.ValidateMonitorInput
+		IntervalSeconds: int32(m.IntervalSeconds),
+		//nolint:gosec // G115: AlertAfterFailures bounded 1..10 by domain.ValidateMonitorInput
 		AlertAfterFailures: int32(m.AlertAfterFailures),
 		IsPaused:           m.IsPaused,
 		IsPublic:           m.IsPublic,
@@ -168,9 +173,10 @@ func monitorToUpdateParams(m *domain.Monitor) gen.UpdateMonitorParams {
 
 func checkResultToInsertParams(cr *domain.CheckResult) gen.InsertCheckResultParams {
 	return gen.InsertCheckResultParams{
-		MonitorID:      cr.MonitorID,
-		Status:         string(cr.Status),
-		StatusCode:     intToPgtypeInt4(cr.StatusCode),
+		MonitorID:  cr.MonitorID,
+		Status:     string(cr.Status),
+		StatusCode: intToPgtypeInt4(cr.StatusCode),
+		//nolint:gosec // G115: response time in ms from http.Client.Timeout (≤ 30s), always fits int32
 		ResponseTimeMs: int32(cr.ResponseTimeMs),
 		ErrorMessage:   cr.ErrorMessage,
 		CheckedAt:      cr.CheckedAt,
