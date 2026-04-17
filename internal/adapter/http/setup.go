@@ -3,6 +3,7 @@ package httpadapter
 import (
 	"errors"
 	"io/fs"
+	"log/slog"
 	"net/http"
 
 	"github.com/gofiber/fiber/v2"
@@ -56,10 +57,11 @@ func SetupApp(
 			if e, ok := err.(*fiber.Error); ok {
 				code = e.Code
 			}
+			slog.Error("unhandled error", "error", err, "code", code)
 			return c.Status(code).JSON(fiber.Map{
 				"error": fiber.Map{
 					"code":    "INTERNAL_ERROR",
-					"message": err.Error(),
+					"message": "internal error",
 				},
 			})
 		},

@@ -240,13 +240,13 @@ func (h *PageHandler) MonitorUpdate(c *fiber.Ctx) error {
 
 	interval := 300
 	if v := c.FormValue("interval_seconds"); v != "" {
-		if parsed, err := strconv.Atoi(v); err == nil {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed >= 30 && parsed <= 86400 {
 			interval = parsed
 		}
 	}
 	alertAfter := 3
 	if v := c.FormValue("alert_after_failures"); v != "" {
-		if parsed, err := strconv.Atoi(v); err == nil {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed >= 1 && parsed <= 10 {
 			alertAfter = parsed
 		}
 	}
@@ -328,14 +328,14 @@ func (h *PageHandler) MonitorCreate(c *fiber.Ctx) error {
 
 	interval := 300
 	if v := c.FormValue("interval_seconds"); v != "" {
-		if parsed, err := strconv.Atoi(v); err == nil {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed >= 30 && parsed <= 86400 {
 			interval = parsed
 		}
 	}
 
 	alertAfter := 3
 	if v := c.FormValue("alert_after_failures"); v != "" {
-		if parsed, err := strconv.Atoi(v); err == nil {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed >= 1 && parsed <= 10 {
 			alertAfter = parsed
 		}
 	}
