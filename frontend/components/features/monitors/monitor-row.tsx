@@ -32,8 +32,8 @@ export function MonitorRow({ m }: { m: MonitorWithUptime }) {
   const paused = m.is_paused ?? false;
 
   return (
-    <div className="group flex items-center gap-4 rounded-lg border border-border/60 bg-card px-4 py-3 hover:border-border hover:bg-accent/30 transition-colors">
-      <StatusDot status={m.current_status} />
+    <div className="group flex items-center gap-3 sm:gap-4 rounded-lg border border-border/60 bg-card px-3 sm:px-4 py-3 hover:border-border hover:bg-accent/30 transition-colors">
+      <StatusDot status={m.current_status} pulse={!paused} />
 
       <Link
         href={`/monitors/${m.id}`}
@@ -42,7 +42,7 @@ export function MonitorRow({ m }: { m: MonitorWithUptime }) {
         <div className="flex items-center gap-2">
           <span className="font-medium truncate">{m.name}</span>
           {paused ? (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-zinc-500/15 text-zinc-600 dark:text-zinc-400">
+            <span className="text-xs px-1.5 py-0.5 rounded bg-zinc-500/15 text-zinc-600 dark:text-zinc-400 shrink-0">
               paused
             </span>
           ) : null}
@@ -52,11 +52,16 @@ export function MonitorRow({ m }: { m: MonitorWithUptime }) {
         </div>
       </Link>
 
-      <span className="text-xs text-muted-foreground tabular-nums">
+      <span className="hidden md:inline text-xs text-muted-foreground tabular-nums">
         {m.interval_seconds ?? 300}s
       </span>
 
-      <span className={cn("text-sm font-semibold tabular-nums w-16 text-right", uptimeColor(uptime))}>
+      <span
+        className={cn(
+          "text-sm font-semibold tabular-nums w-12 sm:w-16 text-right shrink-0",
+          uptimeColor(uptime),
+        )}
+      >
         {uptime.toFixed(1)}%
       </span>
 

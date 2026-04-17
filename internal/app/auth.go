@@ -186,6 +186,11 @@ func ValidatePassword(password string) error {
 	if len(password) < 8 {
 		return fmt.Errorf("password must be at least 8 characters")
 	}
+	// bcrypt silently truncates at 72 bytes. Reject longer passwords so
+	// users don't get surprised by two distinct passwords hashing the same.
+	if len(password) > 72 {
+		return fmt.Errorf("password must be at most 72 characters")
+	}
 	return nil
 }
 

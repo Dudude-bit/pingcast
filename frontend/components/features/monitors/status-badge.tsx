@@ -3,7 +3,19 @@ import { cn } from "@/lib/utils";
 
 type Status = "up" | "down" | "unknown" | (string & {});
 
-export function StatusDot({ status }: { status?: Status }) {
+/**
+ * StatusDot — colored pill showing up/down/unknown. When `pulse` is true
+ * and the status is definite (up or down), the dot radiates a subtle
+ * ping ring matching the colour. Used on live-polled views to signal
+ * that the data is breathing.
+ */
+export function StatusDot({
+  status,
+  pulse = false,
+}: {
+  status?: Status;
+  pulse?: boolean;
+}) {
   const color =
     status === "up"
       ? "bg-emerald-500"
@@ -13,11 +25,21 @@ export function StatusDot({ status }: { status?: Status }) {
   return (
     <span
       className={cn(
-        "inline-block h-2.5 w-2.5 rounded-full ring-2 ring-background shrink-0",
+        "relative inline-block h-2.5 w-2.5 rounded-full ring-2 ring-background shrink-0",
         color,
       )}
       aria-label={`status ${status ?? "unknown"}`}
-    />
+    >
+      {pulse && status !== "unknown" ? (
+        <span
+          className={cn(
+            "absolute inset-0 rounded-full opacity-60 animate-ping",
+            color,
+          )}
+          aria-hidden="true"
+        />
+      ) : null}
+    </span>
   );
 }
 
