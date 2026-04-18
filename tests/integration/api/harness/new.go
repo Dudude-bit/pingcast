@@ -4,12 +4,20 @@ package harness
 
 import "testing"
 
-// Harness is the per-test handle. Fields grow across Tasks 2-7.
+// Harness is the per-test handle. It owns the App and resets state on
+// construction.
 type Harness struct {
-	t *testing.T
+	t   *testing.T
+	App *App
 }
 
 func New(t *testing.T) *Harness {
 	t.Helper()
-	return &Harness{t: t}
+
+	h := &Harness{t: t}
+	h.App = NewApp(t)
+	t.Cleanup(h.App.Close)
+
+	// State reset (TRUNCATE + FLUSHDB) lands in Task 5.
+	return h
 }
