@@ -1,5 +1,10 @@
 FROM node:20-alpine AS base
-RUN corepack enable
+# Install pnpm directly instead of through corepack: corepack would
+# fetch the pnpm binary from the npm registry on every container start
+# (package.json has no "packageManager" field) and then block the build
+# in environments that can't reach the registry (e.g. Dokploy builds
+# hitting a Cloudflare-routed npm host timeout).
+RUN npm install -g pnpm@10.33.0
 WORKDIR /app
 
 FROM base AS deps
