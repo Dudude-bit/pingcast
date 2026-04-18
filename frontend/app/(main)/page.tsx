@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Zap, Bell, LineChart, ArrowRight, Code2 } from "lucide-react";
+import { Zap, Bell, LineChart, ArrowRight, Code2, Terminal } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { LandingDemo } from "@/components/site/landing-demo";
 
@@ -107,6 +107,81 @@ export default function LandingPage() {
       </section>
 
       <section className="py-16 max-w-4xl mx-auto">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-80px" }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="rounded-2xl border border-border/60 bg-card overflow-hidden"
+        >
+          <div className="flex items-center gap-2 border-b border-border/60 bg-muted/40 px-4 py-2.5 text-xs font-mono text-muted-foreground">
+            <Terminal className="h-3.5 w-3.5" />
+            <span>bash — 80x24</span>
+            <span className="ml-auto flex gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-red-400/80" />
+              <span className="h-2 w-2 rounded-full bg-amber-400/80" />
+              <span className="h-2 w-2 rounded-full bg-emerald-400/80" />
+            </span>
+          </div>
+          <pre className="overflow-x-auto px-6 py-5 text-[13px] leading-relaxed font-mono">
+            <code>
+              <span className="text-muted-foreground"># Create a monitor from CI after every deploy</span>
+              {"\n"}
+              <span className="text-emerald-600 dark:text-emerald-400">curl</span>{" "}
+              <span className="text-blue-600 dark:text-blue-400">-X</span> POST https://pingcast.io/api/monitors{" "}
+              {"\\\n  "}
+              <span className="text-blue-600 dark:text-blue-400">-H</span>{" "}
+              <span className="text-amber-600 dark:text-amber-400">{`"Authorization: Bearer $PINGCAST_KEY"`}</span>{" "}
+              {"\\\n  "}
+              <span className="text-blue-600 dark:text-blue-400">-H</span>{" "}
+              <span className="text-amber-600 dark:text-amber-400">{`"Content-Type: application/json"`}</span>{" "}
+              {"\\\n  "}
+              <span className="text-blue-600 dark:text-blue-400">-d</span>{" "}
+              <span className="text-amber-600 dark:text-amber-400">{`'{"name": "api prod", "type": "http",`}</span>
+              {"\n       "}
+              <span className="text-amber-600 dark:text-amber-400">{`"config": {"url": "https://api.example.com/health"},`}</span>
+              {"\n       "}
+              <span className="text-amber-600 dark:text-amber-400">{`"interval_seconds": 60}'`}</span>
+            </code>
+          </pre>
+        </motion.div>
+        <p className="mt-4 text-center text-sm text-muted-foreground">
+          Scoped API keys · Typed OpenAPI spec ·{" "}
+          <Link href="/docs/api" className="underline underline-offset-4 hover:text-foreground">
+            Full reference
+          </Link>
+        </p>
+      </section>
+
+      <section className="py-16 max-w-3xl mx-auto">
+        <h2 className="text-center text-2xl md:text-3xl font-bold tracking-tight mb-10">
+          Frequently asked
+        </h2>
+        <div className="space-y-3">
+          <FAQItem
+            q="Is there a free tier?"
+            a="Yes. 5 monitors, 1-minute checks, unlimited status pages, and Telegram + email + webhook notifications — all free, no credit card."
+          />
+          <FAQItem
+            q="How quickly do alerts fire?"
+            a="Checks run at your configured interval (down to 1 minute). A monitor is only marked down after the configured consecutive-failure threshold, so a single flaky check won't page you."
+          />
+          <FAQItem
+            q="Can I embed my status page?"
+            a="Every monitor you mark public appears on /status/your-slug. The page is SSR + ISR with a 30-second revalidate — share the URL anywhere, embed it in an iframe, or point your own subdomain at it."
+          />
+          <FAQItem
+            q="What happens if PingCast itself goes down?"
+            a="The checker is a separate service from the API and dashboard. Alerts keep firing even if the dashboard is unreachable. For full independence, self-host — the stack is a single docker-compose file."
+          />
+          <FAQItem
+            q="Is the data portable?"
+            a="Yes. Every field exposed in the dashboard is available over the REST API, and the database is standard Postgres. You can self-host the whole stack or export whenever you want."
+          />
+        </div>
+      </section>
+
+      <section className="py-16 max-w-4xl mx-auto">
         <div className="rounded-2xl border border-border/60 bg-card p-8 md:p-12 text-center">
           <div className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary mb-4">
             <Code2 className="h-5 w-5" />
@@ -128,6 +203,24 @@ export default function LandingPage() {
         </div>
       </section>
     </div>
+  );
+}
+
+function FAQItem({ q, a }: { q: string; a: string }) {
+  return (
+    <motion.details
+      initial={{ opacity: 0, y: 6 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-40px" }}
+      transition={{ duration: 0.35, ease: "easeOut" }}
+      className="group rounded-lg border border-border/60 bg-card px-5 py-4 [&[open]_svg]:rotate-90"
+    >
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-medium">
+        {q}
+        <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform" />
+      </summary>
+      <p className="mt-3 text-sm text-muted-foreground leading-relaxed">{a}</p>
+    </motion.details>
   );
 }
 
