@@ -276,20 +276,38 @@ func (s *AlertService) ListChannels(ctx context.Context, userID uuid.UUID) ([]do
 
 func (s *AlertService) BindChannel(ctx context.Context, userID, monitorID, channelID uuid.UUID) error {
 	mon, err := s.monitors.GetByID(ctx, monitorID)
-	if err != nil || mon.UserID != userID {
-		return fmt.Errorf("monitor not found")
+	if err != nil {
+		return err
+	}
+	if mon == nil {
+		return domain.ErrNotFound
+	}
+	if mon.UserID != userID {
+		return domain.ErrForbidden
 	}
 	ch, err := s.channels.GetByID(ctx, channelID)
-	if err != nil || ch.UserID != userID {
-		return fmt.Errorf("channel not found")
+	if err != nil {
+		return err
+	}
+	if ch == nil {
+		return domain.ErrNotFound
+	}
+	if ch.UserID != userID {
+		return domain.ErrForbidden
 	}
 	return s.channels.BindToMonitor(ctx, monitorID, channelID)
 }
 
 func (s *AlertService) UnbindChannel(ctx context.Context, userID, monitorID, channelID uuid.UUID) error {
 	mon, err := s.monitors.GetByID(ctx, monitorID)
-	if err != nil || mon.UserID != userID {
-		return fmt.Errorf("monitor not found")
+	if err != nil {
+		return err
+	}
+	if mon == nil {
+		return domain.ErrNotFound
+	}
+	if mon.UserID != userID {
+		return domain.ErrForbidden
 	}
 	return s.channels.UnbindFromMonitor(ctx, monitorID, channelID)
 }

@@ -3,25 +3,27 @@
 package api
 
 import (
-	"io"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/kirillinakin/pingcast/tests/integration/api/harness"
 )
 
-func TestHealth_Smoke(t *testing.T) {
+// Spec §4 (Health): /health, /healthz, /readyz — all public.
+
+func TestHealth_Returns200(t *testing.T) {
 	h := harness.New(t)
+	resp := h.App.NewSession().GET(t, "/health")
+	harness.AssertStatus(t, resp, 200)
+}
 
-	req := httptest.NewRequest("GET", "/health", nil)
-	resp, err := h.App.Fiber.Test(req, -1)
-	if err != nil {
-		t.Fatalf("fiber test: %v", err)
-	}
-	defer resp.Body.Close()
+func TestHealthz_Returns200(t *testing.T) {
+	h := harness.New(t)
+	resp := h.App.NewSession().GET(t, "/healthz")
+	harness.AssertStatus(t, resp, 200)
+}
 
-	if resp.StatusCode != 200 {
-		b, _ := io.ReadAll(resp.Body)
-		t.Fatalf("status=%d body=%s", resp.StatusCode, b)
-	}
+func TestReadyz_WithAllDeps_Returns200(t *testing.T) {
+	h := harness.New(t)
+	resp := h.App.NewSession().GET(t, "/readyz")
+	harness.AssertStatus(t, resp, 200)
 }
