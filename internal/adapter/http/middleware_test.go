@@ -28,7 +28,7 @@ func TestRequireUser_NilReturns401(t *testing.T) {
 		t.Fatalf("got status %d, want 401", resp.StatusCode)
 	}
 	body, _ := io.ReadAll(resp.Body)
-	if !strings.Contains(string(body), "unauthorized") {
-		t.Fatalf("body does not contain 'unauthorized': %s", body)
+	if !strings.Contains(string(body), "UNAUTHORIZED") {
+		t.Fatalf("body does not contain UNAUTHORIZED: %s", body)
 	}
 }

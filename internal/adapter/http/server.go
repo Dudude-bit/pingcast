@@ -51,16 +51,17 @@ var _ apigen.ServerInterface = (*Server)(nil)
 func (s *Server) Register(c *fiber.Ctx) error {
 	var req apigen.RegisterRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid request body")})
+		return httperr.WriteMalformedJSON(c)
 	}
 
-	// Rate limit by IP (Issue 4.7)
+	// Rate limit by IP (spec §5: register 10/hour/IP — current bucket is
+	// the shared auth bucket at 5/15min; refine in Phase 4 polish)
 	allowed, err := s.rateLimiter.Allow(c.UserContext(), c.IP())
 	if err != nil {
-		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("internal error")})
+		return httperr.Write(c, fmt.Errorf("rate limiter: %w", err))
 	}
 	if !allowed {
-		return c.Status(429).JSON(apigen.ErrorResponse{Error: new("too many requests")})
+		return httperr.WriteRateLimited(c, 60)
 	}
 
 	user, sessionID, err := s.auth.Register(c.UserContext(), string(req.Email), req.Slug, req.Password)
@@ -70,12 +71,12 @@ func (s *Server) Register(c *fiber.Ctx) error {
 		} else {
 			slog.Warn("registration failed", "error", err)
 		}
-		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("registration failed")})
+		return httperr.Write(c, err)
 	}
 
 	setSessionCookie(c, sessionID)
 
-	return c.JSON(apigen.AuthResponse{
+	return c.Status(201).JSON(apigen.AuthResponse{
 		User:      domainUserToAPI(user),
 		SessionId: &sessionID,
 	})
@@ -84,20 +85,20 @@ func (s *Server) Register(c *fiber.Ctx) error {
 func (s *Server) Login(c *fiber.Ctx) error {
 	var req apigen.LoginRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid request body")})
+		return httperr.WriteMalformedJSON(c)
 	}
 
 	allowed, err := s.rateLimiter.Allow(c.UserContext(), string(req.Email))
 	if err != nil {
-		return c.Status(503).JSON(apigen.ErrorResponse{Error: new("service temporarily unavailable")})
+		return httperr.Write(c, fmt.Errorf("rate limiter: %w", err))
 	}
 	if !allowed {
-		return c.Status(429).JSON(apigen.ErrorResponse{Error: new("too many login attempts")})
+		return httperr.WriteRateLimited(c, 60)
 	}
 
 	user, sessionID, err := s.auth.Login(c.UserContext(), string(req.Email), req.Password)
 	if err != nil {
-		return c.Status(401).JSON(apigen.ErrorResponse{Error: new("invalid email or password")})
+		return httperr.WriteUnauthorized(c)
 	}
 
 	_ = s.rateLimiter.Reset(c.UserContext(), string(req.Email))
@@ -111,13 +112,15 @@ func (s *Server) Login(c *fiber.Ctx) error {
 
 func (s *Server) Logout(c *fiber.Ctx) error {
 	sessionID := c.Cookies("session_id")
-	if sessionID != "" {
-		if err := s.auth.Logout(c.UserContext(), sessionID); err != nil {
-			slog.Warn("logout failed — session will expire via Redis TTL", "error", err)
-		}
+	if sessionID == "" {
+		return httperr.WriteUnauthorized(c)
+	}
+
+	if err := s.auth.Logout(c.UserContext(), sessionID); err != nil {
+		slog.Warn("logout failed — session will expire via Redis TTL", "error", err)
 	}
 	c.ClearCookie("session_id")
-	return c.SendStatus(200)
+	return c.SendStatus(204)
 }
 
 func (s *Server) ListMonitors(c *fiber.Ctx) error {
@@ -128,7 +131,7 @@ func (s *Server) ListMonitors(c *fiber.Ctx) error {
 
 	rows, err := s.monitoring.ListMonitorsWithUptime(c.UserContext(), user.ID)
 	if err != nil {
-		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("failed to list monitors")})
+		return httperr.Write(c, err)
 	}
 
 	result := make([]apigen.MonitorWithUptime, 0, len(rows))
@@ -136,7 +139,7 @@ func (s *Server) ListMonitors(c *fiber.Ctx) error {
 		uptimeF := float32(r.Uptime)
 		item, err := s.domainMonitorToAPIWithUptime(&r.Monitor, &uptimeF)
 		if err != nil {
-			return c.Status(500).JSON(apigen.ErrorResponse{Error: new("internal error")})
+			return httperr.Write(c, err)
 		}
 		result = append(result, item)
 	}
@@ -152,12 +155,12 @@ func (s *Server) CreateMonitor(c *fiber.Ctx) error {
 
 	var req apigen.CreateMonitorRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid request body")})
+		return httperr.WriteMalformedJSON(c)
 	}
 
 	checkConfigJSON, err := json.Marshal(req.CheckConfig)
 	if err != nil {
-		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid check_config")})
+		return httperr.WriteMalformedJSON(c)
 	}
 
 	input := app.CreateMonitorInput{
@@ -178,12 +181,12 @@ func (s *Server) CreateMonitor(c *fiber.Ctx) error {
 	mon, err := s.monitoring.CreateMonitor(c.UserContext(), user, input)
 	if err != nil {
 		slog.Warn("create monitor failed", "error", err)
-		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("failed to create monitor")})
+		return httperr.Write(c, err)
 	}
 
 	resp, err := s.domainMonitorToAPI(mon)
 	if err != nil {
-		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("internal error")})
+		return httperr.Write(c, err)
 	}
 	return c.Status(201).JSON(resp)
 }
@@ -201,8 +204,11 @@ func (s *Server) GetMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 	}
 
 	detail, err := s.monitoring.GetMonitorDetail(c.UserContext(), uuid.UUID(id))
-	if err != nil || detail.Monitor.UserID != user.ID {
-		return c.Status(404).JSON(apigen.ErrorResponse{Error: new("not found")})
+	if err != nil {
+		return httperr.Write(c, err)
+	}
+	if detail.Monitor.UserID != user.ID {
+		return httperr.WriteForbiddenTenant(c)
 	}
 
 	apiIncidents := make([]apigen.Incident, 0, len(detail.Incidents))
@@ -228,7 +234,7 @@ func (s *Server) GetMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 		apiChart, apiIncidents,
 	)
 	if err != nil {
-		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("internal error")})
+		return httperr.Write(c, err)
 	}
 	return c.JSON(resp)
 }
@@ -241,7 +247,7 @@ func (s *Server) UpdateMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 
 	var req apigen.UpdateMonitorRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid request body")})
+		return httperr.WriteMalformedJSON(c)
 	}
 
 	input := app.UpdateMonitorInput{
@@ -254,7 +260,7 @@ func (s *Server) UpdateMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 	if req.CheckConfig != nil {
 		configJSON, err := json.Marshal(*req.CheckConfig)
 		if err != nil {
-			return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid check_config")})
+			return httperr.WriteMalformedJSON(c)
 		}
 		input.CheckConfig = configJSON
 	}
@@ -262,12 +268,12 @@ func (s *Server) UpdateMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 	updated, err := s.monitoring.UpdateMonitor(c.UserContext(), user, uuid.UUID(id), input)
 	if err != nil {
 		slog.Warn("update monitor failed", "error", err)
-		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("failed to update monitor")})
+		return httperr.Write(c, err)
 	}
 
 	resp, err := s.domainMonitorToAPI(updated)
 	if err != nil {
-		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("internal error")})
+		return httperr.Write(c, err)
 	}
 	return c.JSON(resp)
 }
@@ -278,9 +284,8 @@ func (s *Server) DeleteMonitor(c *fiber.Ctx, id openapi_types.UUID) error {
 		return nil
 	}
 
-	err := s.monitoring.DeleteMonitor(c.UserContext(), user.ID, uuid.UUID(id))
-	if err != nil {
-		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("failed to delete monitor")})
+	if err := s.monitoring.DeleteMonitor(c.UserContext(), user.ID, uuid.UUID(id)); err != nil {
+		return httperr.Write(c, err)
 	}
 
 	return c.SendStatus(204)
@@ -294,12 +299,12 @@ func (s *Server) ToggleMonitorPause(c *fiber.Ctx, id openapi_types.UUID) error {
 
 	updated, err := s.monitoring.TogglePause(c.UserContext(), user, uuid.UUID(id))
 	if err != nil {
-		return c.Status(404).JSON(apigen.ErrorResponse{Error: new("not found")})
+		return httperr.Write(c, err)
 	}
 
 	resp, err := s.domainMonitorToAPI(updated)
 	if err != nil {
-		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("internal error")})
+		return httperr.Write(c, err)
 	}
 	return c.JSON(resp)
 }
@@ -307,7 +312,8 @@ func (s *Server) ToggleMonitorPause(c *fiber.Ctx, id openapi_types.UUID) error {
 func (s *Server) GetStatusPage(c *fiber.Ctx, slug string) error {
 	data, err := s.monitoring.GetStatusPage(c.UserContext(), slug)
 	if err != nil {
-		return c.Status(404).JSON(apigen.ErrorResponse{Error: new("not found")})
+		// Public endpoint — spec §4: unknown slug is a straight 404.
+		return httperr.WriteNotFound(c, "status page")
 	}
 
 	statusMonitors := make([]apigen.StatusMonitor, 0, len(data.Monitors))
@@ -496,7 +502,7 @@ func (s *Server) ListChannels(c *fiber.Ctx) error {
 	}
 	channels, err := s.alerts.ListChannels(c.UserContext(), user.ID)
 	if err != nil {
-		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("failed to list channels")})
+		return httperr.Write(c, err)
 	}
 	result := make([]apigen.NotificationChannel, 0, len(channels))
 	for _, ch := range channels {
@@ -512,11 +518,11 @@ func (s *Server) CreateChannel(c *fiber.Ctx) error {
 	}
 	var req apigen.CreateChannelRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid request body")})
+		return httperr.WriteMalformedJSON(c)
 	}
 	configJSON, err := json.Marshal(req.Config)
 	if err != nil {
-		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid config")})
+		return httperr.WriteMalformedJSON(c)
 	}
 	ch, err := s.alerts.CreateChannel(c.UserContext(), user.ID, app.CreateChannelInput{
 		Name:   req.Name,
@@ -525,8 +531,7 @@ func (s *Server) CreateChannel(c *fiber.Ctx) error {
 	})
 	if err != nil {
 		slog.Warn("channel handler error", "path", c.Path(), "error", err)
-		status, msg := httperr.ClassifyHTTPError(err)
-		return c.Status(status).JSON(apigen.ErrorResponse{Error: &msg})
+		return httperr.Write(c, err)
 	}
 	return c.Status(201).JSON(domainChannelToAPI(ch))
 }
@@ -538,7 +543,7 @@ func (s *Server) UpdateChannel(c *fiber.Ctx, id openapi_types.UUID) error {
 	}
 	var req apigen.UpdateChannelRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid request body")})
+		return httperr.WriteMalformedJSON(c)
 	}
 	name := ""
 	if req.Name != nil {
@@ -553,14 +558,13 @@ func (s *Server) UpdateChannel(c *fiber.Ctx, id openapi_types.UUID) error {
 		var err error
 		configJSON, err = json.Marshal(*req.Config)
 		if err != nil {
-			return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid config JSON")})
+			return httperr.WriteMalformedJSON(c)
 		}
 	}
 	ch, err := s.alerts.UpdateChannel(c.UserContext(), user.ID, uuid.UUID(id), name, configJSON, isEnabled)
 	if err != nil {
 		slog.Warn("channel handler error", "path", c.Path(), "error", err)
-		status, msg := httperr.ClassifyHTTPError(err)
-		return c.Status(status).JSON(apigen.ErrorResponse{Error: &msg})
+		return httperr.Write(c, err)
 	}
 	return c.JSON(domainChannelToAPI(ch))
 }
@@ -572,8 +576,7 @@ func (s *Server) DeleteChannel(c *fiber.Ctx, id openapi_types.UUID) error {
 	}
 	if err := s.alerts.DeleteChannel(c.UserContext(), user.ID, uuid.UUID(id)); err != nil {
 		slog.Warn("channel handler error", "path", c.Path(), "error", err)
-		status, msg := httperr.ClassifyHTTPError(err)
-		return c.Status(status).JSON(apigen.ErrorResponse{Error: &msg})
+		return httperr.Write(c, err)
 	}
 	return c.SendStatus(204)
 }
@@ -587,12 +590,11 @@ func (s *Server) BindChannel(c *fiber.Ctx, id openapi_types.UUID) error {
 		ChannelID uuid.UUID `json:"channel_id"`
 	}
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid request body")})
+		return httperr.WriteMalformedJSON(c)
 	}
 	if err := s.alerts.BindChannel(c.UserContext(), user.ID, uuid.UUID(id), req.ChannelID); err != nil {
 		slog.Warn("channel handler error", "path", c.Path(), "error", err)
-		status, msg := httperr.ClassifyHTTPError(err)
-		return c.Status(status).JSON(apigen.ErrorResponse{Error: &msg})
+		return httperr.Write(c, err)
 	}
 	return c.SendStatus(200)
 }
@@ -604,8 +606,7 @@ func (s *Server) UnbindChannel(c *fiber.Ctx, id openapi_types.UUID, channelId op
 	}
 	if err := s.alerts.UnbindChannel(c.UserContext(), user.ID, uuid.UUID(id), uuid.UUID(channelId)); err != nil {
 		slog.Warn("channel handler error", "path", c.Path(), "error", err)
-		status, msg := httperr.ClassifyHTTPError(err)
-		return c.Status(status).JSON(apigen.ErrorResponse{Error: &msg})
+		return httperr.Write(c, err)
 	}
 	return c.SendStatus(204)
 }
@@ -635,7 +636,7 @@ func (s *Server) ListAPIKeys(c *fiber.Ctx) error {
 	}
 	keys, err := s.apiKeys.ListByUser(c.UserContext(), user.ID)
 	if err != nil {
-		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("failed to list api keys")})
+		return httperr.Write(c, err)
 	}
 	result := make([]apigen.APIKey, len(keys))
 	for i, k := range keys {
@@ -651,15 +652,15 @@ func (s *Server) CreateAPIKey(c *fiber.Ctx) error {
 	}
 	var req apigen.CreateAPIKeyJSONRequestBody
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("invalid request body")})
+		return httperr.WriteMalformedJSON(c)
 	}
 	if req.Name == "" || len(req.Scopes) == 0 {
-		return c.Status(400).JSON(apigen.ErrorResponse{Error: new("name and scopes required")})
+		return httperr.WriteValidation(c, "name and scopes required")
 	}
 
 	randomBytes := make([]byte, 32)
 	if _, err := cryptoRand.Read(randomBytes); err != nil {
-		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("failed to generate key")})
+		return httperr.Write(c, fmt.Errorf("generate api key: %w", err))
 	}
 	rawKey := "pc_live_" + hexEncoding.EncodeToString(randomBytes)
 
@@ -687,7 +688,7 @@ func (s *Server) CreateAPIKey(c *fiber.Ctx) error {
 
 	created, err := s.apiKeys.Create(c.UserContext(), apiKey)
 	if err != nil {
-		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("failed to create api key")})
+		return httperr.Write(c, err)
 	}
 
 	apiKeyResp := domainAPIKeyToAPI(created)
@@ -703,7 +704,7 @@ func (s *Server) RevokeAPIKey(c *fiber.Ctx, id openapi_types.UUID) error {
 		return nil
 	}
 	if err := s.apiKeys.Delete(c.UserContext(), uuid.UUID(id), user.ID); err != nil {
-		return c.Status(500).JSON(apigen.ErrorResponse{Error: new("failed to revoke api key")})
+		return httperr.Write(c, err)
 	}
 	return c.SendStatus(204)
 }

@@ -175,22 +175,22 @@ func (s *AuthService) generateToken() (string, error) {
 
 func ValidateSlug(slug string) error {
 	if !slugRegex.MatchString(slug) {
-		return fmt.Errorf("slug must be 3-30 characters, lowercase alphanumeric and hyphens only")
+		return domain.NewValidationError("SLUG_INVALID", "slug must be 3-30 characters, lowercase alphanumeric and hyphens only")
 	}
 	if reservedSlugs[slug] {
-		return fmt.Errorf("slug %q is reserved", slug)
+		return domain.NewValidationError("SLUG_RESERVED", fmt.Sprintf("slug %q is reserved", slug))
 	}
 	return nil
 }
 
 func ValidatePassword(password string) error {
 	if len(password) < 8 {
-		return fmt.Errorf("password must be at least 8 characters")
+		return domain.NewValidationError("PASSWORD_TOO_SHORT", "password must be at least 8 characters")
 	}
 	// bcrypt silently truncates at 72 bytes. Reject longer passwords so
 	// users don't get surprised by two distinct passwords hashing the same.
 	if len(password) > 72 {
-		return fmt.Errorf("password must be at most 72 characters")
+		return domain.NewValidationError("PASSWORD_TOO_LONG", "password must be at most 72 characters")
 	}
 	return nil
 }

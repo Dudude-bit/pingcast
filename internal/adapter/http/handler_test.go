@@ -256,8 +256,8 @@ func TestAPIAuth_InvalidAPIKey(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	bodyStr := string(body)
 
-	if !strings.Contains(bodyStr, "invalid api key") {
-		t.Errorf("expected 'invalid api key' in response, got: %s", truncate(bodyStr, 300))
+	if !strings.Contains(bodyStr, "UNAUTHORIZED") {
+		t.Errorf("expected canonical UNAUTHORIZED envelope, got: %s", truncate(bodyStr, 300))
 	}
 }
 

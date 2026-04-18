@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/kirillinakin/pingcast/internal/adapter/httperr"
 	"github.com/kirillinakin/pingcast/internal/app"
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/port"
@@ -36,13 +37,13 @@ func AuthMiddleware(auth *app.AuthService, apiKeyRepo port.APIKeyRepo) fiber.Han
 		// Fall back to session cookie
 		sessionID := c.Cookies("session_id")
 		if sessionID == "" {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
+			return httperr.WriteUnauthorized(c)
 		}
 
 		user, err := auth.ValidateSession(c.UserContext(), sessionID)
 		if err != nil {
 			c.ClearCookie("session_id")
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid session"})
+			return httperr.WriteUnauthorized(c)
 		}
 
 		c.Locals(userCtxKey, user)
@@ -74,23 +75,23 @@ func authenticateWithAPIKey(c *fiber.Ctx, auth *app.AuthService, apiKeyRepo port
 
 	apiKey, err := apiKeyRepo.GetByHash(c.UserContext(), keyHash)
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid api key"})
+		return httperr.WriteUnauthorized(c)
 	}
 
 	if apiKey.IsExpired() {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "api key expired"})
+		return httperr.WriteUnauthorized(c)
 	}
 
 	// Check scope enforcement
 	scope := requiredScope(c.Method(), c.Path())
 	if !apiKey.HasScope(scope) {
 		slog.Warn("api key missing required scope", "key_id", apiKey.ID, "required", scope, "scopes", apiKey.Scopes)
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "insufficient scope", "required": scope})
+		return httperr.WriteForbiddenTenant(c)
 	}
 
 	user, err := auth.GetUserByID(c.UserContext(), apiKey.UserID)
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "user not found"})
+		return httperr.WriteUnauthorized(c)
 	}
 
 	// Touch last_used_at in background with detached context (Issue 4.5).
@@ -152,7 +153,7 @@ func UserFromCtx(c *fiber.Ctx) *domain.User {
 func requireUser(c *fiber.Ctx) *domain.User {
 	user := UserFromCtx(c)
 	if user == nil {
-		_ = c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
+		_ = httperr.WriteUnauthorized(c)
 		return nil
 	}
 	return user
