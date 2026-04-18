@@ -536,6 +536,18 @@ func (s *Server) CreateChannel(c *fiber.Ctx) error {
 	return c.Status(201).JSON(domainChannelToAPI(ch))
 }
 
+func (s *Server) GetChannel(c *fiber.Ctx, id openapi_types.UUID) error {
+	user := requireUser(c)
+	if user == nil {
+		return nil
+	}
+	ch, err := s.alerts.GetChannelByID(c.UserContext(), user.ID, uuid.UUID(id))
+	if err != nil {
+		return httperr.Write(c, err)
+	}
+	return c.JSON(domainChannelToAPI(ch))
+}
+
 func (s *Server) UpdateChannel(c *fiber.Ctx, id openapi_types.UUID) error {
 	user := requireUser(c)
 	if user == nil {

@@ -3,9 +3,11 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/port"
@@ -80,6 +82,9 @@ func (r *ChannelRepo) Create(ctx context.Context, ch *domain.NotificationChannel
 func (r *ChannelRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.NotificationChannel, error) {
 	row, err := r.queries(ctx).GetChannelByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrNotFound
+		}
 		return nil, fmt.Errorf("get channel: %w", err)
 	}
 	result := toDomainChannel(row)

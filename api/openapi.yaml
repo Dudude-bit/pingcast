@@ -256,6 +256,31 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   /api/channels/{id}:
+    get:
+      operationId: getChannel
+      tags: [channels]
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Channel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationChannel"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     put:
       operationId: updateChannel
       tags: [channels]

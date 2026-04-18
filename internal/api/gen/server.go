@@ -432,6 +432,9 @@ type ServerInterface interface {
 	// (DELETE /api/channels/{id})
 	DeleteChannel(c *fiber.Ctx, id openapi_types.UUID) error
 
+	// (GET /api/channels/{id})
+	GetChannel(c *fiber.Ctx, id openapi_types.UUID) error
+
 	// (PUT /api/channels/{id})
 	UpdateChannel(c *fiber.Ctx, id openapi_types.UUID) error
 
@@ -574,6 +577,24 @@ func (siw *ServerInterfaceWrapper) DeleteChannel(c *fiber.Ctx) error {
 	c.Context().SetUserValue(SessionAuthScopes, []string{})
 
 	return siw.Handler.DeleteChannel(c, id)
+}
+
+// GetChannel operation middleware
+func (siw *ServerInterfaceWrapper) GetChannel(c *fiber.Ctx) error {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Params("id"), &id, runtime.BindStyledParameterOptions{Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter id: %w", err).Error())
+	}
+
+	c.Context().SetUserValue(SessionAuthScopes, []string{})
+
+	return siw.Handler.GetChannel(c, id)
 }
 
 // UpdateChannel operation middleware
@@ -794,6 +815,8 @@ func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, option
 	router.Post(options.BaseURL+"/api/channels", wrapper.CreateChannel)
 
 	router.Delete(options.BaseURL+"/api/channels/:id", wrapper.DeleteChannel)
+
+	router.Get(options.BaseURL+"/api/channels/:id", wrapper.GetChannel)
 
 	router.Put(options.BaseURL+"/api/channels/:id", wrapper.UpdateChannel)
 

@@ -229,6 +229,23 @@ func (s *AlertService) DeleteChannel(ctx context.Context, userID, channelID uuid
 	return s.channels.Delete(ctx, channelID, userID)
 }
 
+// GetChannelByID returns a single channel owned by userID. Maps a
+// foreign-tenant match to ErrForbidden so the API boundary emits 403
+// FORBIDDEN_TENANT instead of leaking existence via 404.
+func (s *AlertService) GetChannelByID(ctx context.Context, userID, channelID uuid.UUID) (*domain.NotificationChannel, error) {
+	ch, err := s.channels.GetByID(ctx, channelID)
+	if err != nil {
+		return nil, err
+	}
+	if ch == nil {
+		return nil, domain.ErrNotFound
+	}
+	if ch.UserID != userID {
+		return nil, domain.ErrForbidden
+	}
+	return ch, nil
+}
+
 func (s *AlertService) ListChannels(ctx context.Context, userID uuid.UUID) ([]domain.NotificationChannel, error) {
 	return s.channels.ListByUserID(ctx, userID)
 }
