@@ -49,9 +49,24 @@ func NewServer(
 var _ apigen.ServerInterface = (*Server)(nil)
 
 func (s *Server) Register(c *fiber.Ctx) error {
-	var req apigen.RegisterRequest
-	if err := c.BodyParser(&req); err != nil {
+	// Parse into a permissive local struct with plain strings. The
+	// generated apigen.RegisterRequest uses openapi_types.Email with a
+	// strict UnmarshalJSON — a semantically-invalid email would fail
+	// parsing and surface as 400 MALFORMED_JSON, which conflates malformed
+	// JSON (spec §1, 400) with business validation (spec §1, 422).
+	// Route email-format validation through ValidateEmail instead.
+	var raw struct {
+		Email    string `json:"email"`
+		Slug     string `json:"slug"`
+		Password string `json:"password"`
+	}
+	if err := c.BodyParser(&raw); err != nil {
 		return httperr.WriteMalformedJSON(c)
+	}
+	req := apigen.RegisterRequest{
+		Email:    openapi_types.Email(raw.Email),
+		Slug:     raw.Slug,
+		Password: raw.Password,
 	}
 
 	// Rate limit by IP (spec §5: register 10/hour/IP — current bucket is
