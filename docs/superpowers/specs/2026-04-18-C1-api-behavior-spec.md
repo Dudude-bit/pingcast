@@ -1,6 +1,6 @@
 # C1 — API behavior specification
 
-Status: draft (pending user product decisions on §8)
+Status: draft (product decisions in §8 resolved 2026-04-18)
 Date: 2026-04-18
 Companion to: `2026-04-18-C1-api-contract-tests-design.md`
 
@@ -76,7 +76,7 @@ any business logic.
 | `GET /api/monitor-types`, `/api/channel-types` |  | ✓ | ✓ |
 | `/api/api-keys/*` (list, create, delete) |  | ✓ |  |
 | All other `/api/*` |  | ✓ | ✓ |
-| `POST /logout` (page) — *pending §8.6* |  | ✓ |  |
+| ~~`POST /logout` (page)~~ | removed §8.6 | | |
 
 When both a session cookie and an API key are sent, the API key wins
 and the session is ignored (prevents accidental privilege confusion).
@@ -214,9 +214,7 @@ API key.
     `PlanFree.CanUseEmail() == false`; spec formalizes this) →
     `VALIDATION_FAILED` code `PLAN_UPGRADE_REQUIRED`.
 
-**`GET /api/channels/{id}`** — Session or key.
-- (Spec default per §8.5 — **add the endpoint**. Tests assume this
-  unless user overrides.)
+**`GET /api/channels/{id}`** — Session or key. *(New endpoint, §8.5.)*
 - 200 `{channel}` with secrets redacted (same rules as list).
 - 400 if `id` not a UUID.
 - 401 unauthenticated.
@@ -238,11 +236,15 @@ API key.
 
 **`POST /api/monitors/{id}/channels`** — Session or key. Body
 `{channel_id}`.
-- 201 (or 204 — **§8.2**).
+- 201 `{monitor_id, channel_id, bound_at}` on first bind (§8.2 —
+  return the binding object so frontends can update UI without a
+  refetch).
+- 200 `{monitor_id, channel_id, bound_at}` if already bound (§8.3 —
+  idempotent; re-binding is a safe no-op). Server returns the
+  original `bound_at`.
 - 400 malformed UUIDs.
 - 403 if the monitor OR the channel belongs to another user.
 - 404 if either does not exist.
-- 409 if already bound (idempotent or conflict — **§8.3**).
 
 **`DELETE /api/monitors/{id}/channels/{channelId}`** — Session or key.
 - 204.
@@ -313,10 +315,8 @@ API key.
 
 ### Page logout
 
-**`POST /logout`** — Session, form-POST.
-- (Spec default per §8.6 — **remove the route**. Tests assert that
-  `POST /logout` returns 404. If user overrides, update tests to
-  assert a 303 redirect + expired cookie + CSRF-token requirement.)
+**`POST /logout`** — Route removed (§8.6). Tests assert 404 to
+enforce that the dead SSR handler is gone and no one reintroduces it.
 
 ## §5 Rate limits
 
@@ -328,15 +328,22 @@ sliding windows. 429 responses include `Retry-After` in seconds.
 | Register | IP | 10 / hour |
 | Login | email (lowercased) | 5 / 15 min; resets on success |
 | Public status page | IP + slug | 60 / min |
-| Write API (create/update/delete) | user | 120 / min |
+| Write API (create/update/delete) | user | 300 / min |
 | Read API | user | 600 / min |
 | Webhook `/lemonsqueezy` | — | none (LS controls volume) |
 | Webhook `/telegram/:token` | channel | 60 / min |
 
-Retention / quotas:
-- `check_results`: retained **30 days**. Older rows pruned by a daily
-  job. C1 does not test the job directly but tests that the API
-  respects the window (e.g. chart data never older than 30 days).
+Retention / quotas (§8.4):
+- Free plan: `check_results` and `incidents` retained **30 days**.
+- Pro plan: retained **90 days**.
+- Older rows pruned by a daily job. C1 does not test the job directly
+  but tests that API reads respect the window (chart data never older
+  than the plan's window; `GET /api/monitors/{id}` never returns
+  incidents older than the window).
+- `DELETE /api/monitors/{id}` cascades `monitor_channels` but
+  **preserves** `check_results` and `incidents` until retention prunes
+  them — users can review post-mortem data even after deleting a
+  monitor.
 
 ## §6 Validation rules
 
@@ -388,53 +395,53 @@ Token is generated at channel creation, 32 bytes base64url. Path is
 `/webhook/telegram/{token}`. Tokens are unique across all channels.
 On constant-time mismatch: 401.
 
-## §8 Open product questions
+## §8 Product decisions (resolved)
 
-These are the decisions the spec needs before tests are authored.
-Defaults listed are what the tests will assume if unanswered.
+All decisions finalized 2026-04-18. Rationale emphasizes end-user UX
+and the product-marketing story (developer-friendly API, clean upsell
+paths, industry-standard security).
 
-**§8.1 Pause/resume semantics.** Toggle (current) or explicit
-`/pause` + `/resume`?
-*Default:* Toggle — matches current code. Endpoint is idempotent by
-target state (paused twice stays paused, returns 200).
+**§8.1 Pause semantics — Toggle.** `POST /api/monitors/{id}/pause`
+flips paused state and returns the updated monitor. UI stays
+single-button. No OpenAPI churn. Consumers needing idempotency-by-state
+can re-read the monitor before deciding to flip.
 
-**§8.2 Bind-channel response code.** 201 with binding object, or 204?
-*Default:* 204 — binding has no entity identity worth returning.
+**§8.2 Bind-channel response — 201 with binding object.** Returns
+`{monitor_id, channel_id, bound_at}`. Frontend can optimistically
+update UI without a refetch (snappier perceived performance).
 
-**§8.3 Bind-already-bound.** 409 conflict, or 204 idempotent?
-*Default:* 204 idempotent — client doesn't care, re-binding is a
-no-op.
+**§8.3 Re-bind idempotency — 200, no error.** User clicking "attach"
+a second time sees no error, gets the same binding. Reduces
+client-side state-management complexity.
 
-**§8.4 DELETE monitor cascade.** Hard-delete monitor, keep
-`check_results` and `incidents` for 30 days retention, then prune?
-*Default:* Yes (as specified in §4 and §5). Alternative — full
-cascade delete — would lose historical data for post-mortems.
+**§8.4 Retention on monitor deletion — preserve history.** Plan-aware
+retention window (Free: 30d, Pro: 90d) pruned by daily job.
+`DELETE /api/monitors/{id}` cascades the binding table only, leaving
+`check_results` and `incidents` intact until the retention job runs.
+Upsell: 90d retention becomes a Pro differentiator in marketing copy.
 
-**§8.5 `GET /api/channels/{id}`.** Add the endpoint, or document
-asymmetry and test the 404?
-*Default:* Add it. Symmetry with `/api/monitors/{id}` is expected by
-any API consumer, and the frontend will eventually want it for
-channel-detail views. Code change is small.
+**§8.5 `GET /api/channels/{id}` — Add.** Symmetry with monitors,
+completes the Scalar API-docs surface, prepares frontend channel-detail
+view.
 
-**§8.6 Top-level `POST /logout` page endpoint.** Keep (for future
-SSR needs) or remove (dead after Next.js migration)?
-*Default:* Remove. Frontend logs out via `POST /api/auth/logout`
-exclusively; dead code is a maintenance tax.
+**§8.6 Top-level `POST /logout` page — Remove.** Frontend uses
+`POST /api/auth/logout` exclusively. Dead code since the Next.js
+migration. Eliminates a CSRF surface that no one exercises.
 
-**§8.7 Free-tier email channels.** Currently blocked at domain level
-(`PlanFree.CanUseEmail == false`). Keep this restriction at the API
-boundary?
-*Default:* Keep. Blocks at API with 422 `PLAN_UPGRADE_REQUIRED` —
-more informative than silent domain-layer filtering.
+**§8.7 Free-tier email channels — 422 `PLAN_UPGRADE_REQUIRED`.**
+API returns a structured error with a human-readable upsell message
+(e.g. `"Email notifications are available on Pro. Upgrade at /pricing."`).
+Frontend can parse the code and render an upgrade modal. Honest,
+discoverable upsell.
 
-**§8.8 Rate-limit numbers in §5.** Are the proposed numbers correct,
-or should any be tighter/looser?
-*Default:* as written. Tune after observing real traffic.
+**§8.8 Rate-limit tuning.** Write API raised from 120 → **300 / min**
+to avoid throttling users during initial setup (create monitor → add
+channel → bind → repeat). Other limits as in §5.
 
-**§8.9 Channel config redaction.** Redact all secrets, or return as
-stored?
-*Default:* Redact as described in §4 (`***` with optional last-4).
-Current code likely returns raw values — this will be a code change.
+**§8.9 Channel config redaction — `***` with last-4 preserved.**
+E.g. a Telegram bot token `12345:ABC...XYZ9` surfaces as
+`***XYZ9`. Secrets never leave the server in full. Compliance story
+for enterprise customers; industry standard (Stripe, AWS, etc.).
 
 ---
 
