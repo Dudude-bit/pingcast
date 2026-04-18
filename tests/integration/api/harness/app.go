@@ -4,7 +4,6 @@ package harness
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -76,11 +75,11 @@ func NewApp(t *testing.T) *App {
 		t.Fatalf("jetstream: %v", err)
 	}
 
-	if err := natsadapter.SetupStreams(ctx, js); err != nil {
+	if streamsErr := natsadapter.SetupStreams(ctx, js); streamsErr != nil {
 		pool.Close()
 		_ = rdb.Close()
 		_ = nc.Drain()
-		t.Fatalf("nats streams: %v", err)
+		t.Fatalf("nats streams: %v", streamsErr)
 	}
 
 	cipher, err := crypto.NewEncryptor(1, map[byte]string{1: testEncryptionKey()})
@@ -141,5 +140,3 @@ func (a *App) Close() {
 func testEncryptionKey() string {
 	return "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 }
-
-var _ = fmt.Sprintf
