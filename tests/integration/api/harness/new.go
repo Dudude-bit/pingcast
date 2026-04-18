@@ -18,6 +18,6 @@ func New(t *testing.T) *Harness {
 	h.App = NewApp(t)
 	t.Cleanup(h.App.Close)
 
-	// State reset (TRUNCATE + FLUSHDB) lands in Task 5.
+	h.App.Reset(t)
 	return h
 }
