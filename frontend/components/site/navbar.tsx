@@ -15,6 +15,12 @@ export async function Navbar() {
 
         <div className="flex items-center gap-2 sm:gap-4">
           <Link
+            href="/pricing"
+            className="hidden sm:inline text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Pricing
+          </Link>
+          <Link
             href="/docs/api"
             className="hidden sm:inline text-sm text-muted-foreground hover:text-foreground transition-colors"
           >

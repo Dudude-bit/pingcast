@@ -17,6 +17,8 @@ test.describe("SEO surface", () => {
     expect(body).toContain("<loc>");
     expect(body).toContain("/register");
     expect(body).toContain("/login");
+    expect(body).toContain("/pricing");
+    expect(body).toContain("/docs/api");
   });
 
   test("landing embeds SoftwareApplication JSON-LD", async ({ page }) => {

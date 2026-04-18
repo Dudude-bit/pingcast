@@ -15,7 +15,24 @@ import {
   Rocket,
   GitBranch,
   Server,
+  Check,
+  X,
+  Heart,
 } from "lucide-react";
+
+// Lucide dropped brand marks in 1.x, so ship the GitHub octocat inline.
+function GithubIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M12 .5A12 12 0 0 0 .5 12.6c0 5.3 3.4 9.8 8.2 11.4.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.5-1.4-1.3-1.8-1.3-1.8-1.1-.8.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-6a4.7 4.7 0 0 1 1.3-3.3c-.1-.3-.6-1.6.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.6.2 2.9.1 3.2a4.7 4.7 0 0 1 1.3 3.3c0 4.7-2.8 5.7-5.5 6 .4.4.8 1.1.8 2.2v3.2c0 .3.2.7.8.6A12 12 0 0 0 23.5 12.6 12 12 0 0 0 12 .5z" />
+    </svg>
+  );
+}
 import { buttonVariants } from "@/components/ui/button";
 import { LandingDemo } from "@/components/site/landing-demo";
 
@@ -185,6 +202,77 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Comparison — puts PingCast next to the incumbents on the free
+          tier that most side-projects actually qualify for. Numbers from
+          each vendor's public pricing page as of 2026-04. Revisit when
+          their tiers shuffle. */}
+      <section className="py-20 max-w-5xl mx-auto">
+        <h2 className="text-center text-2xl md:text-3xl font-bold tracking-tight">
+          Free tier, honestly compared
+        </h2>
+        <p className="mt-3 text-center text-muted-foreground max-w-2xl mx-auto">
+          Most "free" uptime tools gate the things you actually need. Here is
+          what you get on each vendor&apos;s free plan — no asterisks.
+        </p>
+        <div className="mt-10 overflow-x-auto rounded-xl border border-border/60 bg-card">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="text-left font-medium px-4 py-3 w-1/3">
+                  Feature
+                </th>
+                <th className="text-left font-medium px-4 py-3">PingCast</th>
+                <th className="text-left font-medium px-4 py-3">
+                  UptimeRobot
+                </th>
+                <th className="text-left font-medium px-4 py-3">Pingdom</th>
+                <th className="text-left font-medium px-4 py-3">
+                  StatusCake
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/50">
+              <CompareRow
+                label="Check interval"
+                values={["1 min", "5 min", "paid only", "5 min"]}
+              />
+              <CompareRow
+                label="Monitors included"
+                values={["5", "50", "1 trial", "10"]}
+              />
+              <CompareRow
+                label="Public status page"
+                values={[true, true, false, true]}
+              />
+              <CompareRow
+                label="Telegram alerts"
+                values={[true, "paid", false, false]}
+              />
+              <CompareRow
+                label="Webhook alerts"
+                values={[true, "paid", "paid", true]}
+              />
+              <CompareRow
+                label="REST API"
+                values={[true, "read-only", "paid", true]}
+              />
+              <CompareRow
+                label="Self-hostable"
+                values={[true, false, false, false]}
+              />
+              <CompareRow
+                label="Open source"
+                values={["MIT", false, false, false]}
+              />
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-4 text-xs text-center text-muted-foreground">
+          Sources: competitor pricing pages as of 2026-04. Your mileage may
+          vary when they update theirs.
+        </p>
+      </section>
+
       <section className="py-16 max-w-4xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
@@ -257,6 +345,53 @@ export default function LandingPage() {
             q="Is the data portable?"
             a="Yes. Every field exposed in the dashboard is available over the REST API, and the database is standard Postgres. You can self-host the whole stack or export whenever you want."
           />
+        </div>
+      </section>
+
+      {/* Built in public — honest replacement for manufactured
+          testimonials. PingCast is early enough that fake logos would
+          be a tell; authenticity is the conversion lever here. */}
+      <section className="py-16 max-w-4xl mx-auto">
+        <div className="rounded-2xl border border-border/60 bg-gradient-to-br from-card via-card to-muted/30 p-8 md:p-10">
+          <div className="flex items-start gap-4">
+            <div className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary shrink-0">
+              <Heart className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-xl md:text-2xl font-bold tracking-tight">
+                Built in public. No logo wall, no "trusted by" fiction.
+              </h2>
+              <p className="mt-3 text-sm md:text-base text-muted-foreground leading-relaxed">
+                Every feature on this page is backed by open-source code
+                under MIT. Read the handlers, the failure modes, the test
+                suite — judge the product from the source, not the
+                marketing.
+              </p>
+              <div className="mt-6 flex flex-wrap items-center gap-3">
+                <Link
+                  href="https://github.com/kirillinakin/pingcast"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`${buttonVariants({ variant: "outline" })}`}
+                >
+                  <GithubIcon className="mr-2 h-4 w-4" />
+                  View on GitHub
+                </Link>
+                <Link
+                  href="/docs/api"
+                  className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-4"
+                >
+                  Browse the API
+                </Link>
+                <Link
+                  href="/pricing"
+                  className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-4"
+                >
+                  See the plans
+                </Link>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -381,6 +516,36 @@ function StepCard({
         {body}
       </p>
     </motion.div>
+  );
+}
+
+function CompareRow({
+  label,
+  values,
+}: {
+  label: string;
+  values: Array<string | boolean>;
+}) {
+  return (
+    <tr>
+      <td className="px-4 py-3 font-medium">{label}</td>
+      {values.map((v, i) => (
+        <td
+          key={i}
+          className={`px-4 py-3 ${
+            i === 0 ? "text-foreground" : "text-muted-foreground"
+          }`}
+        >
+          {v === true ? (
+            <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+          ) : v === false ? (
+            <X className="h-4 w-4 text-muted-foreground/60" />
+          ) : (
+            <span className={i === 0 ? "font-medium" : ""}>{v}</span>
+          )}
+        </td>
+      ))}
+    </tr>
   );
 }
 
