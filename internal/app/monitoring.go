@@ -31,6 +31,7 @@ type MonitoringService struct {
 	events       port.MonitorEventPublisher
 	registry     port.CheckerRegistry
 	metrics      port.Metrics
+	clock        port.Clock
 }
 
 func NewMonitoringService(
@@ -45,6 +46,7 @@ func NewMonitoringService(
 	events port.MonitorEventPublisher,
 	registry port.CheckerRegistry,
 	metrics port.Metrics,
+	clock port.Clock,
 ) *MonitoringService {
 	return &MonitoringService{
 		monitors:     monitors,
@@ -58,6 +60,7 @@ func NewMonitoringService(
 		events:       events,
 		registry:     registry,
 		metrics:      metrics,
+		clock:        clock,
 	}
 }
 
@@ -363,7 +366,7 @@ func (s *MonitoringService) handleRecovery(ctx context.Context, monitor *domain.
 		return nil
 	}
 
-	if err := s.incidents.Resolve(ctx, incident.ID, time.Now()); err != nil {
+	if err := s.incidents.Resolve(ctx, incident.ID, s.clock.Now()); err != nil {
 		return fmt.Errorf("resolve incident: %w", err)
 	}
 
@@ -411,7 +414,7 @@ func (s *MonitoringService) ListMonitorsWithUptime(ctx context.Context, userID u
 		ids[i] = m.ID
 	}
 
-	uptimeMap, err := s.uptime.GetUptimeBatch(ctx, ids, time.Now().Add(-24*time.Hour))
+	uptimeMap, err := s.uptime.GetUptimeBatch(ctx, ids, s.clock.Now().Add(-24*time.Hour))
 	if err != nil {
 		slog.Error("failed to get uptime batch", "error", err)
 		uptimeMap = make(map[uuid.UUID]float64)
@@ -439,7 +442,7 @@ func (s *MonitoringService) GetMonitorDetail(ctx context.Context, monitorID uuid
 		return nil, err
 	}
 
-	now := time.Now()
+	now := s.clock.Now()
 	u24, err := s.uptime.GetUptime(ctx, monitorID, now.Add(-24*time.Hour))
 	if err != nil {
 		slog.Error("failed to get 24h uptime", "monitor_id", monitorID, "error", err)
@@ -503,7 +506,7 @@ func (s *MonitoringService) GetStatusPage(ctx context.Context, slug string) (*St
 	var incidents []domain.Incident
 
 	for _, m := range monitors {
-		uptime, err := s.uptime.GetUptime(ctx, m.ID, time.Now().Add(-90*24*time.Hour))
+		uptime, err := s.uptime.GetUptime(ctx, m.ID, s.clock.Now().Add(-90*24*time.Hour))
 		if err != nil {
 			slog.Error("failed to get 90d uptime", "monitor_id", m.ID, "error", err)
 		}

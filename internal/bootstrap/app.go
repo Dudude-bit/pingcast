@@ -124,6 +124,7 @@ func NewApp(deps AppDeps) (*App, error) {
 	monitoringSvc := app.NewMonitoringService(
 		monitorRepo, channelRepo, checkResultRepo, incidentRepo,
 		userRepo, uptimeRepo, txm, alertPub, monitorPub, checkerReg, metrics,
+		clock,
 	)
 	alertSvc := app.NewAlertService(channelRepo, monitorRepo, channelReg, failedAlertRepo, metrics)
 

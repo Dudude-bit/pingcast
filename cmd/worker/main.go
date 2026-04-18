@@ -16,6 +16,7 @@ import (
 	"github.com/kirillinakin/pingcast/internal/bootstrap"
 	"github.com/kirillinakin/pingcast/internal/adapter/postgres"
 	redisadapter "github.com/kirillinakin/pingcast/internal/adapter/redis"
+	"github.com/kirillinakin/pingcast/internal/adapter/sysclock"
 	"github.com/kirillinakin/pingcast/internal/app"
 	"github.com/kirillinakin/pingcast/internal/config"
 	"github.com/kirillinakin/pingcast/internal/database"
@@ -110,7 +111,7 @@ func main() {
 	metrics := observability.NewMetrics()
 
 	// App service
-	monitoringSvc := app.NewMonitoringService(monitorRepo, channelRepo, checkResultRepo, incidentRepo, userRepo, uptimeRepo, txm, alertPub, nil, registry, metrics)
+	monitoringSvc := app.NewMonitoringService(monitorRepo, channelRepo, checkResultRepo, incidentRepo, userRepo, uptimeRepo, txm, alertPub, nil, registry, metrics, sysclock.New())
 
 	// Pull-based NATS consumer — stateless, scales horizontally
 	checkSub := natsadapter.NewCheckSubscriber(js)

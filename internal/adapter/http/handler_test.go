@@ -56,6 +56,7 @@ func setupTestApp(t *testing.T) *testEnv {
 	monitoringService := app.NewMonitoringService(
 		monitorRepo, channelRepo, checkResultRepo, incidentRepo,
 		userRepo, uptimeRepo, txManager, alertPub, eventPub, checkerRegistry, metrics,
+		sysclock.New(),
 	)
 	alertService := app.NewAlertService(channelRepo, monitorRepo, channelRegistry, failedAlertRepo, metrics)
 
