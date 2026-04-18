@@ -193,8 +193,11 @@ type CreateChannelInput struct {
 }
 
 func (s *AlertService) CreateChannel(ctx context.Context, userID uuid.UUID, input CreateChannelInput) (*domain.NotificationChannel, error) {
+	if err := domain.ValidateChannelInput(input.Name, input.Type); err != nil {
+		return nil, err
+	}
 	if err := s.registry.ValidateConfig(input.Type, input.Config); err != nil {
-		return nil, fmt.Errorf("invalid channel config: %w", err)
+		return nil, domain.NewValidationError("INVALID_CHANNEL_CONFIG", err.Error())
 	}
 	ch := &domain.NotificationChannel{
 		UserID:    userID,
@@ -207,13 +210,13 @@ func (s *AlertService) CreateChannel(ctx context.Context, userID uuid.UUID, inpu
 }
 
 func (s *AlertService) UpdateChannel(ctx context.Context, userID, channelID uuid.UUID, name string, config json.RawMessage, isEnabled bool) (*domain.NotificationChannel, error) {
-	ch, err := s.channels.GetByID(ctx, channelID)
-	if err != nil || ch.UserID != userID {
-		return nil, fmt.Errorf("channel not found")
+	ch, err := s.loadOwnedChannel(ctx, userID, channelID)
+	if err != nil {
+		return nil, err
 	}
 	if config != nil {
 		if err := s.registry.ValidateConfig(ch.Type, config); err != nil {
-			return nil, fmt.Errorf("invalid channel config: %w", err)
+			return nil, domain.NewValidationError("INVALID_CHANNEL_CONFIG", err.Error())
 		}
 		ch.Config = config
 	}
@@ -226,7 +229,28 @@ func (s *AlertService) UpdateChannel(ctx context.Context, userID, channelID uuid
 }
 
 func (s *AlertService) DeleteChannel(ctx context.Context, userID, channelID uuid.UUID) error {
+	if _, err := s.loadOwnedChannel(ctx, userID, channelID); err != nil {
+		return err
+	}
 	return s.channels.Delete(ctx, channelID, userID)
+}
+
+// loadOwnedChannel fetches a channel by ID and verifies caller ownership.
+// Maps missing rows to domain.ErrNotFound and cross-tenant access to
+// domain.ErrForbidden, which the API boundary translates to 404 / 403
+// canonical envelopes.
+func (s *AlertService) loadOwnedChannel(ctx context.Context, userID, channelID uuid.UUID) (*domain.NotificationChannel, error) {
+	ch, err := s.channels.GetByID(ctx, channelID)
+	if err != nil {
+		return nil, err
+	}
+	if ch == nil {
+		return nil, domain.ErrNotFound
+	}
+	if ch.UserID != userID {
+		return nil, domain.ErrForbidden
+	}
+	return ch, nil
 }
 
 // GetChannelByID returns a single channel owned by userID. Maps a
