@@ -38,4 +38,25 @@ test.describe("SEO surface", () => {
       .getAttribute("content");
     expect(desc).toMatch(/monitoring/i);
   });
+
+  test("landing exposes OG + Twitter image tags", async ({ page }) => {
+    await page.goto("/");
+    const ogImage = await page
+      .locator('meta[property="og:image"]')
+      .getAttribute("content");
+    const twImage = await page
+      .locator('meta[name="twitter:image"]')
+      .getAttribute("content");
+    expect(ogImage).toMatch(/opengraph-image/);
+    expect(twImage).toMatch(/twitter-image/);
+  });
+
+  test("opengraph-image endpoint renders a PNG", async ({ request }) => {
+    const res = await request.get("/opengraph-image");
+    expect(res.status()).toBe(200);
+    expect(res.headers()["content-type"]).toBe("image/png");
+    // PNG signature: 89 50 4E 47 0D 0A 1A 0A
+    const buf = await res.body();
+    expect(buf.subarray(0, 4).toString("hex")).toBe("89504e47");
+  });
 });
