@@ -45,11 +45,13 @@ const nextConfig: NextConfig = {
       process.env.INTERNAL_API_URL ??
       process.env.NEXT_PUBLIC_API_URL ??
       "http://localhost:8080/api";
+    // The web container is the only public HTTP entry point in prod.
+    // Forward /api/* to the Go API's apigen routes and /webhook/* to
+    // the HMAC-signed webhook handlers (LemonSqueezy, Telegram).
+    const webhookDest = dest.replace(/\/api\/?$/, "");
     return [
-      {
-        source: "/api/:path*",
-        destination: `${dest}/:path*`,
-      },
+      { source: "/api/:path*", destination: `${dest}/:path*` },
+      { source: "/webhook/:path*", destination: `${webhookDest}/webhook/:path*` },
     ];
   },
 };
