@@ -2,7 +2,20 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Zap, Bell, LineChart, ArrowRight, Code2, Terminal } from "lucide-react";
+import {
+  Zap,
+  Bell,
+  LineChart,
+  ArrowRight,
+  Code2,
+  Terminal,
+  Radio,
+  Plug,
+  Globe,
+  Rocket,
+  GitBranch,
+  Server,
+} from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { LandingDemo } from "@/components/site/landing-demo";
 
@@ -88,6 +101,47 @@ export default function LandingPage() {
         <LandingDemo />
       </section>
 
+      {/* Trust bar — anchors the claims above with concrete numbers. */}
+      <section className="border-y border-border/60 bg-muted/30">
+        <div className="container mx-auto max-w-5xl py-8 px-4 grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+          <Stat label="Check frequency" value="30s" hint="minimum interval" />
+          <Stat label="Alert latency" value="< 10s" hint="p95 Telegram delivery" />
+          <Stat label="Open source" value="MIT" hint="self-host in one command" />
+          <Stat label="Stack" value="Go + Postgres" hint="no exotic dependencies" />
+        </div>
+      </section>
+
+      {/* How it works — three-step arc from register → monitor → alert. */}
+      <section className="py-20 max-w-5xl mx-auto">
+        <h2 className="text-center text-2xl md:text-3xl font-bold tracking-tight">
+          From zero to page in 60 seconds
+        </h2>
+        <p className="mt-3 text-center text-muted-foreground max-w-xl mx-auto">
+          No install scripts, no agents, no YAML. Three clicks and you're
+          watching production.
+        </p>
+        <div className="mt-12 grid gap-6 md:grid-cols-3">
+          <StepCard
+            n="01"
+            icon={<Rocket className="h-5 w-5" />}
+            title="Register"
+            body="Pick an email, a password, and the slug for your public status page. Done in 20 seconds."
+          />
+          <StepCard
+            n="02"
+            icon={<Radio className="h-5 w-5" />}
+            title="Add a monitor"
+            body="Paste a URL. We start checking on the next tick — HTTP, status code, body keyword, TLS validity."
+          />
+          <StepCard
+            n="03"
+            icon={<Plug className="h-5 w-5" />}
+            title="Connect a channel"
+            body="Telegram bot, SMTP, or webhook. A failed check fires after your threshold, with severity and runbook link."
+          />
+        </div>
+      </section>
+
       <section className="py-16 grid gap-6 md:grid-cols-3 max-w-5xl mx-auto">
         <FeatureCard
           icon={<Zap className="h-6 w-6" />}
@@ -104,6 +158,31 @@ export default function LandingPage() {
           title="Public status pages"
           body="SSR + ISR status pages for your customers. Show uptime, incidents, build trust with transparency."
         />
+      </section>
+
+      {/* Use cases — maps PingCast to real developer personas so visitors
+          self-select instead of asking "is this for me?". */}
+      <section className="py-20 max-w-5xl mx-auto">
+        <h2 className="text-center text-2xl md:text-3xl font-bold tracking-tight">
+          Built for the three stacks we live in
+        </h2>
+        <div className="mt-12 grid gap-6 md:grid-cols-3">
+          <UseCaseCard
+            icon={<GitBranch className="h-5 w-5" />}
+            title="CI/CD sentinel"
+            body="Register a monitor from your deploy script via the REST API. If prod breaks after a release, you know before the next commit lands."
+          />
+          <UseCaseCard
+            icon={<Globe className="h-5 w-5" />}
+            title="Side-project lifeline"
+            body="One slug, one Telegram chat, one hour of setup. No agents to install, no pager duty rotations, no invoice creep."
+          />
+          <UseCaseCard
+            icon={<Server className="h-5 w-5" />}
+            title="SaaS status"
+            body="Show customers a public status page at your own subdomain. SSR for SEO, ISR for perf, auth-free for the pages you mark public."
+          />
+        </div>
       </section>
 
       <section className="py-16 max-w-4xl mx-auto">
@@ -246,6 +325,89 @@ function FeatureCard({
       </div>
       <h3 className="font-semibold text-lg">{title}</h3>
       <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{body}</p>
+    </motion.div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+}) {
+  return (
+    <div>
+      <div className="text-2xl md:text-3xl font-bold tracking-tight">
+        {value}
+      </div>
+      <div className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">
+        {label}
+      </div>
+      <div className="text-xs text-muted-foreground mt-0.5">{hint}</div>
+    </div>
+  );
+}
+
+function StepCard({
+  n,
+  icon,
+  title,
+  body,
+}: {
+  n: string;
+  icon: React.ReactNode;
+  title: string;
+  body: string;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-50px" }}
+      transition={{ duration: 0.5, ease: "easeOut" }}
+      className="relative rounded-lg border border-border/60 bg-card p-6"
+    >
+      <span className="absolute right-4 top-4 font-mono text-xs text-muted-foreground/60">
+        {n}
+      </span>
+      <div className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary mb-4">
+        {icon}
+      </div>
+      <h3 className="font-semibold">{title}</h3>
+      <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+        {body}
+      </p>
+    </motion.div>
+  );
+}
+
+function UseCaseCard({
+  icon,
+  title,
+  body,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  body: string;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-50px" }}
+      transition={{ duration: 0.5, ease: "easeOut" }}
+      className="rounded-lg border border-border/60 bg-gradient-to-br from-card to-card/40 p-6"
+    >
+      <div className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary mb-4">
+        {icon}
+      </div>
+      <h3 className="font-semibold">{title}</h3>
+      <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+        {body}
+      </p>
     </motion.div>
   );
 }

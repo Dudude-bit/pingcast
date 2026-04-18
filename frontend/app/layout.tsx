@@ -1,7 +1,23 @@
 import type { Metadata } from "next";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import NextTopLoader from "nextjs-toploader";
+
+// `display: "swap"` shows the system fallback until the webfont lands,
+// which keeps LCP fast and prevents FOIT. Variables are consumed via
+// `--font-sans` / `--font-mono` in globals.css.
+const fontSans = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
+
+const fontMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-jetbrains",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: {
@@ -28,7 +44,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full antialiased" suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`h-full antialiased ${fontSans.variable} ${fontMono.variable}`}
+      suppressHydrationWarning
+    >
       <body className="min-h-full flex flex-col bg-background font-sans">
         <NextTopLoader
           color="hsl(221 83% 53%)"
