@@ -12,6 +12,11 @@ ARG INTERNAL_API_URL=http://api:8080/api
 ENV INTERNAL_API_URL=$INTERNAL_API_URL
 COPY --from=deps /app/node_modules ./node_modules
 COPY frontend/ ./
+# Publish the OpenAPI spec as a static asset so /docs/api can load it
+# without needing a runtime API call. The spec is the source of truth
+# for both the Go handlers and the TS types — serving it directly keeps
+# docs in lockstep with the API surface.
+COPY api/openapi.yaml ./public/openapi.yaml
 RUN pnpm build
 
 FROM base AS runner

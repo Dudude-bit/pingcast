@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Synced from ../api/openapi.yaml via the prebuild / predev scripts.
+# Source of truth is the top-level api/ dir; never hand-edit this copy.
+public/openapi.yaml
