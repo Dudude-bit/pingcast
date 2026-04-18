@@ -1,23 +1,15 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import "@fontsource-variable/inter";
+import "@fontsource-variable/jetbrains-mono";
 import "./globals.css";
 import { Providers } from "./providers";
 import NextTopLoader from "nextjs-toploader";
 
-// `display: "swap"` shows the system fallback until the webfont lands,
-// which keeps LCP fast and prevents FOIT. Variables are consumed via
-// `--font-sans` / `--font-mono` in globals.css.
-const fontSans = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-  display: "swap",
-});
-
-const fontMono = JetBrains_Mono({
-  subsets: ["latin"],
-  variable: "--font-jetbrains",
-  display: "swap",
-});
+// Self-hosted via @fontsource-variable so builds don't call out to
+// fonts.googleapis.com (Dokploy build env can't reach it). The CSS
+// imports above add @font-face rules for 'Inter Variable' and
+// 'JetBrains Mono Variable'; globals.css references them through
+// --font-inter / --font-jetbrains vars.
 
 export const metadata: Metadata = {
   title: {
@@ -46,7 +38,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`h-full antialiased ${fontSans.variable} ${fontMono.variable}`}
+      className="h-full antialiased"
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col bg-background font-sans">

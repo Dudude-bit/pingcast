@@ -4,6 +4,12 @@
 
 @custom-variant dark (&:is(.dark *));
 
+:root {
+  /* Font families supplied by @fontsource-variable (self-hosted) */
+  --font-inter: "Inter Variable";
+  --font-jetbrains: "JetBrains Mono Variable";
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
