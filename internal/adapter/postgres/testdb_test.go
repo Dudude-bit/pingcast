@@ -1,4 +1,6 @@
-package integration
+//go:build integration
+
+package postgres_test
 
 import (
 	"context"
@@ -8,7 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
+	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/kirillinakin/pingcast/internal/database"
@@ -21,11 +23,11 @@ func SetupTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 
 	ctx := context.Background()
 
-	pgContainer, err := postgres.Run(ctx,
+	pgContainer, err := tcpostgres.Run(ctx,
 		"postgres:16-alpine",
-		postgres.WithDatabase("pingcast_test"),
-		postgres.WithUsername("testuser"),
-		postgres.WithPassword("testpass"),
+		tcpostgres.WithDatabase("pingcast_test"),
+		tcpostgres.WithUsername("testuser"),
+		tcpostgres.WithPassword("testpass"),
 		testcontainers.WithWaitStrategy(
 			wait.ForLog("database system is ready to accept connections").
 				WithOccurrence(2).

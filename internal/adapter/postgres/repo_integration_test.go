@@ -1,4 +1,6 @@
-package integration
+//go:build integration
+
+package postgres_test
 
 import (
 	"context"
@@ -119,9 +121,10 @@ func TestMonitorRepo_CRUD(t *testing.T) {
 	err = repo.Delete(ctx, created.ID, userID)
 	require.NoError(t, err)
 
-	// GetByID should return error after soft delete (query filters deleted_at IS NULL)
+	// GetByID should return ErrNotFound after soft delete (query filters
+	// deleted_at IS NULL; the repo wraps pgx.ErrNoRows as domain.ErrNotFound).
 	_, err = repo.GetByID(ctx, created.ID)
-	assert.ErrorIs(t, err, pgx.ErrNoRows)
+	assert.ErrorIs(t, err, domain.ErrNotFound)
 }
 
 func TestMonitorRepo_SoftDelete(t *testing.T) {
@@ -224,7 +227,7 @@ func TestChannelRepo_CRUD(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = repo.GetByID(ctx, created.ID)
-	assert.ErrorIs(t, err, pgx.ErrNoRows)
+	assert.ErrorIs(t, err, domain.ErrNotFound)
 }
 
 func TestChannelRepo_BindUnbind(t *testing.T) {
