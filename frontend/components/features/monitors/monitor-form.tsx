@@ -200,6 +200,7 @@ export function MonitorForm({ mode, initial }: Props) {
                   </div>
                 </div>
                 <Switch
+                  aria-label="Show on public status page"
                   checked={methods.watch("is_public")}
                   onCheckedChange={(v) => methods.setValue("is_public", v)}
                 />

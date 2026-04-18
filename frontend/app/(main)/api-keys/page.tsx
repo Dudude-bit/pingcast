@@ -18,7 +18,7 @@ export default function APIKeysPage() {
         <h1 className="text-2xl font-bold tracking-tight">API keys</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Authenticate programmatic access. Use the{" "}
-          <code className="font-mono text-xs bg-muted px-1 py-0.5 rounded">
+          <code className="font-mono text-xs bg-muted text-foreground px-1 py-0.5 rounded">
             Authorization: Bearer ...
           </code>{" "}
           header.
