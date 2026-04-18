@@ -6,9 +6,34 @@ import { Zap, Bell, LineChart, ArrowRight, Code2 } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { LandingDemo } from "@/components/site/landing-demo";
 
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "PingCast",
+  applicationCategory: "DeveloperApplication",
+  operatingSystem: "Web",
+  description:
+    "Lightweight uptime monitoring with instant Telegram alerts and public status pages.",
+  offers: {
+    "@type": "Offer",
+    price: "0",
+    priceCurrency: "USD",
+  },
+  featureList: [
+    "HTTP uptime checks",
+    "Telegram alerts",
+    "Public status pages",
+    "REST API with scoped keys",
+  ],
+};
+
 export default function LandingPage() {
   return (
     <div className="container mx-auto px-4">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <section className="py-20 md:py-28 max-w-4xl mx-auto text-center">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
