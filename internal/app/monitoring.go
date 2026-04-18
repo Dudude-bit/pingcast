@@ -96,10 +96,23 @@ func (s *MonitoringService) CreateMonitor(ctx context.Context, user *domain.User
 		return nil, fmt.Errorf("count monitors: %w", err)
 	}
 	if count >= user.MonitorLimit() {
-		return nil, fmt.Errorf("monitor limit reached")
+		return nil, domain.NewValidationError(
+			"MONITOR_LIMIT_REACHED",
+			fmt.Sprintf("monitor limit reached for %s plan", user.Plan),
+		)
 	}
 
-	interval := max(input.IntervalSeconds, user.MinInterval())
+	interval := input.IntervalSeconds
+	if interval == 0 {
+		interval = user.MinInterval()
+	}
+	if interval < user.MinInterval() {
+		return nil, domain.NewValidationError(
+			"INTERVAL_BELOW_TIER_MIN",
+			fmt.Sprintf("interval must be at least %d seconds on the %s plan", user.MinInterval(), user.Plan),
+		)
+	}
+
 	alertAfter := input.AlertAfterFailures
 	if alertAfter == 0 {
 		alertAfter = 3
@@ -177,12 +190,9 @@ type UpdateMonitorInput struct {
 }
 
 func (s *MonitoringService) UpdateMonitor(ctx context.Context, user *domain.User, id uuid.UUID, input UpdateMonitorInput) (*domain.Monitor, error) {
-	mon, err := s.monitors.GetByID(ctx, id)
+	mon, err := s.loadOwnedMonitor(ctx, id, user.ID)
 	if err != nil {
-		return nil, fmt.Errorf("monitor not found: %w", err)
-	}
-	if mon.UserID != user.ID {
-		return nil, fmt.Errorf("monitor not found")
+		return nil, err
 	}
 
 	if input.Name != nil {
@@ -222,6 +232,9 @@ func (s *MonitoringService) UpdateMonitor(ctx context.Context, user *domain.User
 }
 
 func (s *MonitoringService) DeleteMonitor(ctx context.Context, userID, monitorID uuid.UUID) error {
+	if _, err := s.loadOwnedMonitor(ctx, monitorID, userID); err != nil {
+		return err
+	}
 	if err := s.monitors.Delete(ctx, monitorID, userID); err != nil {
 		return err
 	}
@@ -238,6 +251,13 @@ func (s *MonitoringService) DeleteMonitor(ctx context.Context, userID, monitorID
 }
 
 func (s *MonitoringService) TogglePause(ctx context.Context, user *domain.User, monitorID uuid.UUID) (*domain.Monitor, error) {
+	// Pre-flight ownership check so cross-tenant returns 403, not the
+	// same error shape as "not found" (which the DB-level toggle would
+	// otherwise collapse to a pgx.ErrNoRows).
+	if _, err := s.loadOwnedMonitor(ctx, monitorID, user.ID); err != nil {
+		return nil, err
+	}
+
 	// Atomic toggle — single SQL query prevents race condition (Issue 4.3).
 	mon, err := s.monitors.TogglePause(ctx, monitorID, user.ID)
 	if err != nil {
@@ -250,6 +270,24 @@ func (s *MonitoringService) TogglePause(ctx context.Context, user *domain.User, 
 	}
 	if err := s.publishMonitorEvent(ctx, action, mon); err != nil {
 		return mon, fmt.Errorf("%w: %w", ErrEventPublishFailed, err)
+	}
+	return mon, nil
+}
+
+// loadOwnedMonitor fetches a monitor by ID and verifies the caller owns
+// it. Maps pgx.ErrNoRows to domain.ErrNotFound and cross-tenant access
+// to domain.ErrForbidden — the HTTP boundary translates those into 404
+// NOT_FOUND and 403 FORBIDDEN_TENANT respectively.
+func (s *MonitoringService) loadOwnedMonitor(ctx context.Context, id, userID uuid.UUID) (*domain.Monitor, error) {
+	mon, err := s.monitors.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if mon == nil {
+		return nil, domain.ErrNotFound
+	}
+	if mon.UserID != userID {
+		return nil, domain.ErrForbidden
 	}
 	return mon, nil
 }
