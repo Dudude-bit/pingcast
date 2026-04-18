@@ -3,8 +3,10 @@
 package api
 
 import (
+	"context"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kirillinakin/pingcast/tests/integration/api/harness"
 )
 
@@ -29,4 +31,25 @@ func TestHarness_ContainersBooted(t *testing.T) {
 	if c.NATSURL == "" {
 		t.Error("nats url empty")
 	}
+}
+
+func TestHarness_SchemaMigrated(t *testing.T) {
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, harness.GetContainers().PostgresURL)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer pool.Close()
+
+	var count int
+	err = pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public'`,
+	).Scan(&count)
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	if count == 0 {
+		t.Fatal("migrations did not create any tables")
+	}
+	t.Logf("public schema has %d tables", count)
 }

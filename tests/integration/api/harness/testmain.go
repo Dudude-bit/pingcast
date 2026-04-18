@@ -26,6 +26,10 @@ func Setup() error {
 	if err != nil {
 		return err
 	}
+	if err := RunMigrations(ctx, c.PostgresURL); err != nil {
+		_ = c.Close(context.Background())
+		return err
+	}
 	global = &globalState{containers: c}
 	return nil
 }
