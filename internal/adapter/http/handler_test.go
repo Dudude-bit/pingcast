@@ -60,12 +60,11 @@ func setupTestApp(t *testing.T) *testEnv {
 	)
 	alertService := app.NewAlertService(channelRepo, monitorRepo, channelRegistry, failedAlertRepo, metrics)
 
-	pageHandler := NewPageHandler(authService, monitoringService, alertService, rateLimiter, apiKeyRepo)
 	server := NewServer(authService, monitoringService, alertService, rateLimiter, apiKeyRepo)
 	webhookHandler := NewWebhookHandler(authService, alertService, "test-secret")
 
 	healthChecker := &HealthChecker{}
-	fiberApp := SetupApp(authService, pageHandler, server, webhookHandler, apiKeyRepo, healthChecker)
+	fiberApp := SetupApp(authService, server, webhookHandler, apiKeyRepo, healthChecker)
 
 	return &testEnv{
 		app:         fiberApp,
@@ -199,33 +198,9 @@ func TestHealthz_PostgresDown(t *testing.T) {
 // Test 7 (Dashboard unauth redirect) removed in C2 — /dashboard is now
 // served by Next.js; auth redirect logic lives in frontend/proxy.ts.
 
-// ---------------------------------------------------------------------------
-// 8. TestCSRF_MissingToken
-// ---------------------------------------------------------------------------
-
-func TestCSRF_MissingToken(t *testing.T) {
-	te := setupTestApp(t)
-
-	// No session.
-	te.sessionRepo.EXPECT().GetUserID(mock.Anything, mock.Anything).Return(uuid.Nil, errors.New("no session")).Maybe()
-	// Rate limiter may be called before CSRF check, or not — depends on middleware order.
-	te.rateLimiter.EXPECT().Allow(mock.Anything, mock.Anything).Return(true, nil).Maybe()
-
-	// POST /login without _csrf field.
-	formData := "email=test@example.com&password=whatever"
-	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(formData))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	resp, err := te.app.Test(req, -1)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 403 {
-		t.Fatalf("expected 403 for missing CSRF token, got %d", resp.StatusCode)
-	}
-}
+// TestCSRF_MissingToken was removed alongside the CSRF middleware:
+// all browser routes migrated to Next.js + JSON API, so there are no
+// form-POST targets to guard (spec §8.6).
 
 // ---------------------------------------------------------------------------
 // 9. TestAPIAuth_InvalidAPIKey

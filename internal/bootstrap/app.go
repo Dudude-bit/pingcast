@@ -133,11 +133,10 @@ func NewApp(deps AppDeps) (*App, error) {
 
 	// HTTP handlers
 	server := httpadapter.NewServer(authSvc, monitoringSvc, alertSvc, rateLimiter, apiKeyRepo)
-	pageHandler := httpadapter.NewPageHandler(authSvc, monitoringSvc, alertSvc, rateLimiter, apiKeyRepo)
 	webhookHandler := httpadapter.NewWebhookHandler(authSvc, alertSvc, deps.LemonSqueezySecret)
 	healthChecker := httpadapter.NewHealthChecker(deps.Pool, deps.Redis, deps.NATS)
 
-	fiberApp := httpadapter.SetupApp(authSvc, pageHandler, server, webhookHandler, apiKeyRepo, healthChecker)
+	fiberApp := httpadapter.SetupApp(authSvc, server, webhookHandler, apiKeyRepo, healthChecker)
 
 	return &App{
 		Fiber:           fiberApp,
