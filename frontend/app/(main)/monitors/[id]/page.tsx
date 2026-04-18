@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
 import { useMonitor } from "@/lib/queries";
@@ -10,7 +11,20 @@ import { StatusBadge } from "@/components/features/monitors/status-badge";
 import { UptimeStats } from "@/components/features/monitors/uptime-stats";
 import { IncidentList } from "@/components/features/monitors/incident-list";
 import { DeleteMonitorDialog } from "@/components/features/monitors/delete-monitor-dialog";
-import { ResponseTimeChart } from "@/components/features/monitors/response-time-chart";
+
+// Recharts is ~100 KB gzipped and only needed on this page — lazy-load it
+// so the rest of the app's first-load bundle stays slim. Skeleton matches
+// the chart's rendered height to avoid layout shift.
+const ResponseTimeChart = dynamic(
+  () =>
+    import("@/components/features/monitors/response-time-chart").then(
+      (m) => m.ResponseTimeChart,
+    ),
+  {
+    ssr: false,
+    loading: () => <Skeleton className="h-64 w-full" />,
+  },
+);
 
 export default function MonitorDetailPage({
   params,

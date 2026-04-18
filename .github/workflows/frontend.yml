@@ -1,0 +1,108 @@
+name: Frontend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend.yml'
+      - 'docker-compose.yml'
+      - 'api/openapi.yaml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend.yml'
+      - 'docker-compose.yml'
+      - 'api/openapi.yaml'
+  workflow_dispatch:
+
+jobs:
+  # Cheap jobs run in parallel — quick signal on typos / style issues.
+  lint-typecheck:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: 'frontend/pnpm-lock.yaml'
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+  # E2E runs the full docker-compose stack (api + web + postgres + redis
+  # + nats) so Playwright hits the real backend. Covers auth, CRUD, a11y
+  # and status-page flows.
+  e2e:
+    runs-on: ubuntu-latest
+    needs: [lint-typecheck]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: 'frontend/pnpm-lock.yaml'
+
+      - name: Install frontend deps (for Playwright runner)
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build and start stack
+        run: docker compose up -d --build
+
+      - name: Wait for web to be ready
+        run: |
+          for i in {1..60}; do
+            if curl -sf http://localhost:3001 > /dev/null; then
+              echo "web is up"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "web did not come up in time" >&2
+          docker compose logs web
+          exit 1
+
+      - name: Run Playwright
+        working-directory: frontend
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:3001
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7
+
+      - name: Dump compose logs on failure
+        if: failure()
+        run: docker compose logs --no-color > compose-logs.txt && cat compose-logs.txt
