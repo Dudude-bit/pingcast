@@ -8,6 +8,8 @@ RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
 
 FROM base AS builder
+ARG INTERNAL_API_URL=http://api:8080/api
+ENV INTERNAL_API_URL=$INTERNAL_API_URL
 COPY --from=deps /app/node_modules ./node_modules
 COPY frontend/ ./
 RUN pnpm build

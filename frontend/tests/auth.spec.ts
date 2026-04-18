@@ -1,12 +1,7 @@
 import { test, expect } from "@playwright/test";
+import { flushRedis, uniqueEmail, uniqueSlug } from "./helpers";
 
-function uniqueEmail() {
-  return `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
-}
-
-function uniqueSlug() {
-  return `e2e${Date.now().toString(36).slice(-6)}${Math.random().toString(36).slice(2, 6)}`;
-}
+test.beforeEach(flushRedis);
 
 test("landing page renders with CTA", async ({ page }) => {
   await page.goto("/");

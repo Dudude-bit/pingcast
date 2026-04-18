@@ -1,4 +1,7 @@
 import { test, expect } from "@playwright/test";
+import { flushRedis } from "./helpers";
+
+test.beforeEach(flushRedis);
 
 test("unknown slug shows not-found page", async ({ page }) => {
   const res = await page.goto("/status/does-not-exist-xyz-12345");
