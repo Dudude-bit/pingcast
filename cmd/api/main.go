@@ -11,22 +11,12 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/kirillinakin/pingcast/internal/adapter/channel"
-	"github.com/kirillinakin/pingcast/internal/bootstrap"
-	"github.com/kirillinakin/pingcast/internal/adapter/checker"
-	httpadapter "github.com/kirillinakin/pingcast/internal/adapter/http"
 	natsadapter "github.com/kirillinakin/pingcast/internal/adapter/nats"
-	"github.com/kirillinakin/pingcast/internal/adapter/postgres"
 	redisadapter "github.com/kirillinakin/pingcast/internal/adapter/redis"
-	smtpadapter "github.com/kirillinakin/pingcast/internal/adapter/smtp"
-	"github.com/kirillinakin/pingcast/internal/adapter/telegram"
-	"github.com/kirillinakin/pingcast/internal/adapter/webhook"
-	"github.com/kirillinakin/pingcast/internal/app"
+	"github.com/kirillinakin/pingcast/internal/bootstrap"
 	"github.com/kirillinakin/pingcast/internal/config"
 	"github.com/kirillinakin/pingcast/internal/database"
-	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/observability"
-	sqlcgen "github.com/kirillinakin/pingcast/internal/sqlc/gen"
 	"github.com/kirillinakin/pingcast/internal/version"
 )
 
@@ -69,8 +59,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	queries := sqlcgen.New(pool)
-
 	// Redis
 	rdb, err := redisadapter.Connect(ctx, cfg.RedisURL)
 	if err != nil {
@@ -92,7 +80,6 @@ func main() {
 		slog.Error("failed to create jetstream context", "error", err)
 		os.Exit(1)
 	}
-
 	if streamsErr := natsadapter.SetupStreams(ctx, js); streamsErr != nil {
 		slog.Error("failed to setup nats streams", "error", streamsErr)
 		os.Exit(1)
@@ -105,66 +92,24 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Postgres repos
-	userRepo := postgres.NewUserRepo(queries)
-	sessionRepo := redisadapter.NewSessionRepo(rdb)
-	monitorRepo := postgres.NewMonitorRepo(pool, queries, cipher)
-	channelRepo := postgres.NewChannelRepo(pool, queries, cipher)
-	checkResultRepo := postgres.NewCheckResultRepo(queries)
-	incidentRepo := postgres.NewIncidentRepo(queries)
-	uptimeRepo := postgres.NewUptimeRepo(queries)
-	txm := postgres.NewTxManager(pool)
-
-	// NATS publishers
-	monitorPub := natsadapter.NewMonitorPublisher(js)
-	alertPub := natsadapter.NewAlertPublisher(js)
-
-	// Checker registry
-	registry := checker.NewRegistry()
-	registry.Register(domain.MonitorHTTP, "HTTP", checker.NewHTTPChecker())
-	registry.Register(domain.MonitorTCP, "TCP", checker.NewTCPChecker(10*time.Second))
-	registry.Register(domain.MonitorDNS, "DNS", checker.NewDNSChecker())
-
-	// API keys
-	apiKeyRepo := postgres.NewAPIKeyRepo(queries)
-
-	// Channel registry (API: validation + schema only, no sending credentials needed)
-	channelReg := channel.NewRegistry()
-	channelReg.Register(domain.ChannelTelegram, "Telegram", telegram.NewFactory(""))
-	channelReg.Register(domain.ChannelEmail, "Email", smtpadapter.NewFactory("", 0, "", "", ""))
-	channelReg.Register(domain.ChannelWebhook, "Webhook", webhook.NewFactory())
-	slog.Info("channel registry initialized (validation-only mode)", "types", len(channelReg.Types()))
-
-	// Failed alerts (DLQ)
-	failedAlertRepo := postgres.NewFailedAlertRepo(queries)
-
-	// Business metrics
-	metrics := observability.NewMetrics()
-
-	// App services
-	authSvc := app.NewAuthService(userRepo, sessionRepo)
-	monitoringSvc := app.NewMonitoringService(monitorRepo, channelRepo, checkResultRepo, incidentRepo, userRepo, uptimeRepo, txm, alertPub, monitorPub, registry, metrics)
-	alertSvc := app.NewAlertService(channelRepo, monitorRepo, channelReg, failedAlertRepo, metrics)
-
-	// HTTP handlers
-	// Shared rate-limit bucket for /api/auth/login and /api/auth/register:
-	// 5 attempts per 15 minutes per IP. Keyed by IP for register (Issue 4.7),
-	// by email for login.
-	rateLimiter := redisadapter.NewRateLimiter(rdb, "auth", 5, 15*time.Minute)
-	server := httpadapter.NewServer(authSvc, monitoringSvc, alertSvc, rateLimiter, apiKeyRepo)
-	pageHandler := httpadapter.NewPageHandler(authSvc, monitoringSvc, alertSvc, rateLimiter, apiKeyRepo)
-	webhookHandler := httpadapter.NewWebhookHandler(authSvc, alertSvc, cfg.LemonSqueezyWebhookSecret)
-
-	// Health checker
-	healthChecker := httpadapter.NewHealthChecker(pool, rdb, nc)
-
-	// Wire
-	fiberApp := httpadapter.SetupApp(authSvc, pageHandler, server, webhookHandler, apiKeyRepo, healthChecker)
+	// Compose the API app (wires repos, services, handlers, routes)
+	bootApp, err := bootstrap.NewApp(bootstrap.AppDeps{
+		Pool:               pool,
+		Redis:              rdb,
+		NATS:               nc,
+		JS:                 js,
+		Cipher:             cipher,
+		LemonSqueezySecret: cfg.LemonSqueezyWebhookSecret,
+	})
+	if err != nil {
+		slog.Error("failed to compose app", "error", err)
+		os.Exit(1)
+	}
 
 	// Start
 	go func() {
 		slog.Info("api started", "port", cfg.Port)
-		if err := fiberApp.Listen(fmt.Sprintf(":%d", cfg.Port)); err != nil {
+		if err := bootApp.Fiber.Listen(fmt.Sprintf(":%d", cfg.Port)); err != nil {
 			slog.Error("server error", "error", err)
 		}
 	}()
@@ -175,7 +120,7 @@ func main() {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
 
-	if err := fiberApp.ShutdownWithContext(shutdownCtx); err != nil {
+	if err := bootApp.Fiber.ShutdownWithContext(shutdownCtx); err != nil {
 		slog.Error("api shutdown error", "error", err)
 	}
 }
