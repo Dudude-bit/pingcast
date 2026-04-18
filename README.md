@@ -90,14 +90,14 @@ pnpm test:e2e   # Playwright (requires docker compose up)
 ### Go dev loop
 
 ```bash
-# Run tests (unit + testcontainers integration — requires Docker)
-go test ./...
-
 # Quick unit-only run
 go test -short ./...
 
-# Lint
-golangci-lint run
+# Integration tests (black-box API + postgres repos, testcontainers, Docker required)
+make test-integration
+
+# Everything (unit + integration + lint)
+make test && make lint
 ```
 
 ## Repo layout
@@ -135,17 +135,26 @@ internal/
 
 | Layer | Tool | Count |
 |---|---|---|
-| Go unit | `go test` | 9 packages |
-| Go integration | testcontainers + Postgres | ~20 tests |
+| Go unit | `go test -short ./...` | 9 packages |
+| Go repo integration | testcontainers + Postgres | ~20 tests |
+| Go API integration (black-box, C1) | testcontainers + Postgres + Redis + NATS | ~80 tests |
 | Frontend unit | — (skipped for now) | 0 |
-| Frontend E2E | Playwright | 6 tests |
+| Frontend E2E | Playwright | 11 specs |
+
+The API integration suite is black-box: each test drives the Fiber
+app in-process via HTTP, asserts the canonical error envelope
+`{"error":{"code","message"}}` from spec §1, and resets Postgres +
+Redis state between runs. The behavior spec lives at
+`docs/superpowers/specs/2026-04-18-C1-api-behavior-spec.md` —
+tests assert against that document, not against current code.
 
 Run the full suite:
 
 ```bash
-go test -count=1 ./...          # includes testcontainers (needs Docker)
-golangci-lint run               # must be 0 findings
-cd frontend && pnpm test:e2e    # requires docker compose up + redis FLUSHDB between runs
+make lint              # golangci-lint, must be 0 findings
+make test-short        # unit-only, ~seconds
+make test-integration  # black-box API + repo, ~30s first boot
+cd frontend && pnpm test:e2e   # Playwright (requires docker compose up)
 ```
 
 ## Production deployment
