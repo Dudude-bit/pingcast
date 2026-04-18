@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -45,10 +44,12 @@ func mustHashPassword(p string) string {
 type AuthService struct {
 	users    port.UserRepo
 	sessions port.SessionRepo
+	clock    port.Clock
+	rng      port.Random
 }
 
-func NewAuthService(users port.UserRepo, sessions port.SessionRepo) *AuthService {
-	return &AuthService{users: users, sessions: sessions}
+func NewAuthService(users port.UserRepo, sessions port.SessionRepo, clock port.Clock, rng port.Random) *AuthService {
+	return &AuthService{users: users, sessions: sessions, clock: clock, rng: rng}
 }
 
 func (s *AuthService) Register(ctx context.Context, email, slug, password string) (*domain.User, string, error) {
@@ -115,7 +116,7 @@ func (s *AuthService) ValidateSession(ctx context.Context, sessionID string) (*d
 		return nil, fmt.Errorf("user not found")
 	}
 
-	if err := s.sessions.Touch(ctx, sessionID, time.Now().Add(sessionDuration)); err != nil {
+	if err := s.sessions.Touch(ctx, sessionID, s.clock.Now().Add(sessionDuration)); err != nil {
 		slog.Warn("failed to touch session", "session_id", sessionID, "error", err)
 	}
 
@@ -154,19 +155,19 @@ func (s *AuthService) GetUserByEmail(ctx context.Context, email string) (*domain
 // token, so an attacker cannot predict or reuse a session ID. Multiple concurrent
 // sessions (e.g. different devices) are intentional and expire via Redis TTL.
 func (s *AuthService) createSession(ctx context.Context, userID uuid.UUID) (string, error) {
-	token, err := generateToken()
+	token, err := s.generateToken()
 	if err != nil {
 		return "", fmt.Errorf("generate token: %w", err)
 	}
-	if err := s.sessions.Create(ctx, token, userID, time.Now().Add(sessionDuration)); err != nil {
+	if err := s.sessions.Create(ctx, token, userID, s.clock.Now().Add(sessionDuration)); err != nil {
 		return "", fmt.Errorf("create session: %w", err)
 	}
 	return token, nil
 }
 
-func generateToken() (string, error) {
+func (s *AuthService) generateToken() (string, error) {
 	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
+	if _, err := s.rng.Read(b); err != nil {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil

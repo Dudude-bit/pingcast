@@ -87,6 +87,9 @@ func NewApp(t *testing.T) *App {
 		t.Fatalf("cipher: %v", err)
 	}
 
+	clock := NewFakeClock()
+	rng := NewFakeRandom()
+
 	bootApp, err := bootstrap.NewApp(bootstrap.AppDeps{
 		Pool:               pool,
 		Redis:              rdb,
@@ -94,6 +97,8 @@ func NewApp(t *testing.T) *App {
 		JS:                 js,
 		Cipher:             cipher,
 		LemonSqueezySecret: "test-ls-secret",
+		Clock:              clock,
+		Random:             rng,
 	})
 	if err != nil {
 		pool.Close()
@@ -113,8 +118,8 @@ func NewApp(t *testing.T) *App {
 		Pool:     pool,
 		Redis:    rdb,
 		NATS:     nc,
-		Clock:    NewFakeClock(),
-		Rand:     NewFakeRandom(),
+		Clock:    clock,
+		Rand:     rng,
 		SMTP:     smtp,
 		Telegram: tg,
 		Webhook:  sink,

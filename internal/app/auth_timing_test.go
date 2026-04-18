@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 
+	"github.com/kirillinakin/pingcast/internal/adapter/sysclock"
+	"github.com/kirillinakin/pingcast/internal/adapter/sysrand"
 	"github.com/kirillinakin/pingcast/internal/app"
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/mocks"
@@ -36,7 +38,7 @@ func TestLogin_TimingParityUnderShort(t *testing.T) {
 	users.EXPECT().GetByEmail(mock.Anything, "absent@example.com").
 		Return(nil, "", errors.New("not found")).Maybe()
 
-	svc := app.NewAuthService(users, sessions)
+	svc := app.NewAuthService(users, sessions, sysclock.New(), sysrand.New())
 
 	const samples = 5
 	var missingTotal, wrongTotal time.Duration

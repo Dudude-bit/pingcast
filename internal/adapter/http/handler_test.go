@@ -13,6 +13,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 
+	"github.com/kirillinakin/pingcast/internal/adapter/sysclock"
+	"github.com/kirillinakin/pingcast/internal/adapter/sysrand"
 	"github.com/kirillinakin/pingcast/internal/app"
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/mocks"
@@ -50,7 +52,7 @@ func setupTestApp(t *testing.T) *testEnv {
 	metrics := mocks.NewMockMetrics(t)
 	eventPub := mocks.NewMockMonitorEventPublisher(t)
 
-	authService := app.NewAuthService(userRepo, sessionRepo)
+	authService := app.NewAuthService(userRepo, sessionRepo, sysclock.New(), sysrand.New())
 	monitoringService := app.NewMonitoringService(
 		monitorRepo, channelRepo, checkResultRepo, incidentRepo,
 		userRepo, uptimeRepo, txManager, alertPub, eventPub, checkerRegistry, metrics,

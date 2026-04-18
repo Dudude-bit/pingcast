@@ -16,6 +16,8 @@ import (
 	"github.com/kirillinakin/pingcast/internal/adapter/postgres"
 	redisadapter "github.com/kirillinakin/pingcast/internal/adapter/redis"
 	smtpadapter "github.com/kirillinakin/pingcast/internal/adapter/smtp"
+	"github.com/kirillinakin/pingcast/internal/adapter/sysclock"
+	"github.com/kirillinakin/pingcast/internal/adapter/sysrand"
 	"github.com/kirillinakin/pingcast/internal/adapter/telegram"
 	"github.com/kirillinakin/pingcast/internal/adapter/webhook"
 	"github.com/kirillinakin/pingcast/internal/app"
@@ -36,6 +38,11 @@ type AppDeps struct {
 	Cipher port.Cipher
 
 	LemonSqueezySecret string
+
+	// Deterministic injection points. If nil, sysclock/sysrand defaults
+	// are wired; tests override with Fake impls.
+	Clock  port.Clock
+	Random port.Random
 
 	// Optional overrides. If nil, defaults are used.
 	Metrics *observability.Metrics
@@ -75,6 +82,15 @@ func NewApp(deps AppDeps) (*App, error) {
 		metrics = observability.NewMetrics()
 	}
 
+	clock := deps.Clock
+	if clock == nil {
+		clock = sysclock.New()
+	}
+	rng := deps.Random
+	if rng == nil {
+		rng = sysrand.New()
+	}
+
 	// Repos
 	userRepo := postgres.NewUserRepo(queries)
 	sessionRepo := redisadapter.NewSessionRepo(deps.Redis)
@@ -104,7 +120,7 @@ func NewApp(deps AppDeps) (*App, error) {
 	channelReg.Register(domain.ChannelWebhook, "Webhook", webhook.NewFactory())
 
 	// App services
-	authSvc := app.NewAuthService(userRepo, sessionRepo)
+	authSvc := app.NewAuthService(userRepo, sessionRepo, clock, rng)
 	monitoringSvc := app.NewMonitoringService(
 		monitorRepo, channelRepo, checkResultRepo, incidentRepo,
 		userRepo, uptimeRepo, txm, alertPub, monitorPub, checkerReg, metrics,
