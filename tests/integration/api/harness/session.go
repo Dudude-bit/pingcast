@@ -19,6 +19,17 @@ type Session struct {
 	app     *App
 	cookies []*http.Cookie
 	bearer  string
+	extra   map[string]string
+}
+
+// SetHeader attaches a header to every subsequent request made by this
+// session. Useful for webhooks (e.g. X-Signature) that are neither
+// cookie- nor bearer-authenticated.
+func (s *Session) SetHeader(name, value string) {
+	if s.extra == nil {
+		s.extra = make(map[string]string)
+	}
+	s.extra[name] = value
 }
 
 // NewSession returns an unauthenticated session.
@@ -138,6 +149,9 @@ func (s *Session) attach(req *http.Request) {
 	}
 	if s.bearer != "" {
 		req.Header.Set("Authorization", "Bearer "+s.bearer)
+	}
+	for k, v := range s.extra {
+		req.Header.Set(k, v)
 	}
 }
 
