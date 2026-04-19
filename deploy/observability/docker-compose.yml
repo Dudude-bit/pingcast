@@ -1,9 +1,10 @@
 version: "3.9"
 
 # Observability stack for PingCast — deployed as a standalone compose
-# app in Dokploy. All services share a Docker network; the API /
-# scheduler / worker / notifier point their OTEL_EXPORTER_OTLP_ENDPOINT
-# at otel-collector.<namespace>:4317 (internal Dokploy DNS).
+# app in Dokploy. Ports are not bound to the host: the otel-collector
+# is reachable by other Dokploy services via internal DNS
+# (<compose-name>-otel-collector-1:4317), and Grafana is exposed via
+# a Traefik domain (configured at the Dokploy app level, not here).
 
 services:
   otel-collector:
@@ -12,10 +13,10 @@ services:
     configs:
       - source: collector-config
         target: /etc/otel/config.yaml
-    ports:
-      - "4317:4317"
-      - "4318:4318"
-      - "8889:8889"
+    expose:
+      - "4317"
+      - "4318"
+      - "8889"
     depends_on:
       - tempo
       - loki
@@ -28,13 +29,13 @@ services:
         target: /etc/tempo.yaml
     volumes:
       - tempo-data:/var/tempo
-    ports:
-      - "3200:3200"
+    expose:
+      - "3200"
 
   loki:
     image: grafana/loki:2.9.4
-    ports:
-      - "3100:3100"
+    expose:
+      - "3100"
     volumes:
       - loki-data:/loki
 
@@ -47,8 +48,9 @@ services:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
       GF_SECURITY_ADMIN_PASSWORD: "${GF_ADMIN_PASSWORD:-admin}"
-    ports:
-      - "3000:3000"
+      GF_SERVER_ROOT_URL: "${GF_ROOT_URL:-http://localhost:3000}"
+    expose:
+      - "3000"
     volumes:
       - grafana-data:/var/lib/grafana
     depends_on:
