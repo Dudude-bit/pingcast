@@ -48,3 +48,53 @@ export async function registerFreshUser(
 
   return { email, slug, password };
 }
+
+/** UI helper: navigate to monitor create, fill form, submit, expect redirect. */
+export async function uiCreateMonitor(
+  page: Page,
+  opts: { name: string; url: string },
+): Promise<void> {
+  await page.goto("/monitors/new");
+  await page.getByLabel(/name/i).fill(opts.name);
+  await page.getByLabel(/url/i).fill(opts.url);
+  await page.getByRole("button", { name: /create/i }).click();
+  await expect(page).toHaveURL(/\/monitors/);
+}
+
+/**
+ * UI helper: create a channel via the /channels page. `config` is a
+ * record of field-label → value pairs the helper fills in the dialog.
+ */
+export async function uiCreateChannel(
+  page: Page,
+  opts: {
+    name: string;
+    type: "telegram" | "webhook";
+    config: Record<string, string>;
+  },
+): Promise<void> {
+  await page.goto("/channels");
+  await page.getByRole("button", { name: /(create|add).*channel/i }).click();
+  await page.getByLabel(/name/i).fill(opts.name);
+  await page.getByRole("combobox", { name: /type/i }).click();
+  await page.getByRole("option", { name: new RegExp(opts.type, "i") }).click();
+  for (const [label, value] of Object.entries(opts.config)) {
+    await page.getByLabel(new RegExp(label, "i")).fill(value);
+  }
+  await page.getByRole("button", { name: /^(create|save)$/i }).click();
+  await expect(page.getByText(opts.name)).toBeVisible();
+}
+
+/**
+ * UI helper: on a monitor-detail page, open the "bind channel" control
+ * and attach the named channel. Assumes the caller has already navigated
+ * to the monitor detail.
+ */
+export async function uiBindChannelOnMonitor(
+  page: Page,
+  channelName: string,
+): Promise<void> {
+  await page.getByRole("button", { name: /(bind|add).*channel/i }).click();
+  await page.getByRole("option", { name: channelName }).click();
+  await expect(page.getByText(channelName)).toBeVisible();
+}

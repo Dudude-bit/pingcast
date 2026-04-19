@@ -12,5 +12,18 @@ export default defineConfig({
     baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3001",
     trace: "on-first-retry",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"] },
+      // Mobile-only specs opt out via grepInvert on the project side.
+      grepInvert: /@mobile/,
+    },
+    {
+      name: "mobile-chromium",
+      use: { ...devices["iPhone 14"] },
+      // Only run the mobile-tagged specs on this project.
+      grep: /@mobile/,
+    },
+  ],
 });
