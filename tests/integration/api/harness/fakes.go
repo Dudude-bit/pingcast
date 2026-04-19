@@ -3,13 +3,18 @@
 package harness
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/kirillinakin/pingcast/internal/domain"
+	"github.com/kirillinakin/pingcast/internal/port"
 )
 
 // ---- SMTP ----------------------------------------------------------
@@ -113,6 +118,7 @@ type FakeWebhookSink struct {
 	server *httptest.Server
 	mu     sync.Mutex
 	hits   []WebhookHit
+	failErr error
 }
 
 func NewFakeWebhookSink() *FakeWebhookSink {
@@ -141,6 +147,72 @@ func (s *FakeWebhookSink) handle(w http.ResponseWriter, r *http.Request) {
 		Headers: r.Header.Clone(),
 		Body:    body,
 	})
+	failErr := s.failErr
 	s.mu.Unlock()
+	if failErr != nil {
+		w.WriteHeader(500)
+		return
+	}
 	w.WriteHeader(200)
+}
+
+// FailAll makes the webhook sink return 500 on every subsequent delivery
+// until cleared with FailAll(nil). Hits are still recorded. Used by
+// DLQ scenario tests.
+func (s *FakeWebhookSink) FailAll(err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.failErr = err
+}
+
+// ---- AlertSender adapters (port.AlertSender) -----------------------
+
+// AsSender adapts FakeSMTP to port.AlertSender. The alert event is
+// rendered to a minimal subject/body so tests can assert on "Sent".
+func (s *FakeSMTP) AsSender() port.AlertSender { return smtpSender{s} }
+
+type smtpSender struct{ *FakeSMTP }
+
+func (a smtpSender) Send(_ context.Context, event *domain.AlertEvent) error {
+	subject := fmt.Sprintf("[%s] %s", event.Event, event.MonitorName)
+	body := fmt.Sprintf("monitor %s is %s (cause: %s)", event.MonitorName, event.Event, event.Cause)
+	return a.FakeSMTP.Send("recipient@test.local", subject, body)
+}
+
+// AsSender adapts FakeTelegram to port.AlertSender. Records the event
+// summary as a TelegramCall.
+func (f *FakeTelegram) AsSender() port.AlertSender { return telegramSender{f} }
+
+type telegramSender struct{ *FakeTelegram }
+
+func (a telegramSender) Send(_ context.Context, event *domain.AlertEvent) error {
+	text := fmt.Sprintf("[%s] %s — %s", event.Event, event.MonitorName, event.Cause)
+	a.FakeTelegram.mu.Lock()
+	a.FakeTelegram.calls = append(a.FakeTelegram.calls, TelegramCall{
+		ChatID: event.MonitorID.String(),
+		Text:   text,
+	})
+	a.FakeTelegram.mu.Unlock()
+	return nil
+}
+
+// AsSender adapts FakeWebhookSink to port.AlertSender. Records an
+// equivalent HTTP-looking hit and honours FailAll.
+func (s *FakeWebhookSink) AsSender() port.AlertSender { return webhookSender{s} }
+
+type webhookSender struct{ *FakeWebhookSink }
+
+func (a webhookSender) Send(_ context.Context, event *domain.AlertEvent) error {
+	body := fmt.Sprintf(`{"monitor_id":%q,"event":%q,"cause":%q}`,
+		event.MonitorID, event.Event, event.Cause)
+	a.FakeWebhookSink.mu.Lock()
+	a.FakeWebhookSink.hits = append(a.FakeWebhookSink.hits, WebhookHit{
+		Method:  "POST",
+		Path:    "/",
+		Headers: http.Header{"Content-Type": []string{"application/json"}},
+		Body:    []byte(body),
+	})
+	failErr := a.FakeWebhookSink.failErr
+	a.FakeWebhookSink.mu.Unlock()
+	return failErr
 }

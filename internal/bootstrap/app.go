@@ -59,6 +59,11 @@ type App struct {
 
 	Health *httpadapter.HealthChecker
 
+	// Cipher is the encryption port handed to all repos. Exposed so
+	// the integration harness can reuse the same cipher when composing
+	// scheduler/worker/notifier against the same Postgres.
+	Cipher port.Cipher
+
 	// Repos exposed for inspection/assertion in tests. Production main
 	// does not use these fields directly.
 	UserRepo       port.UserRepo
@@ -144,6 +149,7 @@ func NewApp(deps AppDeps) (*App, error) {
 		MonitorSvc:      monitoringSvc,
 		AlertSvc:        alertSvc,
 		Health:          healthChecker,
+		Cipher:          deps.Cipher,
 		UserRepo:        userRepo,
 		SessionRepo:     sessionRepo,
 		MonitorRepo:     monitorRepo,

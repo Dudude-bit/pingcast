@@ -26,10 +26,10 @@ type App struct {
 	Pool  *pgxpool.Pool
 	Redis *goredis.Client
 	NATS  *nats.Conn
+	JS    jetstream.JetStream
 
-	// Per-test deterministic replacements. Services don't yet accept
-	// these — threading is introduced in Tasks 10-12. Until then the
-	// fakes are wired at the harness level only.
+	// Per-test deterministic replacements injected into
+	// bootstrap.AppDeps via Clock/Random fields.
 	Clock *FakeClock
 	Rand  *FakeRandom
 
@@ -118,6 +118,7 @@ func NewApp(t *testing.T) *App {
 		Pool:     pool,
 		Redis:    rdb,
 		NATS:     nc,
+		JS:       js,
 		Clock:    clock,
 		Rand:     rng,
 		SMTP:     smtp,
