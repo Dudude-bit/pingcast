@@ -165,10 +165,3 @@ func domainStatusAndCode(e *domain.DomainError) (int, string) {
 	return 500, "INTERNAL_ERROR"
 }
 
-// ClassifyHTTPError is the legacy helper still called by some handlers.
-// It forwards to the canonical classifier and returns (status, safe
-// message). Prefer Write(c, err) in new code.
-func ClassifyHTTPError(err error) (int, string) {
-	status, _, msg := classify(err)
-	return status, msg
-}
