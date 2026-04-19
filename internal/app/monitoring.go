@@ -343,14 +343,16 @@ func (s *MonitoringService) ProcessCheckResult(ctx context.Context, monitor *dom
 		return fmt.Errorf("update status: %w", err)
 	}
 
-	if previousStatus == result.Status {
-		return nil
-	}
-
+	// handleDown is called on every down result (not only on the
+	// transition) so that multi-check thresholds like
+	// alert_after_failures=3 evaluate on each subsequent failure.
+	// handleDown is idempotent: cooldown + ErrIncidentExists prevent
+	// duplicate incidents for the same monitor.
 	if result.Status == domain.StatusDown {
 		return s.handleDown(ctx, monitor, result)
 	}
 
+	// Recovery fires only on the up transition after a prior down.
 	if result.Status == domain.StatusUp && previousStatus == domain.StatusDown {
 		return s.handleRecovery(ctx, monitor)
 	}

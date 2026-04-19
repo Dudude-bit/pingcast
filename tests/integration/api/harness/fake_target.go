@@ -28,10 +28,12 @@ type response struct {
 }
 
 // NewFakeTarget starts a target that returns 200 by default. Tests
-// append behaviour via RespondWith / FailNext / Slow.
+// override the default by calling RespondWith/FailNext/Slow — the
+// first such call clears the default and enqueues the requested
+// behaviour.
 func NewFakeTarget(t *testing.T) *FakeTarget {
 	t.Helper()
-	ft := &FakeTarget{queue: []response{{status: 200}}}
+	ft := &FakeTarget{}
 	ft.Server = httptest.NewServer(http.HandlerFunc(ft.handle))
 	ft.URL = ft.Server.URL
 	t.Cleanup(ft.Server.Close)
@@ -41,11 +43,11 @@ func NewFakeTarget(t *testing.T) *FakeTarget {
 func (f *FakeTarget) handle(w http.ResponseWriter, _ *http.Request) {
 	f.mu.Lock()
 	f.hits++
-	var r response
+	r := response{status: 200}
 	if len(f.queue) > 1 {
 		r = f.queue[0]
 		f.queue = f.queue[1:]
-	} else {
+	} else if len(f.queue) == 1 {
 		r = f.queue[0]
 	}
 	f.mu.Unlock()
