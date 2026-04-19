@@ -2,30 +2,20 @@ package main
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 	"time"
 
-	"github.com/go-redsync/redsync/v4"
-	"github.com/jackc/pgx/v5"
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/kirillinakin/pingcast/internal/adapter/checker"
-	"github.com/kirillinakin/pingcast/internal/bootstrap"
 	natsadapter "github.com/kirillinakin/pingcast/internal/adapter/nats"
-	"github.com/kirillinakin/pingcast/internal/adapter/postgres"
 	redisadapter "github.com/kirillinakin/pingcast/internal/adapter/redis"
+	"github.com/kirillinakin/pingcast/internal/bootstrap"
 	"github.com/kirillinakin/pingcast/internal/config"
 	"github.com/kirillinakin/pingcast/internal/database"
-	"github.com/kirillinakin/pingcast/internal/domain"
-	"github.com/kirillinakin/pingcast/internal/port"
 	"github.com/kirillinakin/pingcast/internal/observability"
-	sqlcgen "github.com/kirillinakin/pingcast/internal/sqlc/gen"
 	"github.com/kirillinakin/pingcast/internal/version"
 )
 
@@ -40,171 +30,70 @@ func main() {
 
 	cfg, err := config.LoadChecker()
 	if err != nil {
-		slog.Error("failed to load config", "error", err)
+		slog.Error("config", "error", err)
 		os.Exit(1)
 	}
 
-	// PostgreSQL
 	devMode := os.Getenv("DEV_MODE") == "true"
-	slowQueryTracer := observability.NewSlowQueryTracer(100*time.Millisecond, devMode)
-	//nolint:gosec // G115: MaxDBConns from env config, typical 5-15, far below int32 max
-	pool, err := database.Connect(ctx, cfg.DatabaseURL, int32(cfg.MaxDBConns), database.WithTracer(slowQueryTracer))
+	tracer := observability.NewSlowQueryTracer(100*time.Millisecond, devMode)
+	//nolint:gosec // G115: MaxDBConns far below int32 max
+	pool, err := database.Connect(ctx, cfg.DatabaseURL, int32(cfg.MaxDBConns), database.WithTracer(tracer))
 	if err != nil {
-		slog.Error("failed to connect to database", "error", err)
+		slog.Error("db connect", "error", err)
 		os.Exit(1)
 	}
 	defer pool.Close()
 
-	queries := sqlcgen.New(pool)
-
-	// Redis
 	rdb, err := redisadapter.Connect(ctx, cfg.RedisURL)
 	if err != nil {
-		slog.Error("failed to connect to redis", "error", err)
+		slog.Error("redis connect", "error", err)
 		os.Exit(1)
 	}
 	defer rdb.Close()
 
-	// NATS
 	nc, err := natsadapter.Connect(cfg.NatsURL)
 	if err != nil {
-		slog.Error("failed to connect to nats", "error", err)
+		slog.Error("nats connect", "error", err)
 		os.Exit(1)
 	}
 	defer func() { _ = nc.Drain() }()
 
 	js, err := jetstream.New(nc)
 	if err != nil {
-		slog.Error("failed to create jetstream context", "error", err)
+		slog.Error("jetstream", "error", err)
+		os.Exit(1)
+	}
+	if err := natsadapter.SetupStreams(ctx, js); err != nil {
+		slog.Error("streams", "error", err)
 		os.Exit(1)
 	}
 
-	if streamsErr := natsadapter.SetupStreams(ctx, js); streamsErr != nil {
-		slog.Error("failed to setup nats streams", "error", streamsErr)
-		os.Exit(1)
-	}
-
-	// Repos (scheduler only needs monitor repo for loading active monitors)
 	cipher, err := bootstrap.InitCipher(cfg.EncryptionConfig)
 	if err != nil {
-		slog.Error("failed to initialize encryption", "error", err)
+		slog.Error("cipher", "error", err)
 		os.Exit(1)
 	}
-	monitorRepo := postgres.NewMonitorRepo(pool, queries, cipher)
-	checkResultRepo := postgres.NewCheckResultRepo(queries)
 
-	// Redsync for distributed locks
-	rs := redisadapter.NewRedsync(rdb)
-	schedulerMutex := rs.NewMutex("lock:scheduler:leader", redsync.WithExpiry(10*time.Second))
-
-	// Check task publisher (scheduler → NATS)
-	checkPub := natsadapter.NewCheckPublisher(js)
-
-	// Leader scheduler with instance ID for tracing transitions
-	hostname, _ := os.Hostname()
-	instanceID := fmt.Sprintf("%s-%d", hostname, os.Getpid())
-	leaderScheduler := checker.NewLeaderScheduler(schedulerMutex, checkPub, instanceID)
-
-	// Load existing monitors
-	activeMonitors, err := monitorRepo.ListActive(ctx)
+	sched, err := bootstrap.NewScheduler(bootstrap.SchedulerDeps{
+		Pool:          pool,
+		Redis:         rdb,
+		JS:            js,
+		Cipher:        cipher,
+		RetentionDays: cfg.RetentionDays,
+	})
 	if err != nil {
-		slog.Error("failed to load active monitors", "error", err)
-		os.Exit(1)
-	}
-	for i := range activeMonitors {
-		leaderScheduler.Add(&activeMonitors[i])
-	}
-	slog.Info("loaded monitors", "count", len(activeMonitors))
-
-	// Subscribe to monitor changes BEFORE starting the scheduler (Issue 3.1).
-	// Subscribe buffers NATS messages while Run starts with complete state.
-	monitorSub := natsadapter.NewMonitorSubscriber(js)
-	if err := monitorSub.Subscribe(ctx, func(ctx context.Context, event port.MonitorChangedEvent) error {
-		switch event.Action {
-		case domain.ActionCreate, domain.ActionUpdate, domain.ActionResume:
-			mon := &domain.Monitor{
-				ID:                 event.MonitorID,
-				Name:               event.Name,
-				Type:               event.Type,
-				CheckConfig:        event.CheckConfig,
-				IntervalSeconds:    event.IntervalSeconds,
-				AlertAfterFailures: event.AlertAfterFailures,
-				IsPaused:           event.IsPaused,
-			}
-			leaderScheduler.Add(mon)
-		case domain.ActionDelete, domain.ActionPause:
-			leaderScheduler.Remove(event.MonitorID)
-		}
-		slog.Info("processed monitor change", "action", event.Action, "monitor_id", event.MonitorID)
-		return nil
-	}); err != nil {
-		slog.Error("failed to subscribe to monitor changes", "error", err)
+		slog.Error("compose scheduler", "error", err)
 		os.Exit(1)
 	}
 
-	// Start leader scheduler AFTER subscribing (Issue 3.1)
-	go leaderScheduler.Run(ctx)
+	sched.Start(ctx)
+	slog.Info("scheduler started")
 
-	// Data retention cleanup + partition management (daily, with distributed lock)
-	// Tracked via WaitGroup so shutdown waits for completion (Issue 3.2).
-	var cleanupWg sync.WaitGroup
-	cleanupMutex := rs.NewMutex("lock:cleanup:retention", redsync.WithExpiry(1*time.Hour))
-	cleanupWg.Add(1)
-	go func() {
-		defer cleanupWg.Done()
-		ticker := time.NewTicker(24 * time.Hour)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				if err := cleanupMutex.Lock(); err != nil {
-					// Differentiate lock contention (normal) from infrastructure errors (Issue 3.3)
-					if errors.Is(err, redsync.ErrFailed) {
-						slog.Debug("cleanup lock held by another instance, skipping")
-					} else {
-						slog.Warn("cleanup lock failed (infrastructure issue)", "error", err)
-					}
-					continue
-				}
-
-				cutoff := time.Now().Add(-time.Duration(cfg.RetentionDays) * 24 * time.Hour)
-				deleted, err := checkResultRepo.DeleteOlderThan(ctx, cutoff)
-				if err != nil {
-					slog.Error("retention cleanup failed", "error", err)
-				} else if deleted > 0 {
-					slog.Info("retention cleanup", "deleted_rows", deleted)
-				}
-
-				rangeStart := time.Date(time.Now().Year(), time.Now().Month()+1, 1, 0, 0, 0, 0, time.UTC)
-				rangeEnd := rangeStart.AddDate(0, 1, 0)
-				safeName := pgx.Identifier{fmt.Sprintf("check_results_%d_%02d", rangeStart.Year(), rangeStart.Month())}.Sanitize()
-				ddl := fmt.Sprintf(
-					"CREATE TABLE IF NOT EXISTS %s PARTITION OF check_results FOR VALUES FROM ('%s') TO ('%s')",
-					safeName,
-					rangeStart.Format("2006-01-02"),
-					rangeEnd.Format("2006-01-02"),
-				)
-				if _, err = pool.Exec(ctx, ddl); err != nil {
-					slog.Error("partition creation failed", "partition", safeName, "error", err)
-				} else {
-					slog.Info("ensured partition exists", "partition", safeName)
-				}
-
-				if _, err := cleanupMutex.Unlock(); err != nil {
-					slog.Error("failed to release cleanup lock", "error", err)
-				}
-			}
-		}
-	}()
-
-	slog.Info("scheduler started", "monitors", len(activeMonitors))
 	<-ctx.Done()
 	slog.Info("scheduler shutting down")
 
-	monitorSub.Stop()
-	leaderScheduler.Stop()
-	cleanupWg.Wait() // Wait for cleanup goroutine before closing DB pool (Issue 3.2)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+	sched.Stop(shutdownCtx)
 	slog.Info("scheduler shutdown complete")
 }
