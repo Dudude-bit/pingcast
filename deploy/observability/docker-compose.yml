@@ -18,6 +18,8 @@ services:
     depends_on:
       - tempo
       - loki
+    networks:
+      - dokploy
 
   tempo:
     image: grafana/tempo:2.3.1
@@ -29,6 +31,8 @@ services:
       - tempo-data:/var/tempo
     expose:
       - "3200"
+    networks:
+      - dokploy
 
   loki:
     image: grafana/loki:2.9.4
@@ -36,6 +40,8 @@ services:
       - "3100"
     volumes:
       - loki-data:/loki
+    networks:
+      - dokploy
 
   grafana:
     image: grafana/grafana:10.3.1
@@ -54,6 +60,8 @@ services:
     depends_on:
       - tempo
       - loki
+    networks:
+      - dokploy
 
 configs:
   collector-config:
@@ -67,7 +75,7 @@ configs:
 # notifier containers (running as Swarm services) can reach the
 # collector via internal DNS.
 networks:
-  default:
+  dokploy:
     name: dokploy-network
     external: true
 
