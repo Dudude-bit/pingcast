@@ -120,6 +120,34 @@ func (s *LeaderScheduler) dispatchDueChecks(ctx context.Context) {
 	}
 }
 
+// DispatchAll publishes a check task for every non-paused monitor
+// regardless of lastTick. Tests use this to force a deterministic
+// fan-out without running the ticker/leader loop. Production code
+// paths use Run() → dispatchDueChecks() unchanged.
+func (s *LeaderScheduler) DispatchAll(ctx context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, sm := range s.monitors {
+		if sm.monitor.IsPaused {
+			continue
+		}
+		if err := s.publisher.Publish(ctx, sm.monitor.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// MonitorCount returns the number of monitors currently registered.
+// Tests use it to verify Add/Remove bookkeeping without reaching into
+// the unexported map.
+func (s *LeaderScheduler) MonitorCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.monitors)
+}
+
 // Stop stops the scheduler. Releases the lock only if currently leader.
 func (s *LeaderScheduler) Stop() {
 	s.cancel()
