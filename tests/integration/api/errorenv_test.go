@@ -43,3 +43,13 @@ func TestErrorEnvelope_NotFound_Returns404(t *testing.T) {
 	resp := s.GET(t, "/api/monitors/00000000-0000-0000-0000-000000000000")
 	harness.AssertError(t, resp, 404, "NOT_FOUND")
 }
+
+// Unknown routes hit the catch-all in setup.go and return the
+// canonical envelope instead of Fiber's default "Cannot <METHOD> <path>"
+// plaintext.
+func TestErrorEnvelope_UnknownRoute_Returns404(t *testing.T) {
+	h := harness.New(t)
+	s := h.App.NewSession()
+	resp := s.GET(t, "/nonexistent/path")
+	harness.AssertError(t, resp, 404, "NOT_FOUND")
+}

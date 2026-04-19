@@ -57,6 +57,14 @@ func SetupApp(
 		},
 	})
 
+	// Catch-all 404 so unmatched routes return the canonical error
+	// envelope instead of Fiber's default "Cannot <METHOD> <path>"
+	// plaintext. Registered last so it only fires when no earlier
+	// handler matches.
+	app.Use(func(c *fiber.Ctx) error {
+		return httperr.WriteNotFound(c, "route")
+	})
+
 	return app
 }
 

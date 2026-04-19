@@ -98,9 +98,20 @@ func (s *Server) Register(c *fiber.Ctx) error {
 }
 
 func (s *Server) Login(c *fiber.Ctx) error {
-	var req apigen.LoginRequest
-	if err := c.BodyParser(&req); err != nil {
+	// Same permissive-parse trick as Register — openapi_types.Email
+	// rejects invalid emails at UnmarshalJSON, which would mask a
+	// well-formed JSON + bad email as 400 MALFORMED_JSON instead of
+	// surfacing a 401 UNAUTHORIZED from the auth service.
+	var raw struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if err := c.BodyParser(&raw); err != nil {
 		return httperr.WriteMalformedJSON(c)
+	}
+	req := apigen.LoginRequest{
+		Email:    openapi_types.Email(raw.Email),
+		Password: raw.Password,
 	}
 
 	allowed, err := s.rateLimiter.Allow(c.UserContext(), string(req.Email))
