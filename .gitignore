@@ -1,4 +1,8 @@
 /pingcast
+/api
+/scheduler
+/worker
+/notifier
 *.exe
 .env
 .env.*
