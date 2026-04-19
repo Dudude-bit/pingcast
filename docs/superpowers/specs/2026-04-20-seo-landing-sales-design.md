@@ -3,7 +3,7 @@
 **Date:** 2026-04-20
 **Status:** pending user review
 **Author:** Kirill
-**Effort:** ~5 sprints (≈5 weeks of solo evening work)
+**Effort:** 5 sprints, realistically 8–12 weeks elapsed for solo evening work (2–3 hr/day). Sprint 1 is by far the heaviest (~3 weeks); Sprints 2–4 are 1.5–2 weeks each; Sprint 5 is 1 week of execution + ongoing distribution. Aggressive on-paper week-per-sprint cadence is only possible if the author goes full-time.
 
 ## §1 — Problem
 
@@ -172,7 +172,10 @@ and copy stay in sync.
 ### Pricing-page copy locks
 
 - Use the words "founder's price" and "first 100 customers" verbatim. The
-  scarcity must be real; we hard-cap at 100 in LemonSqueezy.
+  scarcity must be real — enforcement mechanism in §6 (Sprint 1):
+  webhook tracks active founder-variant subscription count, dashboard
+  stops linking to the founder checkout once 100 is reached, retail $19
+  takes over.
 - No "billed annually" / "billed monthly" toggle in v1 — single price,
   monthly only. Annual revisited after the A/B.
 - No FAQ on the pricing page — push it back to the landing FAQ to reduce
@@ -199,6 +202,10 @@ pointed at the file or surface that owns the work.
   `/import/atlassian` (Pro-gated), link from
   `/alternatives/atlassian-statuspage`. Pin to one current Atlassian schema
   version; reject unknown versions with a helpful error.
+- **Public stats endpoint** — `GET /api/stats/public` (no auth, 5-min
+  cached) returning `{monitors_count, incidents_resolved, public_status_pages}`.
+  Powers the trust-bar live counter on the landing. Trivial — one sqlc
+  query, one handler, one Redis cache key.
 - **LemonSqueezy product** — create the Pro product with two price
   variants ($9 founder, $19 retail). Plumb through the existing webhook
   (`internal/adapter/http/webhook.go`) so `subscription_created` flips
@@ -265,8 +272,14 @@ into client islands so the SEO-relevant content ships in the SSR HTML.
    a sample branded status page (custom logo, custom color, sample
    incident timeline). Demonstrates the product, not just claims it.
 3. **Trust bar** — keep `30s checks`, `MIT`, `Go + Postgres`. Replace
-   `< 10s alert latency` with **live counter** of monitors + incidents
-   (server-rendered from the API).
+   `< 10s alert latency` with a **live counter** of monitors + incidents
+   (SSR-fetched from a new public stats endpoint —
+   `GET /api/stats/public` returning `{monitors_count, incidents_resolved}`,
+   cached 5 min, no auth). Endpoint is part of Sprint 1 deliverables. If
+   numbers are embarrassingly small at launch (< 50 monitors, < 100
+   incidents), keep the existing static `< 10s alert latency` line and
+   defer the counter swap to post-launch when the numbers earn the
+   spotlight.
 4. **"Why not Atlassian / Statuspage.io"** — new section. Three columns:
    `Price ($9 vs $29)`, `Setup time (10 min vs 1 day)`, `Self-hostable
    escape hatch`. Anchor link from the comparison table.
@@ -403,7 +416,9 @@ In order:
 3. **Telegram channels** — pitch to CodeFreeze, Технологический Сок,
    "Мониторинг и алертинг". Personal note + value to their audience.
 4. **IndieHackers** — milestone post: "Open-source status page hits
-   $X MRR." Wait until ≥ 3 paying Pro customers exist before this.
+   $X MRR." Conditional on ≥ 3 paying Pro customers existing — if Sprint
+   5 launches without them, slip this step to a later week. The Sprint 5
+   schedule does not block on it.
 5. **r/selfhosted** — angle: "I shipped a self-hostable status page."
    Lead with the GitHub link, mention SaaS as escape hatch.
 6. **ProductHunt** — schedule for a Tuesday 00:01 PT, with 5 hunters
@@ -426,9 +441,9 @@ weighted by `checkout_completed` retention at 30d.
 
 | Sprint | Theme | Deliverables |
 |---|---|---|
-| **1** | Foundation + status-page polish | Domain registered + 301; incident states + manual updates; Atlassian importer; LemonSqueezy product (Pro $9/$19); pricing page rewrite; landing copy rewrite; JSON-LD enrichment; Plausible installed; bootstrap-proof outreach to 10 indie SaaS |
+| **1** | Foundation + status-page polish | Domain registered + 301; incident states + manual updates; Atlassian importer; LemonSqueezy product (Pro $9/$19) + cap enforcement; public stats endpoint (`GET /api/stats/public`); pricing page rewrite; landing copy rewrite; JSON-LD enrichment; Plausible installed; bootstrap-proof outreach to 10 indie SaaS |
 | **2** | Pro v1 + viral hooks | Branded status page; SSL expiry warnings; 1y retention + CSV export; maintenance windows; SVG badge endpoint |
-| **3** | Pro v2 + distribution hooks | Custom domain (wildcard cert + Traefik); email subscriptions (double opt-in); multi-monitor groups; embeddable JS widget |
+| **3** | Pro v2 + distribution hooks | Custom domain (per-subdomain HTTP-01 cert via Traefik + ACME queue); email subscriptions (double opt-in); multi-monitor groups; embeddable JS widget |
 | **4** | SEO content | next-intl + RU mirror; 5 alternatives pages; 7 category/listicle pages; blog scaffold + 3 launch articles RU+EN; newsletter scaffold |
 | **5** | Launch + pricing A/B | Habr v2; vc.ru; Telegram; IndieHackers; r/selfhosted; ProductHunt prep; Twitter/X build-in-public; pricing A/B begins |
 
