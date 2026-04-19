@@ -63,8 +63,8 @@ func main() {
 		slog.Error("jetstream", "error", err)
 		os.Exit(1)
 	}
-	if err := natsadapter.SetupStreams(ctx, js); err != nil {
-		slog.Error("streams", "error", err)
+	if streamsErr := natsadapter.SetupStreams(ctx, js); streamsErr != nil {
+		slog.Error("streams", "error", streamsErr)
 		os.Exit(1)
 	}
 
