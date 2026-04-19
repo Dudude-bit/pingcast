@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -11,19 +10,11 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/kirillinakin/pingcast/internal/adapter/channel"
-	"github.com/kirillinakin/pingcast/internal/bootstrap"
 	natsadapter "github.com/kirillinakin/pingcast/internal/adapter/nats"
-	"github.com/kirillinakin/pingcast/internal/adapter/postgres"
-	smtpadapter "github.com/kirillinakin/pingcast/internal/adapter/smtp"
-	"github.com/kirillinakin/pingcast/internal/adapter/telegram"
-	"github.com/kirillinakin/pingcast/internal/adapter/webhook"
-	"github.com/kirillinakin/pingcast/internal/app"
+	"github.com/kirillinakin/pingcast/internal/bootstrap"
 	"github.com/kirillinakin/pingcast/internal/config"
 	"github.com/kirillinakin/pingcast/internal/database"
-	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/observability"
-	sqlcgen "github.com/kirillinakin/pingcast/internal/sqlc/gen"
 	"github.com/kirillinakin/pingcast/internal/version"
 )
 
@@ -38,111 +29,64 @@ func main() {
 
 	cfg, err := config.LoadNotifier()
 	if err != nil {
-		slog.Error("failed to load config", "error", err)
+		slog.Error("config", "error", err)
 		os.Exit(1)
 	}
 
-	// PostgreSQL (for channel lookup)
 	devMode := os.Getenv("DEV_MODE") == "true"
-	slowQueryTracer := observability.NewSlowQueryTracer(100*time.Millisecond, devMode)
-	//nolint:gosec // G115: MaxDBConns from env config, typical 5-15, far below int32 max
-	pool, err := database.Connect(ctx, cfg.DatabaseURL, int32(cfg.MaxDBConns), database.WithTracer(slowQueryTracer))
+	tracer := observability.NewSlowQueryTracer(100*time.Millisecond, devMode)
+	//nolint:gosec // G115
+	pool, err := database.Connect(ctx, cfg.DatabaseURL, int32(cfg.MaxDBConns), database.WithTracer(tracer))
 	if err != nil {
-		slog.Error("failed to connect to database", "error", err)
+		slog.Error("db connect", "error", err)
 		os.Exit(1)
 	}
 	defer pool.Close()
 
-	queries := sqlcgen.New(pool)
-	cipher, err := bootstrap.InitCipher(cfg.EncryptionConfig)
-	if err != nil {
-		slog.Error("failed to initialize encryption", "error", err)
-		os.Exit(1)
-	}
-	channelRepo := postgres.NewChannelRepo(pool, queries, cipher)
-	monitorRepo := postgres.NewMonitorRepo(pool, queries, cipher)
-	failedAlertRepo := postgres.NewFailedAlertRepo(queries)
-
-	// NATS
 	nc, err := natsadapter.Connect(cfg.NatsURL)
 	if err != nil {
-		slog.Error("failed to connect to nats", "error", err)
+		slog.Error("nats connect", "error", err)
 		os.Exit(1)
 	}
 	defer func() { _ = nc.Drain() }()
 
 	js, err := jetstream.New(nc)
 	if err != nil {
-		slog.Error("failed to create jetstream context", "error", err)
+		slog.Error("jetstream", "error", err)
+		os.Exit(1)
+	}
+	if err := natsadapter.SetupStreams(ctx, js); err != nil {
+		slog.Error("streams", "error", err)
 		os.Exit(1)
 	}
 
-	if streamsErr := natsadapter.SetupStreams(ctx, js); streamsErr != nil {
-		slog.Error("failed to setup nats streams", "error", streamsErr)
+	cipher, err := bootstrap.InitCipher(cfg.EncryptionConfig)
+	if err != nil {
+		slog.Error("cipher", "error", err)
 		os.Exit(1)
 	}
 
-	// Channel registry (notifier: sending mode, only register with valid credentials)
-	channelReg := channel.NewRegistry()
-	if cfg.TelegramToken != "" {
-		channelReg.Register(domain.ChannelTelegram, "Telegram", telegram.NewFactory(cfg.TelegramToken))
-	} else {
-		slog.Warn("telegram channel disabled: TELEGRAM_BOT_TOKEN not set")
-	}
-	if cfg.SMTPHost != "" {
-		channelReg.Register(domain.ChannelEmail, "Email", smtpadapter.NewFactory(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPFrom))
-	} else {
-		slog.Warn("email channel disabled: SMTP_HOST not set")
-	}
-	channelReg.Register(domain.ChannelWebhook, "Webhook", webhook.NewFactory())
-	if len(channelReg.Types()) == 1 {
-		slog.Warn("only webhook channel active, telegram and email disabled")
-	}
-
-	// Business metrics
-	metrics := observability.NewMetrics()
-
-	// Alert service
-	alertSvc := app.NewAlertService(channelRepo, monitorRepo, channelReg, failedAlertRepo, metrics)
-
-	// Subscribe to alerts
-	alertSub := natsadapter.NewAlertSubscriber(js)
-	if err := alertSub.Subscribe(ctx, func(ctx context.Context, event *domain.AlertEvent) error {
-		return alertSvc.Handle(ctx, event)
-	}); err != nil {
-		slog.Error("failed to subscribe to alerts", "error", err)
+	n, err := bootstrap.NewNotifier(bootstrap.NotifierDeps{
+		Pool:          pool,
+		NATS:          nc,
+		JS:            js,
+		Cipher:        cipher,
+		TelegramToken: cfg.TelegramToken,
+		SMTPHost:      cfg.SMTPHost,
+		SMTPPort:      cfg.SMTPPort,
+		SMTPUser:      cfg.SMTPUser,
+		SMTPPass:      cfg.SMTPPass,
+		SMTPFrom:      cfg.SMTPFrom,
+	})
+	if err != nil {
+		slog.Error("compose notifier", "error", err)
 		os.Exit(1)
 	}
-
-	// DLQ consumer: persist alerts that exhausted MaxDeliver (Issue 2.4)
-	dlqConsumer := natsadapter.NewDLQConsumer(nc)
-	if err := dlqConsumer.Subscribe(ctx, func(ctx context.Context, streamName, consumerName string, streamSeq uint64, data []byte) error {
-		errMsg := fmt.Sprintf("max deliveries exhausted: stream=%s consumer=%s seq=%d", streamName, consumerName, streamSeq)
-		return failedAlertRepo.Create(ctx, data, errMsg, nil)
-	}); err != nil {
-		slog.Error("failed to subscribe to DLQ advisories", "error", err)
-		os.Exit(1)
-	}
-	slog.Info("DLQ consumer started for ALERTS stream")
 
 	slog.Info("notifier started")
 	<-ctx.Done()
 	slog.Info("notifier shutting down")
 
-	// Graceful shutdown — drain in-flight alert deliveries
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer shutdownCancel()
-
-	done := make(chan struct{})
-	go func() {
-		alertSub.Stop()
-		dlqConsumer.Stop()
-		close(done)
-	}()
-	select {
-	case <-done:
-		slog.Info("notifier shutdown complete")
-	case <-shutdownCtx.Done():
-		slog.Warn("notifier shutdown timed out, force stopping")
-	}
+	n.Stop()
+	slog.Info("notifier shutdown complete")
 }

@@ -31,10 +31,23 @@ type AlertService struct {
 	registry     port.ChannelRegistry
 	failedAlerts port.FailedAlertRepo
 	metrics      port.Metrics
+
+	// sendOverrides, if non-nil for a given ChannelType, replaces the
+	// registry-built sender for that type. Used by integration tests
+	// to inject FakeTelegram/FakeSMTP/FakeWebhookSink. Production
+	// constructor leaves it nil.
+	sendOverrides map[domain.ChannelType]port.AlertSender
 }
 
 func NewAlertService(channels port.ChannelRepo, monitors port.MonitorRepo, registry port.ChannelRegistry, failedAlerts port.FailedAlertRepo, metrics port.Metrics) *AlertService {
 	return &AlertService{channels: channels, monitors: monitors, registry: registry, failedAlerts: failedAlerts, metrics: metrics}
+}
+
+// WithSendOverrides installs per-type AlertSender overrides on the
+// service. Test-only; production code passes nil or skips this call.
+func (s *AlertService) WithSendOverrides(overrides map[domain.ChannelType]port.AlertSender) *AlertService {
+	s.sendOverrides = overrides
+	return s
 }
 
 func (s *AlertService) Registry() port.ChannelRegistry {
@@ -85,17 +98,23 @@ func (s *AlertService) Handle(ctx context.Context, event *domain.AlertEvent) err
 		}
 		ch := ch
 		g.Go(func() error {
-			sender, err := s.registry.CreateSender(ch.Type, ch.ID, ch.Config)
-			if err != nil {
-				slog.Error("failed to create sender", "channel_id", ch.ID, "type", ch.Type, "error", err)
-				if s.metrics != nil {
-					s.metrics.RecordAlertSent(gCtx, string(ch.Type), false, "config_error")
+			var sender port.AlertSender
+			if override, ok := s.sendOverrides[ch.Type]; ok {
+				sender = override
+			} else {
+				built, err := s.registry.CreateSender(ch.Type, ch.ID, ch.Config)
+				if err != nil {
+					slog.Error("failed to create sender", "channel_id", ch.ID, "type", ch.Type, "error", err)
+					if s.metrics != nil {
+						s.metrics.RecordAlertSent(gCtx, string(ch.Type), false, "config_error")
+					}
+					mu.Lock()
+					failedIDs = append(failedIDs, ch.ID)
+					failed++
+					mu.Unlock()
+					return nil // don't abort other goroutines
 				}
-				mu.Lock()
-				failedIDs = append(failedIDs, ch.ID)
-				failed++
-				mu.Unlock()
-				return nil // don't abort other goroutines
+				sender = built
 			}
 
 			chCtx, chCancel := context.WithTimeout(gCtx, 10*time.Second)
