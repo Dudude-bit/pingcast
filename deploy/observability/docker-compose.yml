@@ -1,0 +1,69 @@
+version: "3.9"
+
+# Observability stack for PingCast — deployed as a standalone compose
+# app in Dokploy. All services share a Docker network; the API /
+# scheduler / worker / notifier point their OTEL_EXPORTER_OTLP_ENDPOINT
+# at otel-collector.<namespace>:4317 (internal Dokploy DNS).
+
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.96.0
+    command: ["--config=/etc/otel/config.yaml"]
+    configs:
+      - source: collector-config
+        target: /etc/otel/config.yaml
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "8889:8889"
+    depends_on:
+      - tempo
+      - loki
+
+  tempo:
+    image: grafana/tempo:2.3.1
+    command: ["-config.file=/etc/tempo.yaml"]
+    configs:
+      - source: tempo-config
+        target: /etc/tempo.yaml
+    volumes:
+      - tempo-data:/var/tempo
+    ports:
+      - "3200:3200"
+
+  loki:
+    image: grafana/loki:2.9.4
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki-data:/loki
+
+  grafana:
+    image: grafana/grafana:10.3.1
+    configs:
+      - source: grafana-datasources
+        target: /etc/grafana/provisioning/datasources/datasources.yaml
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_ADMIN_PASSWORD: "${GF_ADMIN_PASSWORD:-admin}"
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - tempo
+      - loki
+
+configs:
+  collector-config:
+    file: ./collector-config.yaml
+  tempo-config:
+    file: ./tempo.yaml
+  grafana-datasources:
+    file: ./grafana-datasources.yaml
+
+volumes:
+  tempo-data:
+  loki-data:
+  grafana-data:
