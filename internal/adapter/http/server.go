@@ -653,10 +653,17 @@ func (s *Server) UnbindChannel(c *fiber.Ctx, id openapi_types.UUID, channelId op
 
 func domainChannelToAPI(ch *domain.NotificationChannel) apigen.NotificationChannel {
 	typ := string(ch.Type)
-	config, err := ch.ParseConfig()
-	if err != nil {
-		slog.Error("failed to parse channel config", "channel_id", ch.ID, "error", err)
+
+	// Spec §8.9: secrets in channel config (bot_token, webhook url,
+	// smtp_password) must be redacted on every read path — the
+	// plaintext value left the server once at creation and never again.
+	redacted := domain.RedactChannelConfig(ch.Type, ch.Config)
+	var config map[string]any
+	if err := json.Unmarshal(redacted, &config); err != nil {
+		slog.Error("failed to parse redacted channel config", "channel_id", ch.ID, "error", err)
+		config = map[string]any{}
 	}
+
 	return apigen.NotificationChannel{
 		Id:        (*openapi_types.UUID)(&ch.ID),
 		Name:      &ch.Name,

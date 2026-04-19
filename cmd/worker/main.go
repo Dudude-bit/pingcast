@@ -11,7 +11,6 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	natsadapter "github.com/kirillinakin/pingcast/internal/adapter/nats"
-	redisadapter "github.com/kirillinakin/pingcast/internal/adapter/redis"
 	"github.com/kirillinakin/pingcast/internal/bootstrap"
 	"github.com/kirillinakin/pingcast/internal/config"
 	"github.com/kirillinakin/pingcast/internal/database"
@@ -44,13 +43,10 @@ func main() {
 	}
 	defer pool.Close()
 
-	rdb, err := redisadapter.Connect(ctx, cfg.RedisURL)
-	if err != nil {
-		slog.Error("redis connect", "error", err)
-		os.Exit(1)
-	}
-	defer rdb.Close()
-	_ = rdb // kept for future feature hooks (rate-limits on worker)
+	// Worker doesn't need Redis — scheduler owns leader-election locks,
+	// API owns rate-limits + sessions. Adding it back would be a drive-by
+	// feature. Keep the config field in case a future host-limit lives
+	// here, but don't open a connection we don't use.
 
 	nc, err := natsadapter.Connect(cfg.NatsURL)
 	if err != nil {
