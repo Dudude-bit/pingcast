@@ -1,5 +1,3 @@
-version: "3.9"
-
 # Observability stack for PingCast — deployed as a standalone compose
 # app in Dokploy. Ports are not bound to the host: the otel-collector
 # is reachable by other Dokploy services via internal DNS
@@ -64,6 +62,14 @@ configs:
     file: ./tempo.yaml
   grafana-datasources:
     file: ./grafana-datasources.yaml
+
+# Join the Dokploy-wide overlay so the api / scheduler / worker /
+# notifier containers (running as Swarm services) can reach the
+# collector via internal DNS.
+networks:
+  default:
+    name: dokploy-network
+    external: true
 
 volumes:
   tempo-data:
