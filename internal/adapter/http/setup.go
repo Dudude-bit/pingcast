@@ -1,6 +1,8 @@
 package httpadapter
 
 import (
+	"strings"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
@@ -18,6 +20,7 @@ func SetupApp(
 	webhookHandler *WebhookHandler,
 	apiKeyRepo port.APIKeyRepo,
 	healthChecker *HealthChecker,
+	rls *port.RateLimiters,
 ) *fiber.App {
 	app := fiber.New(fiber.Config{
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
@@ -41,19 +44,18 @@ func SetupApp(
 	app.Get("/healthz", healthChecker.Healthz)
 	app.Get("/readyz", healthChecker.Readyz)
 
-	// /logout page form-POST was removed post-Next.js migration (spec §8.6).
-	// The only logout endpoint is POST /api/auth/logout.
-
 	// Webhooks (no auth — HMAC-protected by handler; spec §7)
 	app.Post("/webhook/lemonsqueezy", webhookHandler.HandleLemonSqueezy)
 	app.Post("/webhook/telegram/:token", webhookHandler.HandleTelegramWebhook)
 
 	// JSON API — uses oapi-codegen generated RegisterHandlers.
 	// Auth middleware gates every /api/* path except register, login,
-	// and the public status page.
+	// and the public status page. Rate-limiters run AFTER auth so
+	// write/read buckets can key on user.ID.
 	apigen.RegisterHandlersWithOptions(app, server, apigen.FiberServerOptions{
 		Middlewares: []apigen.MiddlewareFunc{
 			authMiddlewareSelector(authService, apiKeyRepo),
+			apiRateLimitSelector(rls),
 		},
 	})
 
@@ -88,5 +90,34 @@ func authMiddlewareSelector(authService *app.AuthService, apiKeyRepo port.APIKey
 
 		// All other /api/ routes need auth (session cookie or API key)
 		return AuthMiddleware(authService, apiKeyRepo)(c)
+	}
+}
+
+// apiRateLimitSelector returns a middleware that applies the right
+// scoped rate-limiter based on the request path/method.
+//   - /api/status/{slug} (public)      → rls.Status, keyed by IP+slug
+//   - Authenticated GET /api/...       → rls.Read,   keyed by user.ID
+//   - Authenticated POST/PUT/DELETE    → rls.Write,  keyed by user.ID
+//
+// Register and Login keep their inline limiters (scopes need IP /
+// email keys and a Reset on success, respectively).
+func apiRateLimitSelector(rls *port.RateLimiters) apigen.MiddlewareFunc {
+	return func(c *fiber.Ctx) error {
+		path := c.Path()
+		if !strings.HasPrefix(path, "/api/") {
+			return c.Next()
+		}
+		if path == "/api/auth/register" || path == "/api/auth/login" {
+			return c.Next() // handled inline
+		}
+		if strings.HasPrefix(path, "/api/status/") {
+			return rateLimitMW(rls.Status, ipSlugKey, 1)(c)
+		}
+
+		method := c.Method()
+		if method == fiber.MethodGet || method == fiber.MethodHead {
+			return rateLimitMW(rls.Read, userKey, 1)(c)
+		}
+		return rateLimitMW(rls.Write, userKey, 1)(c)
 	}
 }

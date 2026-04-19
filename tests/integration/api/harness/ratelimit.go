@@ -7,9 +7,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
-	goredis "github.com/redis/go-redis/v9"
 
 	natsadapter "github.com/kirillinakin/pingcast/internal/adapter/nats"
 	redisadapter "github.com/kirillinakin/pingcast/internal/adapter/redis"
@@ -18,56 +16,37 @@ import (
 	"github.com/kirillinakin/pingcast/internal/port"
 )
 
-// App is the test-scoped wrapper over bootstrap.App. It also holds
-// infrastructure handles so tests can inspect state and harness
-// helpers can reset between tests.
-type App struct {
-	*bootstrap.App
-
-	Pool  *pgxpool.Pool
-	Redis *goredis.Client
-	NATS  *nats.Conn
-	JS    jetstream.JetStream
-
-	// Per-test deterministic replacements injected into
-	// bootstrap.AppDeps via Clock/Random fields.
-	Clock *FakeClock
-	Rand  *FakeRandom
-
-	SMTP     *FakeSMTP
-	Telegram *FakeTelegram
-	Webhook  *FakeWebhookSink
-}
-
-// NewApp composes a fresh API app wired to the shared test containers.
-// The caller is responsible for App.Close() via t.Cleanup.
-func NewApp(t *testing.T) *App {
+// NewAppWithRateLimits composes an isolated App with the given
+// rate-limit config. Used by C4 tests that need tight per-scope
+// buckets to exercise burst + Retry-After behaviour.
+//
+// A fresh Postgres pool / Redis client / NATS conn is spun up against
+// the shared containers so the caller can reuse harness.Reset() +
+// RegisterAndLogin flows without competing with other tests.
+func NewAppWithRateLimits(t *testing.T, cfg *port.RateLimitConfig) *App {
 	t.Helper()
 
 	c := GetContainers()
 	if c == nil {
-		t.Fatal("harness not initialized (TestMain did not run?)")
+		t.Fatal("harness not initialized")
 	}
 	ctx := context.Background()
 
 	pool, err := pgxpool.New(ctx, c.PostgresURL)
 	if err != nil {
-		t.Fatalf("pg pool: %v", err)
+		t.Fatalf("pg: %v", err)
 	}
-
 	rdb, err := redisadapter.Connect(ctx, c.RedisURL)
 	if err != nil {
 		pool.Close()
 		t.Fatalf("redis: %v", err)
 	}
-
 	nc, err := natsadapter.Connect(c.NATSURL)
 	if err != nil {
 		pool.Close()
 		_ = rdb.Close()
 		t.Fatalf("nats: %v", err)
 	}
-
 	js, err := jetstream.New(nc)
 	if err != nil {
 		pool.Close()
@@ -75,14 +54,12 @@ func NewApp(t *testing.T) *App {
 		_ = nc.Drain()
 		t.Fatalf("jetstream: %v", err)
 	}
-
-	if streamsErr := natsadapter.SetupStreams(ctx, js); streamsErr != nil {
+	if err := natsadapter.SetupStreams(ctx, js); err != nil {
 		pool.Close()
 		_ = rdb.Close()
 		_ = nc.Drain()
-		t.Fatalf("nats streams: %v", streamsErr)
+		t.Fatalf("streams: %v", err)
 	}
-
 	cipher, err := crypto.NewEncryptor(1, map[byte]string{1: testEncryptionKey()})
 	if err != nil {
 		t.Fatalf("cipher: %v", err)
@@ -90,18 +67,6 @@ func NewApp(t *testing.T) *App {
 
 	clock := NewFakeClock()
 	rng := NewFakeRandom()
-
-	// Rate-limit defaults for the harness: generous enough that the
-	// existing C1/C2 suites don't ever trip limiter flakes. Individual
-	// C4 tests that exercise burst behaviour use their own App with
-	// a tighter config via StartAppWithRateLimits.
-	defaultRL := &port.RateLimitConfig{
-		RegisterPerHour: 1000,
-		LoginPer15Min:   1000,
-		StatusPerMin:    1000,
-		WritePerMin:     1000,
-		ReadPerMin:      1000,
-	}
 
 	bootApp, err := bootstrap.NewApp(bootstrap.AppDeps{
 		Pool:               pool,
@@ -112,7 +77,7 @@ func NewApp(t *testing.T) *App {
 		LemonSqueezySecret: "test-ls-secret",
 		Clock:              clock,
 		Random:             rng,
-		RateLimits:         defaultRL,
+		RateLimits:         cfg,
 	})
 	if err != nil {
 		pool.Close()
@@ -127,7 +92,7 @@ func NewApp(t *testing.T) *App {
 	sink := NewFakeWebhookSink()
 	t.Cleanup(sink.Close)
 
-	return &App{
+	a := &App{
 		App:      bootApp,
 		Pool:     pool,
 		Redis:    rdb,
@@ -139,24 +104,7 @@ func NewApp(t *testing.T) *App {
 		Telegram: tg,
 		Webhook:  sink,
 	}
-}
-
-func (a *App) Close() {
-	if a == nil {
-		return
-	}
-	if a.Pool != nil {
-		a.Pool.Close()
-	}
-	if a.Redis != nil {
-		_ = a.Redis.Close()
-	}
-	if a.NATS != nil {
-		_ = a.NATS.Drain()
-	}
-}
-
-// testEncryptionKey is a fixed 32-byte base64 key for deterministic tests.
-func testEncryptionKey() string {
-	return "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+	t.Cleanup(a.Close)
+	a.Reset(t)
+	return a
 }

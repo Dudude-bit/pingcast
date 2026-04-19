@@ -44,6 +44,11 @@ type AppDeps struct {
 	Clock  port.Clock
 	Random port.Random
 
+	// RateLimits overrides per-scope bucket sizes and/or the window for
+	// all scopes (used by integration tests to run burst scenarios in
+	// seconds). Nil → production defaults from port.RateLimitDefaults.
+	RateLimits *port.RateLimitConfig
+
 	// Optional overrides. If nil, defaults are used.
 	Metrics *observability.Metrics
 }
@@ -133,15 +138,19 @@ func NewApp(deps AppDeps) (*App, error) {
 	)
 	alertSvc := app.NewAlertService(channelRepo, monitorRepo, channelReg, failedAlertRepo, metrics)
 
-	// Rate limiter (shared bucket for auth endpoints, 5/15min keyed per-target)
-	rateLimiter := redisadapter.NewRateLimiter(deps.Redis, "auth", 5, 15*time.Minute)
+	// Per-scope rate limiters (spec §5). Each bucket has its own prefix
+	// so they don't share keys, and its own max/window per scope. Tests
+	// override windows via deps.RateLimits.WindowOverride.
+	rls := buildRateLimiters(deps.Redis, deps.RateLimits)
 
 	// HTTP handlers
-	server := httpadapter.NewServer(authSvc, monitoringSvc, alertSvc, rateLimiter, apiKeyRepo)
+	server := httpadapter.NewServer(authSvc, monitoringSvc, alertSvc, rls, apiKeyRepo)
 	webhookHandler := httpadapter.NewWebhookHandler(authSvc, alertSvc, deps.LemonSqueezySecret)
 	healthChecker := httpadapter.NewHealthChecker(deps.Pool, deps.Redis, deps.NATS)
 
-	fiberApp := httpadapter.SetupApp(authSvc, server, webhookHandler, apiKeyRepo, healthChecker)
+	fiberApp := httpadapter.SetupApp(authSvc, server, webhookHandler, apiKeyRepo, healthChecker, rls)
+
+	_ = rls // silence if go vet flags rls as unused in some paths
 
 	return &App{
 		Fiber:           fiberApp,

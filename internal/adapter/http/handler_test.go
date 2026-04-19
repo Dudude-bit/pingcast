@@ -18,6 +18,7 @@ import (
 	"github.com/kirillinakin/pingcast/internal/app"
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/mocks"
+	"github.com/kirillinakin/pingcast/internal/port"
 )
 
 // ---------------------------------------------------------------------------
@@ -39,6 +40,16 @@ func setupTestApp(t *testing.T) *testEnv {
 	sessionRepo := mocks.NewMockSessionRepo(t)
 	rateLimiter := mocks.NewMockRateLimiter(t)
 	apiKeyRepo := mocks.NewMockAPIKeyRepo(t)
+	// All five scoped limiters share the same mock — existing tests
+	// only care that limiter.Allow returns true; the scoping is exercised
+	// by the integration suite, not this unit fixture.
+	rls := &port.RateLimiters{
+		Register: rateLimiter,
+		Login:    rateLimiter,
+		Status:   rateLimiter,
+		Write:    rateLimiter,
+		Read:     rateLimiter,
+	}
 	monitorRepo := mocks.NewMockMonitorRepo(t)
 	channelRepo := mocks.NewMockChannelRepo(t)
 	checkResultRepo := mocks.NewMockCheckResultRepo(t)
@@ -60,11 +71,11 @@ func setupTestApp(t *testing.T) *testEnv {
 	)
 	alertService := app.NewAlertService(channelRepo, monitorRepo, channelRegistry, failedAlertRepo, metrics)
 
-	server := NewServer(authService, monitoringService, alertService, rateLimiter, apiKeyRepo)
+	server := NewServer(authService, monitoringService, alertService, rls, apiKeyRepo)
 	webhookHandler := NewWebhookHandler(authService, alertService, "test-secret")
 
 	healthChecker := &HealthChecker{}
-	fiberApp := SetupApp(authService, server, webhookHandler, apiKeyRepo, healthChecker)
+	fiberApp := SetupApp(authService, server, webhookHandler, apiKeyRepo, healthChecker, rls)
 
 	return &testEnv{
 		app:         fiberApp,

@@ -22,26 +22,26 @@ import (
 
 // Server implements apigen.ServerInterface using app services.
 type Server struct {
-	auth        *app.AuthService
-	monitoring  *app.MonitoringService
-	alerts      *app.AlertService
-	rateLimiter port.RateLimiter
-	apiKeys     port.APIKeyRepo
+	auth       *app.AuthService
+	monitoring *app.MonitoringService
+	alerts     *app.AlertService
+	rl         *port.RateLimiters
+	apiKeys    port.APIKeyRepo
 }
 
 func NewServer(
 	auth *app.AuthService,
 	monitoring *app.MonitoringService,
 	alerts *app.AlertService,
-	rateLimiter port.RateLimiter,
+	rl *port.RateLimiters,
 	apiKeys port.APIKeyRepo,
 ) *Server {
 	return &Server{
-		auth:        auth,
-		monitoring:  monitoring,
-		alerts:      alerts,
-		rateLimiter: rateLimiter,
-		apiKeys:     apiKeys,
+		auth:       auth,
+		monitoring: monitoring,
+		alerts:     alerts,
+		rl:         rl,
+		apiKeys:    apiKeys,
 	}
 }
 
@@ -69,9 +69,8 @@ func (s *Server) Register(c *fiber.Ctx) error {
 		Password: raw.Password,
 	}
 
-	// Rate limit by IP (spec §5: register 10/hour/IP — current bucket is
-	// the shared auth bucket at 5/15min; refine in Phase 4 polish)
-	allowed, err := s.rateLimiter.Allow(c.UserContext(), c.IP())
+	// Spec §5: register 10/hour/IP (RateLimiters.Register).
+	allowed, err := s.rl.Register.Allow(c.UserContext(), c.IP())
 	if err != nil {
 		return httperr.Write(c, fmt.Errorf("rate limiter: %w", err))
 	}
@@ -114,7 +113,10 @@ func (s *Server) Login(c *fiber.Ctx) error {
 		Password: raw.Password,
 	}
 
-	allowed, err := s.rateLimiter.Allow(c.UserContext(), string(req.Email))
+	// Spec §5: login 5/15min/email (RateLimiters.Login). Counter is
+	// cleared on success (below) so a user who eventually types the
+	// right password regains headroom.
+	allowed, err := s.rl.Login.Allow(c.UserContext(), string(req.Email))
 	if err != nil {
 		return httperr.Write(c, fmt.Errorf("rate limiter: %w", err))
 	}
@@ -127,7 +129,7 @@ func (s *Server) Login(c *fiber.Ctx) error {
 		return httperr.WriteUnauthorized(c)
 	}
 
-	_ = s.rateLimiter.Reset(c.UserContext(), string(req.Email))
+	_ = s.rl.Login.Reset(c.UserContext(), string(req.Email))
 	setSessionCookie(c, sessionID)
 
 	return c.JSON(apigen.AuthResponse{
