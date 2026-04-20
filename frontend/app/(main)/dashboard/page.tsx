@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { MonitorList } from "@/components/features/monitors/monitor-list";
+import { GettingStarted } from "@/components/features/common/getting-started";
 
 export default function DashboardPage() {
   return (
@@ -22,6 +23,7 @@ export default function DashboardPage() {
           <Plus className="mr-2 h-4 w-4" /> New monitor
         </Link>
       </div>
+      <GettingStarted />
       <MonitorList />
     </div>
   );
