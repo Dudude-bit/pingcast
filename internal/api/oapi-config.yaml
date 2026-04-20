@@ -1,5 +1,9 @@
 package: gen
-output: gen/server.go
+# Path is resolved relative to the CWD of `go generate ./tools/...` (= tools/).
+# Points at the real apigen file that the rest of the project imports —
+# without this, generation silently wrote to tools/gen/server.go and the
+# actual internal/api/gen/server.go went stale.
+output: ../internal/api/gen/server.go
 generate:
   fiber-server: true
   models: true

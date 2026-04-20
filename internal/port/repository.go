@@ -65,3 +65,15 @@ type IncidentRepo interface {
 type FailedAlertRepo interface {
 	Create(ctx context.Context, event json.RawMessage, errMsg string, failedChannelIDs []uuid.UUID) error
 }
+
+// PublicStats is the shape returned by the unauthenticated /api/stats/public
+// endpoint. Powers the landing-page trust-bar live counter.
+type PublicStats struct {
+	MonitorsCount     int64
+	IncidentsResolved int64
+	PublicStatusPages int64
+}
+
+type StatsRepo interface {
+	GetPublic(ctx context.Context) (PublicStats, error)
+}

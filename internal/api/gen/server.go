@@ -318,6 +318,13 @@ type NotificationChannel struct {
 	Type      *string                 `json:"type,omitempty"`
 }
 
+// PublicStats defines model for PublicStats.
+type PublicStats struct {
+	IncidentsResolved int64 `json:"incidents_resolved"`
+	MonitorsCount     int64 `json:"monitors_count"`
+	PublicStatusPages int64 `json:"public_status_pages"`
+}
+
 // RegisterRequest defines model for RegisterRequest.
 type RegisterRequest struct {
 	Email    openapi_types.Email `json:"email"`
@@ -464,6 +471,9 @@ type ServerInterface interface {
 
 	// (POST /api/monitors/{id}/pause)
 	ToggleMonitorPause(c *fiber.Ctx, id openapi_types.UUID) error
+
+	// (GET /api/stats/public)
+	GetPublicStats(c *fiber.Ctx) error
 
 	// (GET /api/status/{slug})
 	GetStatusPage(c *fiber.Ctx, slug string) error
@@ -753,6 +763,12 @@ func (siw *ServerInterfaceWrapper) ToggleMonitorPause(c *fiber.Ctx) error {
 	return siw.Handler.ToggleMonitorPause(c, id)
 }
 
+// GetPublicStats operation middleware
+func (siw *ServerInterfaceWrapper) GetPublicStats(c *fiber.Ctx) error {
+
+	return siw.Handler.GetPublicStats(c)
+}
+
 // GetStatusPage operation middleware
 func (siw *ServerInterfaceWrapper) GetStatusPage(c *fiber.Ctx) error {
 
@@ -837,6 +853,8 @@ func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, option
 	router.Delete(options.BaseURL+"/api/monitors/:id/channels/:channelId", wrapper.UnbindChannel)
 
 	router.Post(options.BaseURL+"/api/monitors/:id/pause", wrapper.ToggleMonitorPause)
+
+	router.Get(options.BaseURL+"/api/stats/public", wrapper.GetPublicStats)
 
 	router.Get(options.BaseURL+"/api/status/:slug", wrapper.GetStatusPage)
 

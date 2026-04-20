@@ -27,6 +27,7 @@ packages:
       MonitorRepo: {}
       RateLimiter: {}
       SessionRepo: {}
+      StatsRepo: {}
       TxManager: {}
       UptimeRepo: {}
       UserRepo: {}

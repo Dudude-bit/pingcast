@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -27,6 +28,14 @@ type Server struct {
 	alerts     *app.AlertService
 	rl         *port.RateLimiters
 	apiKeys    port.APIKeyRepo
+	stats      port.StatsRepo
+
+	// publicStats memo-caches the stats query for 5 min; the underlying
+	// COUNTs are cheap but this is a public endpoint linked from the
+	// landing hero, so cache anyway.
+	psMu      sync.RWMutex
+	psCached  port.PublicStats
+	psExpires time.Time
 }
 
 func NewServer(
@@ -35,6 +44,7 @@ func NewServer(
 	alerts *app.AlertService,
 	rl *port.RateLimiters,
 	apiKeys port.APIKeyRepo,
+	stats port.StatsRepo,
 ) *Server {
 	return &Server{
 		auth:       auth,
@@ -42,6 +52,7 @@ func NewServer(
 		alerts:     alerts,
 		rl:         rl,
 		apiKeys:    apiKeys,
+		stats:      stats,
 	}
 }
 
@@ -371,6 +382,40 @@ func (s *Server) GetStatusPage(c *fiber.Ctx, slug string) error {
 
 func (s *Server) HealthCheck(c *fiber.Ctx) error {
 	return c.JSON(apigen.HealthResponse{Status: new("ok")})
+}
+
+// GetPublicStats returns landing-page counters with a 5-minute memo
+// cache. Unauthenticated (whitelisted in authMiddlewareSelector) and
+// public-rate-limited via the catch-all read bucket.
+func (s *Server) GetPublicStats(c *fiber.Ctx) error {
+	s.psMu.RLock()
+	if time.Now().Before(s.psExpires) {
+		stats := s.psCached
+		s.psMu.RUnlock()
+		return s.writePublicStats(c, stats)
+	}
+	s.psMu.RUnlock()
+
+	stats, err := s.stats.GetPublic(c.UserContext())
+	if err != nil {
+		return httperr.Write(c, fmt.Errorf("get public stats: %w", err))
+	}
+
+	s.psMu.Lock()
+	s.psCached = stats
+	s.psExpires = time.Now().Add(5 * time.Minute)
+	s.psMu.Unlock()
+
+	return s.writePublicStats(c, stats)
+}
+
+func (s *Server) writePublicStats(c *fiber.Ctx, stats port.PublicStats) error {
+	c.Set("Cache-Control", "public, max-age=300")
+	return c.JSON(apigen.PublicStats{
+		MonitorsCount:     stats.MonitorsCount,
+		IncidentsResolved: stats.IncidentsResolved,
+		PublicStatusPages: stats.PublicStatusPages,
+	})
 }
 
 // --- helpers ---

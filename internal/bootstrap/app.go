@@ -112,6 +112,7 @@ func NewApp(deps AppDeps) (*App, error) {
 	txm := postgres.NewTxManager(deps.Pool)
 	apiKeyRepo := postgres.NewAPIKeyRepo(queries)
 	failedAlertRepo := postgres.NewFailedAlertRepo(queries)
+	statsRepo := postgres.NewStatsRepo(queries)
 
 	// NATS publishers
 	monitorPub := natsadapter.NewMonitorPublisher(deps.JS)
@@ -144,7 +145,7 @@ func NewApp(deps AppDeps) (*App, error) {
 	rls := buildRateLimiters(deps.Redis, deps.RateLimits)
 
 	// HTTP handlers
-	server := httpadapter.NewServer(authSvc, monitoringSvc, alertSvc, rls, apiKeyRepo)
+	server := httpadapter.NewServer(authSvc, monitoringSvc, alertSvc, rls, apiKeyRepo, statsRepo)
 	webhookHandler := httpadapter.NewWebhookHandler(authSvc, alertSvc, deps.LemonSqueezySecret)
 	healthChecker := httpadapter.NewHealthChecker(deps.Pool, deps.Redis, deps.NATS)
 

@@ -84,6 +84,7 @@ func authMiddlewareSelector(authService *app.AuthService, apiKeyRepo port.APIKey
 
 		// Public API endpoints (no auth needed)
 		if path == "/api/auth/register" || path == "/api/auth/login" ||
+			path == "/api/stats/public" ||
 			(len(path) > 12 && path[:12] == "/api/status/") {
 			return c.Next()
 		}
@@ -111,6 +112,12 @@ func apiRateLimitSelector(rls *port.RateLimiters) apigen.MiddlewareFunc {
 			return c.Next() // handled inline
 		}
 		if strings.HasPrefix(path, "/api/status/") {
+			return rateLimitMW(rls.Status, ipSlugKey, 1)(c)
+		}
+		if path == "/api/stats/public" {
+			// Public cached endpoint — IP-keyed read bucket keeps a
+			// botnet from hammering it while the in-process 5-min
+			// memo absorbs normal load.
 			return rateLimitMW(rls.Status, ipSlugKey, 1)(c)
 		}
 

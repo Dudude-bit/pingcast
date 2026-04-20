@@ -373,6 +373,19 @@ paths:
         "204":
           description: Unbound
 
+  /api/stats/public:
+    get:
+      operationId: getPublicStats
+      tags: [stats]
+      description: Unauthenticated counters for the landing-page trust bar. Cached 5 minutes.
+      responses:
+        "200":
+          description: Public stats counters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicStats"
+
   /api/status/{slug}:
     get:
       operationId: getStatusPage
@@ -698,6 +711,20 @@ components:
           nullable: true
         cause:
           type: string
+
+    PublicStats:
+      type: object
+      required: [monitors_count, incidents_resolved, public_status_pages]
+      properties:
+        monitors_count:
+          type: integer
+          format: int64
+        incidents_resolved:
+          type: integer
+          format: int64
+        public_status_pages:
+          type: integer
+          format: int64
 
     StatusPageResponse:
       type: object

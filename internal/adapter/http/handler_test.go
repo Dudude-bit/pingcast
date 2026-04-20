@@ -71,7 +71,8 @@ func setupTestApp(t *testing.T) *testEnv {
 	)
 	alertService := app.NewAlertService(channelRepo, monitorRepo, channelRegistry, failedAlertRepo, metrics)
 
-	server := NewServer(authService, monitoringService, alertService, rls, apiKeyRepo)
+	statsRepo := mocks.NewMockStatsRepo(t)
+	server := NewServer(authService, monitoringService, alertService, rls, apiKeyRepo, statsRepo)
 	webhookHandler := NewWebhookHandler(authService, alertService, "test-secret")
 
 	healthChecker := &HealthChecker{}

@@ -155,7 +155,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        get: operations["getChannel"];
         put: operations["updateChannel"];
         post?: never;
         delete: operations["deleteChannel"];
@@ -191,6 +191,23 @@ export interface paths {
         put?: never;
         post?: never;
         delete: operations["unbindChannel"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stats/public": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Unauthenticated counters for the landing-page trust bar. Cached 5 minutes. */
+        get: operations["getPublicStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -379,6 +396,14 @@ export interface components {
             /** Format: date-time */
             resolved_at?: string | null;
             cause?: string;
+        };
+        PublicStats: {
+            /** Format: int64 */
+            monitors_count: number;
+            /** Format: int64 */
+            incidents_resolved: number;
+            /** Format: int64 */
+            public_status_pages: number;
         };
         StatusPageResponse: {
             slug?: string;
@@ -788,6 +813,37 @@ export interface operations {
             };
         };
     };
+    getChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Channel */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationChannel"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     updateChannel: {
         parameters: {
             query?: never;
@@ -879,6 +935,26 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    getPublicStats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Public stats counters */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicStats"];
+                };
             };
         };
     };
