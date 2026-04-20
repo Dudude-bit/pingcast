@@ -130,6 +130,22 @@ export function ChannelForm({ mode, initial }: Props) {
                 )}
               </div>
 
+              {selectedType === "email" ? (
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-900 dark:text-amber-200">
+                  <p className="font-medium">Email is on the Pro plan.</p>
+                  <p className="mt-1 text-xs text-amber-800/80 dark:text-amber-200/80">
+                    Save will return a validation error on Free. Telegram and
+                    Webhook work on every plan.{" "}
+                    <Link
+                      href="/pricing"
+                      className="underline underline-offset-2 hover:text-amber-950 dark:hover:text-amber-100"
+                    >
+                      See pricing →
+                    </Link>
+                  </p>
+                </div>
+              ) : null}
+
               <div className="rounded-md border border-border/60 bg-muted/20 p-4">
                 <DynamicConfigFields
                   fields={typeInfo?.schema?.fields}
