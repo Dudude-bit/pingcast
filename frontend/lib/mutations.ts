@@ -1,13 +1,48 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "./api";
+import { apiFetch, ApiError } from "./api";
 import { toast } from "sonner";
 import type { components } from "./openapi-types";
 
 type CreateReq = components["schemas"]["CreateMonitorRequest"];
 type UpdateReq = components["schemas"]["UpdateMonitorRequest"];
 type Monitor = components["schemas"]["Monitor"];
+
+/**
+ * mutationErrorToast centralises the shape of toast errors produced
+ * by every mutation. Instead of nine near-identical onError handlers
+ * all emitting "Create failed: {some message}", we branch once on the
+ * ApiError.code so the user gets intent-specific guidance:
+ *
+ *   - RATE_LIMITED       → "Slow down — try again in a minute."
+ *   - VALIDATION_FAILED  → just the server's message (already specific)
+ *   - UNAUTHORIZED       → "You're signed out — please log in again."
+ *   - other              → "{verb} failed: {message}" with the verb from
+ *                          the call site (Create / Update / Delete …)
+ *
+ * Non-ApiError errors (network drops, JSON parse failures) still get
+ * a "{verb} failed: …" prefix so the user can see what action broke.
+ */
+function mutationErrorToast(verb: string): (e: Error) => void {
+  return (e) => {
+    if (e instanceof ApiError) {
+      switch (e.code) {
+        case "RATE_LIMITED":
+          toast.error("Slow down — too many requests. Try again in a minute.");
+          return;
+        case "VALIDATION_FAILED":
+        case "CONFLICT":
+          toast.error(e.message);
+          return;
+        case "UNAUTHORIZED":
+          toast.error("You're signed out — please log in again.");
+          return;
+      }
+    }
+    toast.error(`${verb} failed: ${e.message}`);
+  };
+}
 
 export function useCreateMonitor() {
   const qc = useQueryClient();
@@ -18,7 +53,7 @@ export function useCreateMonitor() {
       qc.invalidateQueries({ queryKey: ["monitors"] });
       toast.success("Monitor created");
     },
-    onError: (e: Error) => toast.error(`Create failed: ${e.message}`),
+    onError: mutationErrorToast("Create"),
   });
 }
 
@@ -32,7 +67,7 @@ export function useUpdateMonitor(id: string) {
       qc.invalidateQueries({ queryKey: ["monitors", id] });
       toast.success("Monitor updated");
     },
-    onError: (e: Error) => toast.error(`Update failed: ${e.message}`),
+    onError: mutationErrorToast("Update"),
   });
 }
 
@@ -45,7 +80,7 @@ export function useDeleteMonitor() {
       qc.invalidateQueries({ queryKey: ["monitors"] });
       toast.success("Monitor deleted");
     },
-    onError: (e: Error) => toast.error(`Delete failed: ${e.message}`),
+    onError: mutationErrorToast("Delete"),
   });
 }
 
@@ -54,11 +89,12 @@ export function useTogglePause() {
   return useMutation({
     mutationFn: (id: string) =>
       apiFetch<Monitor>(`/monitors/${id}/pause`, { method: "POST" }),
-    onSuccess: (_, id) => {
+    onSuccess: (updated, id) => {
       qc.invalidateQueries({ queryKey: ["monitors"] });
       qc.invalidateQueries({ queryKey: ["monitors", id] });
+      toast.success(updated.is_paused ? "Monitor paused" : "Monitor resumed");
     },
-    onError: (e: Error) => toast.error(`Toggle failed: ${e.message}`),
+    onError: mutationErrorToast("Toggle"),
   });
 }
 
@@ -76,7 +112,7 @@ export function useCreateChannel() {
       qc.invalidateQueries({ queryKey: ["channels"] });
       toast.success("Channel created");
     },
-    onError: (e: Error) => toast.error(`Create failed: ${e.message}`),
+    onError: mutationErrorToast("Create"),
   });
 }
 
@@ -89,7 +125,7 @@ export function useUpdateChannel(id: string) {
       qc.invalidateQueries({ queryKey: ["channels"] });
       toast.success("Channel updated");
     },
-    onError: (e: Error) => toast.error(`Update failed: ${e.message}`),
+    onError: mutationErrorToast("Update"),
   });
 }
 
@@ -102,7 +138,7 @@ export function useDeleteChannel() {
       qc.invalidateQueries({ queryKey: ["channels"] });
       toast.success("Channel deleted");
     },
-    onError: (e: Error) => toast.error(`Delete failed: ${e.message}`),
+    onError: mutationErrorToast("Delete"),
   });
 }
 
@@ -118,7 +154,7 @@ export function useCreateAPIKey() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["api-keys"] });
     },
-    onError: (e: Error) => toast.error(`Create failed: ${e.message}`),
+    onError: mutationErrorToast("Create"),
   });
 }
 
@@ -131,6 +167,6 @@ export function useRevokeAPIKey() {
       qc.invalidateQueries({ queryKey: ["api-keys"] });
       toast.success("API key revoked");
     },
-    onError: (e: Error) => toast.error(`Revoke failed: ${e.message}`),
+    onError: mutationErrorToast("Revoke"),
   });
 }
