@@ -18,6 +18,27 @@ async function postAuth(
   });
 }
 
+/**
+ * errorFromResponse turns a non-2xx response into a user-facing
+ * message. Parses the canonical envelope when present; falls back to
+ * a status-specific default otherwise.
+ */
+async function errorFromResponse(res: Response, fallback: string): Promise<string> {
+  const raw = await res.text();
+  try {
+    const obj = JSON.parse(raw);
+    if (obj?.error?.code === "RATE_LIMITED") {
+      return "Too many attempts. Try again in a minute.";
+    }
+    if (typeof obj?.error?.message === "string" && obj.error.message.trim()) {
+      return obj.error.message;
+    }
+  } catch {
+    // Non-JSON body — drop to fallback.
+  }
+  return fallback;
+}
+
 async function copySessionCookie(res: Response): Promise<void> {
   const setCookie = res.headers.get("set-cookie");
   if (!setCookie) return;
@@ -44,6 +65,14 @@ export async function login(
 
   const res = await postAuth("/auth/login", { email, password });
   if (!res.ok) {
+    // Rate-limit is the only case worth surfacing specifically on
+    // login — everything else stays generic to avoid user-enumeration
+    // (whether the email is registered, whether password was wrong).
+    if (res.status === 429) {
+      return {
+        error: await errorFromResponse(res, "Too many attempts. Try again in a minute."),
+      };
+    }
     return { error: "Invalid email or password" };
   }
   await copySessionCookie(res);
@@ -60,7 +89,9 @@ export async function register(
 
   const res = await postAuth("/auth/register", { email, slug, password });
   if (!res.ok) {
-    return { error: "Registration failed" };
+    return {
+      error: await errorFromResponse(res, "Registration failed."),
+    };
   }
   await copySessionCookie(res);
   redirect("/dashboard");
