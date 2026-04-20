@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { sessionCookie } from "@/lib/session";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { ThemeToggle } from "./theme-toggle";
+import { LogoutButton } from "./logout-button";
 
 export async function Navbar() {
   const isLoggedIn = Boolean(await sessionCookie());
@@ -35,11 +36,7 @@ export async function Navbar() {
               >
                 Dashboard
               </Link>
-              <form action="/api/auth/logout" method="POST">
-                <Button type="submit" variant="ghost" size="sm">
-                  Logout
-                </Button>
-              </form>
+              <LogoutButton />
             </>
           ) : (
             <>
