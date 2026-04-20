@@ -538,11 +538,14 @@ func (s *Server) domainMonitorToAPIDetail(m *domain.Monitor, u24h, u7d, u30d flo
 
 func domainIncidentToAPI(i *domain.Incident) apigen.Incident {
 	return apigen.Incident{
-		Id:         &i.ID,
-		MonitorId:  (*openapi_types.UUID)(&i.MonitorID),
-		StartedAt:  &i.StartedAt,
+		Id:         i.ID,
+		MonitorId:  openapi_types.UUID(i.MonitorID),
+		StartedAt:  i.StartedAt,
 		ResolvedAt: i.ResolvedAt,
-		Cause:      &i.Cause,
+		Cause:      i.Cause,
+		State:      apigen.IncidentState(i.State),
+		IsManual:   i.IsManual,
+		Title:      i.Title,
 	}
 }
 

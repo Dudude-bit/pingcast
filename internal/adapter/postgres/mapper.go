@@ -194,5 +194,8 @@ func incidentFromRow(r gen.Incident) domain.Incident {
 		StartedAt:  r.StartedAt,
 		ResolvedAt: pgtypeTimestamptzToPtr(r.ResolvedAt),
 		Cause:      r.Cause,
+		State:      domain.IncidentState(r.State),
+		IsManual:   r.IsManual,
+		Title:      r.Title,
 	}
 }

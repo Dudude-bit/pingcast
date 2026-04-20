@@ -55,11 +55,24 @@ type UptimeRepo interface {
 }
 
 type IncidentRepo interface {
-	Create(ctx context.Context, monitorID uuid.UUID, cause string) (*domain.Incident, error)
+	Create(ctx context.Context, in CreateIncidentInput) (*domain.Incident, error)
 	Resolve(ctx context.Context, id int64, resolvedAt time.Time) error
+	UpdateState(ctx context.Context, id int64, state domain.IncidentState) error
+	GetByID(ctx context.Context, id int64) (*domain.Incident, error)
 	GetOpen(ctx context.Context, monitorID uuid.UUID) (*domain.Incident, error)
 	IsInCooldown(ctx context.Context, monitorID uuid.UUID) (bool, error)
 	ListByMonitorID(ctx context.Context, monitorID uuid.UUID, limit int) ([]domain.Incident, error)
+}
+
+// CreateIncidentInput unifies the parameters for incident creation so
+// auto-detected (worker-side) and manual (API-side) flows share one
+// surface. Callers fill State+IsManual+Title as appropriate.
+type CreateIncidentInput struct {
+	MonitorID uuid.UUID
+	Cause     string
+	State     domain.IncidentState
+	IsManual  bool
+	Title     *string
 }
 
 type FailedAlertRepo interface {

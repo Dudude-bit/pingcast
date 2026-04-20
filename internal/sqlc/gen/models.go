@@ -5,11 +5,57 @@
 package gen
 
 import (
+	"database/sql/driver"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+type IncidentState string
+
+const (
+	IncidentStateInvestigating IncidentState = "investigating"
+	IncidentStateIdentified    IncidentState = "identified"
+	IncidentStateMonitoring    IncidentState = "monitoring"
+	IncidentStateResolved      IncidentState = "resolved"
+)
+
+func (e *IncidentState) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = IncidentState(s)
+	case string:
+		*e = IncidentState(s)
+	default:
+		return fmt.Errorf("unsupported scan type for IncidentState: %T", src)
+	}
+	return nil
+}
+
+type NullIncidentState struct {
+	IncidentState IncidentState `json:"incident_state"`
+	Valid         bool          `json:"valid"` // Valid is true if IncidentState is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullIncidentState) Scan(value interface{}) error {
+	if value == nil {
+		ns.IncidentState, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.IncidentState.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullIncidentState) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.IncidentState), nil
+}
 
 type ApiKey struct {
 	ID         uuid.UUID          `json:"id"`
@@ -57,6 +103,9 @@ type Incident struct {
 	StartedAt  time.Time          `json:"started_at"`
 	ResolvedAt pgtype.Timestamptz `json:"resolved_at"`
 	Cause      string             `json:"cause"`
+	State      IncidentState      `json:"state"`
+	IsManual   bool               `json:"is_manual"`
+	Title      *string            `json:"title"`
 }
 
 type Monitor struct {

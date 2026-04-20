@@ -13,18 +13,27 @@ import (
 )
 
 const createIncident = `-- name: CreateIncident :one
-INSERT INTO incidents (monitor_id, cause)
-VALUES ($1, $2)
-RETURNING id, monitor_id, started_at, resolved_at, cause
+INSERT INTO incidents (monitor_id, cause, state, is_manual, title)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, monitor_id, started_at, resolved_at, cause, state, is_manual, title
 `
 
 type CreateIncidentParams struct {
-	MonitorID uuid.UUID `json:"monitor_id"`
-	Cause     string    `json:"cause"`
+	MonitorID uuid.UUID     `json:"monitor_id"`
+	Cause     string        `json:"cause"`
+	State     IncidentState `json:"state"`
+	IsManual  bool          `json:"is_manual"`
+	Title     *string       `json:"title"`
 }
 
 func (q *Queries) CreateIncident(ctx context.Context, arg CreateIncidentParams) (Incident, error) {
-	row := q.db.QueryRow(ctx, createIncident, arg.MonitorID, arg.Cause)
+	row := q.db.QueryRow(ctx, createIncident,
+		arg.MonitorID,
+		arg.Cause,
+		arg.State,
+		arg.IsManual,
+		arg.Title,
+	)
 	var i Incident
 	err := row.Scan(
 		&i.ID,
@@ -32,12 +41,36 @@ func (q *Queries) CreateIncident(ctx context.Context, arg CreateIncidentParams) 
 		&i.StartedAt,
 		&i.ResolvedAt,
 		&i.Cause,
+		&i.State,
+		&i.IsManual,
+		&i.Title,
+	)
+	return i, err
+}
+
+const getIncidentByID = `-- name: GetIncidentByID :one
+SELECT id, monitor_id, started_at, resolved_at, cause, state, is_manual, title
+FROM incidents WHERE id = $1
+`
+
+func (q *Queries) GetIncidentByID(ctx context.Context, id int64) (Incident, error) {
+	row := q.db.QueryRow(ctx, getIncidentByID, id)
+	var i Incident
+	err := row.Scan(
+		&i.ID,
+		&i.MonitorID,
+		&i.StartedAt,
+		&i.ResolvedAt,
+		&i.Cause,
+		&i.State,
+		&i.IsManual,
+		&i.Title,
 	)
 	return i, err
 }
 
 const getOpenIncidentByMonitorID = `-- name: GetOpenIncidentByMonitorID :one
-SELECT id, monitor_id, started_at, resolved_at, cause
+SELECT id, monitor_id, started_at, resolved_at, cause, state, is_manual, title
 FROM incidents
 WHERE monitor_id = $1 AND resolved_at IS NULL
 ORDER BY started_at DESC
@@ -53,6 +86,9 @@ func (q *Queries) GetOpenIncidentByMonitorID(ctx context.Context, monitorID uuid
 		&i.StartedAt,
 		&i.ResolvedAt,
 		&i.Cause,
+		&i.State,
+		&i.IsManual,
+		&i.Title,
 	)
 	return i, err
 }
@@ -73,7 +109,7 @@ func (q *Queries) IsInCooldown(ctx context.Context, monitorID uuid.UUID) (bool, 
 }
 
 const listIncidentsByMonitorID = `-- name: ListIncidentsByMonitorID :many
-SELECT id, monitor_id, started_at, resolved_at, cause
+SELECT id, monitor_id, started_at, resolved_at, cause, state, is_manual, title
 FROM incidents
 WHERE monitor_id = $1
 ORDER BY started_at DESC
@@ -100,6 +136,9 @@ func (q *Queries) ListIncidentsByMonitorID(ctx context.Context, arg ListIncident
 			&i.StartedAt,
 			&i.ResolvedAt,
 			&i.Cause,
+			&i.State,
+			&i.IsManual,
+			&i.Title,
 		); err != nil {
 			return nil, err
 		}
@@ -112,7 +151,7 @@ func (q *Queries) ListIncidentsByMonitorID(ctx context.Context, arg ListIncident
 }
 
 const resolveIncident = `-- name: ResolveIncident :exec
-UPDATE incidents SET resolved_at = $2 WHERE id = $1
+UPDATE incidents SET resolved_at = $2, state = 'resolved' WHERE id = $1
 `
 
 type ResolveIncidentParams struct {
@@ -122,5 +161,19 @@ type ResolveIncidentParams struct {
 
 func (q *Queries) ResolveIncident(ctx context.Context, arg ResolveIncidentParams) error {
 	_, err := q.db.Exec(ctx, resolveIncident, arg.ID, arg.ResolvedAt)
+	return err
+}
+
+const updateIncidentState = `-- name: UpdateIncidentState :exec
+UPDATE incidents SET state = $2 WHERE id = $1
+`
+
+type UpdateIncidentStateParams struct {
+	ID    int64         `json:"id"`
+	State IncidentState `json:"state"`
+}
+
+func (q *Queries) UpdateIncidentState(ctx context.Context, arg UpdateIncidentStateParams) error {
+	_, err := q.db.Exec(ctx, updateIncidentState, arg.ID, arg.State)
 	return err
 }

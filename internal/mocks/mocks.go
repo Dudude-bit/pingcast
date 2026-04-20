@@ -5161,8 +5161,8 @@ func (_m *MockIncidentRepo) EXPECT() *MockIncidentRepo_Expecter {
 }
 
 // Create provides a mock function for the type MockIncidentRepo
-func (_mock *MockIncidentRepo) Create(ctx context.Context, monitorID uuid.UUID, cause string) (*domain.Incident, error) {
-	ret := _mock.Called(ctx, monitorID, cause)
+func (_mock *MockIncidentRepo) Create(ctx context.Context, in port.CreateIncidentInput) (*domain.Incident, error) {
+	ret := _mock.Called(ctx, in)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Create")
@@ -5170,18 +5170,18 @@ func (_mock *MockIncidentRepo) Create(ctx context.Context, monitorID uuid.UUID, 
 
 	var r0 *domain.Incident
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, string) (*domain.Incident, error)); ok {
-		return returnFunc(ctx, monitorID, cause)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, port.CreateIncidentInput) (*domain.Incident, error)); ok {
+		return returnFunc(ctx, in)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, string) *domain.Incident); ok {
-		r0 = returnFunc(ctx, monitorID, cause)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, port.CreateIncidentInput) *domain.Incident); ok {
+		r0 = returnFunc(ctx, in)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*domain.Incident)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, uuid.UUID, string) error); ok {
-		r1 = returnFunc(ctx, monitorID, cause)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, port.CreateIncidentInput) error); ok {
+		r1 = returnFunc(ctx, in)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -5195,30 +5195,24 @@ type MockIncidentRepo_Create_Call struct {
 
 // Create is a helper method to define mock.On call
 //   - ctx context.Context
-//   - monitorID uuid.UUID
-//   - cause string
-func (_e *MockIncidentRepo_Expecter) Create(ctx interface{}, monitorID interface{}, cause interface{}) *MockIncidentRepo_Create_Call {
-	return &MockIncidentRepo_Create_Call{Call: _e.mock.On("Create", ctx, monitorID, cause)}
+//   - in port.CreateIncidentInput
+func (_e *MockIncidentRepo_Expecter) Create(ctx interface{}, in interface{}) *MockIncidentRepo_Create_Call {
+	return &MockIncidentRepo_Create_Call{Call: _e.mock.On("Create", ctx, in)}
 }
 
-func (_c *MockIncidentRepo_Create_Call) Run(run func(ctx context.Context, monitorID uuid.UUID, cause string)) *MockIncidentRepo_Create_Call {
+func (_c *MockIncidentRepo_Create_Call) Run(run func(ctx context.Context, in port.CreateIncidentInput)) *MockIncidentRepo_Create_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 uuid.UUID
+		var arg1 port.CreateIncidentInput
 		if args[1] != nil {
-			arg1 = args[1].(uuid.UUID)
-		}
-		var arg2 string
-		if args[2] != nil {
-			arg2 = args[2].(string)
+			arg1 = args[1].(port.CreateIncidentInput)
 		}
 		run(
 			arg0,
 			arg1,
-			arg2,
 		)
 	})
 	return _c
@@ -5229,7 +5223,75 @@ func (_c *MockIncidentRepo_Create_Call) Return(incident *domain.Incident, err er
 	return _c
 }
 
-func (_c *MockIncidentRepo_Create_Call) RunAndReturn(run func(ctx context.Context, monitorID uuid.UUID, cause string) (*domain.Incident, error)) *MockIncidentRepo_Create_Call {
+func (_c *MockIncidentRepo_Create_Call) RunAndReturn(run func(ctx context.Context, in port.CreateIncidentInput) (*domain.Incident, error)) *MockIncidentRepo_Create_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetByID provides a mock function for the type MockIncidentRepo
+func (_mock *MockIncidentRepo) GetByID(ctx context.Context, id int64) (*domain.Incident, error) {
+	ret := _mock.Called(ctx, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetByID")
+	}
+
+	var r0 *domain.Incident
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int64) (*domain.Incident, error)); ok {
+		return returnFunc(ctx, id)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int64) *domain.Incident); ok {
+		r0 = returnFunc(ctx, id)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*domain.Incident)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, int64) error); ok {
+		r1 = returnFunc(ctx, id)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockIncidentRepo_GetByID_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetByID'
+type MockIncidentRepo_GetByID_Call struct {
+	*mock.Call
+}
+
+// GetByID is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id int64
+func (_e *MockIncidentRepo_Expecter) GetByID(ctx interface{}, id interface{}) *MockIncidentRepo_GetByID_Call {
+	return &MockIncidentRepo_GetByID_Call{Call: _e.mock.On("GetByID", ctx, id)}
+}
+
+func (_c *MockIncidentRepo_GetByID_Call) Run(run func(ctx context.Context, id int64)) *MockIncidentRepo_GetByID_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 int64
+		if args[1] != nil {
+			arg1 = args[1].(int64)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockIncidentRepo_GetByID_Call) Return(incident *domain.Incident, err error) *MockIncidentRepo_GetByID_Call {
+	_c.Call.Return(incident, err)
+	return _c
+}
+
+func (_c *MockIncidentRepo_GetByID_Call) RunAndReturn(run func(ctx context.Context, id int64) (*domain.Incident, error)) *MockIncidentRepo_GetByID_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -5501,6 +5563,69 @@ func (_c *MockIncidentRepo_Resolve_Call) Return(err error) *MockIncidentRepo_Res
 }
 
 func (_c *MockIncidentRepo_Resolve_Call) RunAndReturn(run func(ctx context.Context, id int64, resolvedAt time.Time) error) *MockIncidentRepo_Resolve_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpdateState provides a mock function for the type MockIncidentRepo
+func (_mock *MockIncidentRepo) UpdateState(ctx context.Context, id int64, state domain.IncidentState) error {
+	ret := _mock.Called(ctx, id, state)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateState")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int64, domain.IncidentState) error); ok {
+		r0 = returnFunc(ctx, id, state)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockIncidentRepo_UpdateState_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateState'
+type MockIncidentRepo_UpdateState_Call struct {
+	*mock.Call
+}
+
+// UpdateState is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id int64
+//   - state domain.IncidentState
+func (_e *MockIncidentRepo_Expecter) UpdateState(ctx interface{}, id interface{}, state interface{}) *MockIncidentRepo_UpdateState_Call {
+	return &MockIncidentRepo_UpdateState_Call{Call: _e.mock.On("UpdateState", ctx, id, state)}
+}
+
+func (_c *MockIncidentRepo_UpdateState_Call) Run(run func(ctx context.Context, id int64, state domain.IncidentState)) *MockIncidentRepo_UpdateState_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 int64
+		if args[1] != nil {
+			arg1 = args[1].(int64)
+		}
+		var arg2 domain.IncidentState
+		if args[2] != nil {
+			arg2 = args[2].(domain.IncidentState)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockIncidentRepo_UpdateState_Call) Return(err error) *MockIncidentRepo_UpdateState_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockIncidentRepo_UpdateState_Call) RunAndReturn(run func(ctx context.Context, id int64, state domain.IncidentState) error) *MockIncidentRepo_UpdateState_Call {
 	_c.Call.Return(run)
 	return _c
 }

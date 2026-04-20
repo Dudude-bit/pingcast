@@ -695,6 +695,7 @@ components:
 
     Incident:
       type: object
+      required: [id, monitor_id, started_at, cause, state, is_manual]
       properties:
         id:
           type: integer
@@ -711,6 +712,14 @@ components:
           nullable: true
         cause:
           type: string
+        state:
+          type: string
+          enum: [investigating, identified, monitoring, resolved]
+        is_manual:
+          type: boolean
+        title:
+          type: string
+          nullable: true
 
     PublicStats:
       type: object

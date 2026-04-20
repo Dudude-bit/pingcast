@@ -1,13 +1,20 @@
 -- name: CreateIncident :one
-INSERT INTO incidents (monitor_id, cause)
-VALUES ($1, $2)
-RETURNING id, monitor_id, started_at, resolved_at, cause;
+INSERT INTO incidents (monitor_id, cause, state, is_manual, title)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, monitor_id, started_at, resolved_at, cause, state, is_manual, title;
 
 -- name: ResolveIncident :exec
-UPDATE incidents SET resolved_at = $2 WHERE id = $1;
+UPDATE incidents SET resolved_at = $2, state = 'resolved' WHERE id = $1;
+
+-- name: UpdateIncidentState :exec
+UPDATE incidents SET state = $2 WHERE id = $1;
+
+-- name: GetIncidentByID :one
+SELECT id, monitor_id, started_at, resolved_at, cause, state, is_manual, title
+FROM incidents WHERE id = $1;
 
 -- name: GetOpenIncidentByMonitorID :one
-SELECT id, monitor_id, started_at, resolved_at, cause
+SELECT id, monitor_id, started_at, resolved_at, cause, state, is_manual, title
 FROM incidents
 WHERE monitor_id = $1 AND resolved_at IS NULL
 ORDER BY started_at DESC
@@ -21,7 +28,7 @@ SELECT EXISTS(
 )::bool AS in_cooldown;
 
 -- name: ListIncidentsByMonitorID :many
-SELECT id, monitor_id, started_at, resolved_at, cause
+SELECT id, monitor_id, started_at, resolved_at, cause, state, is_manual, title
 FROM incidents
 WHERE monitor_id = $1
 ORDER BY started_at DESC

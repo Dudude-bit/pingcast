@@ -21,10 +21,17 @@ func NewIncidentRepo(q *gen.Queries) *IncidentRepo {
 	return &IncidentRepo{q: q}
 }
 
-func (r *IncidentRepo) Create(ctx context.Context, monitorID uuid.UUID, cause string) (*domain.Incident, error) {
+func (r *IncidentRepo) Create(ctx context.Context, in port.CreateIncidentInput) (*domain.Incident, error) {
+	state := in.State
+	if state == "" {
+		state = domain.IncidentStateInvestigating
+	}
 	row, err := r.q.CreateIncident(ctx, gen.CreateIncidentParams{
-		MonitorID: monitorID,
-		Cause:     cause,
+		MonitorID: in.MonitorID,
+		Cause:     in.Cause,
+		State:     gen.IncidentState(state),
+		IsManual:  in.IsManual,
+		Title:     in.Title,
 	})
 	if err != nil {
 		// Partial unique index (migration 016) — concurrent Create on a monitor
@@ -44,6 +51,22 @@ func (r *IncidentRepo) Resolve(ctx context.Context, id int64, resolvedAt time.Ti
 		ID:         id,
 		ResolvedAt: timeToPgtypeTimestamptz(resolvedAt),
 	})
+}
+
+func (r *IncidentRepo) UpdateState(ctx context.Context, id int64, state domain.IncidentState) error {
+	return r.q.UpdateIncidentState(ctx, gen.UpdateIncidentStateParams{
+		ID:    id,
+		State: gen.IncidentState(state),
+	})
+}
+
+func (r *IncidentRepo) GetByID(ctx context.Context, id int64) (*domain.Incident, error) {
+	row, err := r.q.GetIncidentByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	out := incidentFromRow(row)
+	return &out, nil
 }
 
 func (r *IncidentRepo) GetOpen(ctx context.Context, monitorID uuid.UUID) (*domain.Incident, error) {

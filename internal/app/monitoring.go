@@ -383,7 +383,12 @@ func (s *MonitoringService) handleDown(ctx context.Context, monitor *domain.Moni
 		cause = *result.ErrorMessage
 	}
 
-	incident, err := s.incidents.Create(ctx, monitor.ID, cause)
+	incident, err := s.incidents.Create(ctx, port.CreateIncidentInput{
+		MonitorID: monitor.ID,
+		Cause:     cause,
+		State:     domain.IncidentStateInvestigating,
+		IsManual:  false,
+	})
 	if err != nil {
 		// Partial unique index caught a concurrent Create — another goroutine
 		// already opened the incident. Skip (Issue 4.6).

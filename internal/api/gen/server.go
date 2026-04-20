@@ -41,6 +41,30 @@ func (e CreateAPIKeyRequestScopes) Valid() bool {
 	}
 }
 
+// Defines values for IncidentState.
+const (
+	Identified    IncidentState = "identified"
+	Investigating IncidentState = "investigating"
+	Monitoring    IncidentState = "monitoring"
+	Resolved      IncidentState = "resolved"
+)
+
+// Valid indicates whether the value is a known member of the IncidentState enum.
+func (e IncidentState) Valid() bool {
+	switch e {
+	case Identified:
+		return true
+	case Investigating:
+		return true
+	case Monitoring:
+		return true
+	case Resolved:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for MonitorCurrentStatus.
 const (
 	MonitorCurrentStatusDown    MonitorCurrentStatus = "down"
@@ -222,12 +246,18 @@ type HealthResponse struct {
 
 // Incident defines model for Incident.
 type Incident struct {
-	Cause      *string             `json:"cause,omitempty"`
-	Id         *int64              `json:"id,omitempty"`
-	MonitorId  *openapi_types.UUID `json:"monitor_id,omitempty"`
-	ResolvedAt *time.Time          `json:"resolved_at,omitempty"`
-	StartedAt  *time.Time          `json:"started_at,omitempty"`
+	Cause      string             `json:"cause"`
+	Id         int64              `json:"id"`
+	IsManual   bool               `json:"is_manual"`
+	MonitorId  openapi_types.UUID `json:"monitor_id"`
+	ResolvedAt *time.Time         `json:"resolved_at,omitempty"`
+	StartedAt  time.Time          `json:"started_at"`
+	State      IncidentState      `json:"state"`
+	Title      *string            `json:"title,omitempty"`
 }
+
+// IncidentState defines model for Incident.State.
+type IncidentState string
 
 // LoginRequest defines model for LoginRequest.
 type LoginRequest struct {
