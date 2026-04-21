@@ -64,8 +64,9 @@ func setupTestApp(t *testing.T) *testEnv {
 	eventPub := mocks.NewMockMonitorEventPublisher(t)
 
 	authService := app.NewAuthService(userRepo, sessionRepo, sysclock.New(), sysrand.New())
+	incidentUpdateRepo := mocks.NewMockIncidentUpdateRepo(t)
 	monitoringService := app.NewMonitoringService(
-		monitorRepo, channelRepo, checkResultRepo, incidentRepo,
+		monitorRepo, channelRepo, checkResultRepo, incidentRepo, incidentUpdateRepo,
 		userRepo, uptimeRepo, txManager, alertPub, eventPub, checkerRegistry, metrics,
 		sysclock.New(),
 	)

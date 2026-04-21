@@ -20,18 +20,19 @@ import (
 var ErrEventPublishFailed = fmt.Errorf("event publish failed")
 
 type MonitoringService struct {
-	monitors     port.MonitorRepo
-	channels     port.ChannelRepo
-	checkResults port.CheckResultRepo
-	incidents    port.IncidentRepo
-	users        port.UserRepo
-	uptime       port.UptimeRepo
-	txm          port.TxManager
-	alerts       port.AlertEventPublisher
-	events       port.MonitorEventPublisher
-	registry     port.CheckerRegistry
-	metrics      port.Metrics
-	clock        port.Clock
+	monitors        port.MonitorRepo
+	channels        port.ChannelRepo
+	checkResults    port.CheckResultRepo
+	incidents       port.IncidentRepo
+	incidentUpdates port.IncidentUpdateRepo
+	users           port.UserRepo
+	uptime          port.UptimeRepo
+	txm             port.TxManager
+	alerts          port.AlertEventPublisher
+	events          port.MonitorEventPublisher
+	registry        port.CheckerRegistry
+	metrics         port.Metrics
+	clock           port.Clock
 }
 
 func NewMonitoringService(
@@ -39,6 +40,7 @@ func NewMonitoringService(
 	channels port.ChannelRepo,
 	checkResults port.CheckResultRepo,
 	incidents port.IncidentRepo,
+	incidentUpdates port.IncidentUpdateRepo,
 	users port.UserRepo,
 	uptime port.UptimeRepo,
 	txm port.TxManager,
@@ -49,19 +51,147 @@ func NewMonitoringService(
 	clock port.Clock,
 ) *MonitoringService {
 	return &MonitoringService{
-		monitors:     monitors,
-		channels:     channels,
-		checkResults: checkResults,
-		incidents:    incidents,
-		users:        users,
-		uptime:       uptime,
-		txm:          txm,
-		alerts:       alerts,
-		events:       events,
-		registry:     registry,
-		metrics:      metrics,
-		clock:        clock,
+		monitors:        monitors,
+		channels:        channels,
+		checkResults:    checkResults,
+		incidents:       incidents,
+		incidentUpdates: incidentUpdates,
+		users:           users,
+		uptime:          uptime,
+		txm:             txm,
+		alerts:          alerts,
+		events:          events,
+		registry:        registry,
+		metrics:         metrics,
+		clock:           clock,
 	}
+}
+
+// --- Manual incident lifecycle (Pro-gated at HTTP layer) ---
+
+// ChangeIncidentStateInput captures a user-driven state transition on
+// an incident, paired with a narrative body posted to the timeline.
+type ChangeIncidentStateInput struct {
+	IncidentID int64
+	UserID     uuid.UUID
+	NewState   domain.IncidentState
+	UpdateBody string
+}
+
+// ChangeIncidentState validates ownership + transition, then atomically
+// updates the incident and appends an IncidentUpdate. Resolving also
+// sets resolved_at. Returns the IncidentUpdate that represents the post.
+func (s *MonitoringService) ChangeIncidentState(ctx context.Context, in ChangeIncidentStateInput) (*domain.IncidentUpdate, error) {
+	if !in.NewState.Valid() {
+		return nil, fmt.Errorf("invalid incident state %q", in.NewState)
+	}
+	if strings.TrimSpace(in.UpdateBody) == "" {
+		return nil, fmt.Errorf("update body is required")
+	}
+
+	inc, err := s.incidents.GetByID(ctx, in.IncidentID)
+	if err != nil {
+		return nil, err
+	}
+	monitor, err := s.monitors.GetByID(ctx, inc.MonitorID)
+	if err != nil {
+		return nil, err
+	}
+	if monitor.UserID != in.UserID {
+		return nil, domain.ErrForbidden
+	}
+	if err := inc.State.CanTransitionTo(in.NewState); err != nil {
+		return nil, err
+	}
+
+	var created *domain.IncidentUpdate
+	err = s.txm.Do(ctx, func(ctx context.Context) error {
+		if err := s.incidents.UpdateState(ctx, in.IncidentID, in.NewState); err != nil {
+			return fmt.Errorf("update state: %w", err)
+		}
+		if in.NewState == domain.IncidentStateResolved {
+			if err := s.incidents.Resolve(ctx, in.IncidentID, s.clock.Now()); err != nil {
+				return fmt.Errorf("resolve: %w", err)
+			}
+		}
+		u, err := s.incidentUpdates.Create(ctx, port.CreateIncidentUpdateInput{
+			IncidentID:     in.IncidentID,
+			State:          in.NewState,
+			Body:           in.UpdateBody,
+			PostedByUserID: in.UserID,
+		})
+		if err != nil {
+			return fmt.Errorf("append update: %w", err)
+		}
+		created = u
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return created, nil
+}
+
+// CreateManualIncidentInput opens a new user-authored incident against
+// a monitor the user owns.
+type CreateManualIncidentInput struct {
+	MonitorID uuid.UUID
+	UserID    uuid.UUID
+	Title     string
+	Body      string
+}
+
+// CreateManualIncident opens an incident in state=investigating with
+// is_manual=true, and appends the initial update with the given body.
+// Returns the created incident and its first update.
+func (s *MonitoringService) CreateManualIncident(ctx context.Context, in CreateManualIncidentInput) (*domain.Incident, *domain.IncidentUpdate, error) {
+	title := strings.TrimSpace(in.Title)
+	body := strings.TrimSpace(in.Body)
+	if title == "" {
+		return nil, nil, fmt.Errorf("title is required")
+	}
+	if body == "" {
+		return nil, nil, fmt.Errorf("body is required")
+	}
+
+	monitor, err := s.monitors.GetByID(ctx, in.MonitorID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if monitor.UserID != in.UserID {
+		return nil, nil, domain.ErrForbidden
+	}
+
+	var inc *domain.Incident
+	var upd *domain.IncidentUpdate
+	err = s.txm.Do(ctx, func(ctx context.Context) error {
+		created, err := s.incidents.Create(ctx, port.CreateIncidentInput{
+			MonitorID: in.MonitorID,
+			Cause:     title, // cause falls back to title for auto-rendered summaries
+			State:     domain.IncidentStateInvestigating,
+			IsManual:  true,
+			Title:     &title,
+		})
+		if err != nil {
+			return fmt.Errorf("create incident: %w", err)
+		}
+		u, err := s.incidentUpdates.Create(ctx, port.CreateIncidentUpdateInput{
+			IncidentID:     created.ID,
+			State:          domain.IncidentStateInvestigating,
+			Body:           body,
+			PostedByUserID: in.UserID,
+		})
+		if err != nil {
+			return fmt.Errorf("append initial update: %w", err)
+		}
+		inc = created
+		upd = u
+		return nil
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return inc, upd, nil
 }
 
 // Registry returns the checker registry.

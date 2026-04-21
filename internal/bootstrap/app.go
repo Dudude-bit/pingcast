@@ -135,7 +135,7 @@ func NewApp(deps AppDeps) (*App, error) {
 	// App services
 	authSvc := app.NewAuthService(userRepo, sessionRepo, clock, rng)
 	monitoringSvc := app.NewMonitoringService(
-		monitorRepo, channelRepo, checkResultRepo, incidentRepo,
+		monitorRepo, channelRepo, checkResultRepo, incidentRepo, incidentUpdateRepo,
 		userRepo, uptimeRepo, txm, alertPub, monitorPub, checkerReg, metrics,
 		clock,
 	)

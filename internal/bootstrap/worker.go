@@ -63,8 +63,9 @@ func NewWorker(deps WorkerDeps) (*Worker, error) {
 		clock = sysclock.New()
 	}
 
+	incidentUpdateRepo := postgres.NewIncidentUpdateRepo(queries)
 	svc := app.NewMonitoringService(
-		monitorRepo, channelRepo, checkResultRepo, incidentRepo,
+		monitorRepo, channelRepo, checkResultRepo, incidentRepo, incidentUpdateRepo,
 		userRepo, uptimeRepo, txm, alertPub, nil, registry, metrics, clock,
 	)
 
