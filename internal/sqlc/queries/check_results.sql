@@ -18,6 +18,19 @@ AND rn < COALESCE((SELECT rn FROM first_up), (SELECT COUNT(*) + 1 FROM ordered))
 -- name: DeleteCheckResultsOlderThan :execrows
 DELETE FROM check_results WHERE checked_at < $1;
 
+-- name: DeleteCheckResultsByPlan :execrows
+-- Plan-aware retention: Free users keep up to $1 worth of results, Pro
+-- users keep up to $2 worth. Both cutoffs are absolute timestamps
+-- computed in Go so the partition pruner can use them.
+DELETE FROM check_results cr
+USING monitors m, users u
+WHERE cr.monitor_id = m.id
+  AND m.user_id = u.id
+  AND (
+    (u.plan = 'free' AND cr.checked_at < $1)
+    OR (u.plan = 'pro' AND cr.checked_at < $2)
+  );
+
 -- name: GetResponseTimeChart :many
 SELECT
     date_trunc('hour', checked_at)::timestamptz AS bucket,

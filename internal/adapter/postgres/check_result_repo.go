@@ -38,6 +38,13 @@ func (r *CheckResultRepo) DeleteOlderThan(ctx context.Context, cutoff time.Time)
 	return r.q.DeleteCheckResultsOlderThan(ctx, cutoff)
 }
 
+func (r *CheckResultRepo) DeleteByPlan(ctx context.Context, freeCutoff, proCutoff time.Time) (int64, error) {
+	return r.q.DeleteCheckResultsByPlan(ctx, gen.DeleteCheckResultsByPlanParams{
+		CheckedAt:   freeCutoff,
+		CheckedAt_2: proCutoff,
+	})
+}
+
 func (r *CheckResultRepo) GetResponseTimeChart(ctx context.Context, monitorID uuid.UUID, since time.Time) ([]domain.ChartPoint, error) {
 	rows, err := r.q.GetResponseTimeChart(ctx, gen.GetResponseTimeChartParams{
 		MonitorID: monitorID,

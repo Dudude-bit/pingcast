@@ -33,3 +33,14 @@ FROM incidents
 WHERE monitor_id = $1
 ORDER BY started_at DESC
 LIMIT $2;
+
+-- name: ListIncidentsByUserIDForExport :many
+-- Flat incident rows joined to monitor name for CSV export. Ordered
+-- newest-first so the CSV opens in spreadsheets with recent events at
+-- the top.
+SELECT i.id, i.monitor_id, m.name AS monitor_name, i.started_at,
+       i.resolved_at, i.cause, i.state, i.is_manual, i.title
+FROM incidents i
+JOIN monitors m ON i.monitor_id = m.id
+WHERE m.user_id = $1 AND m.deleted_at IS NULL
+ORDER BY i.started_at DESC;

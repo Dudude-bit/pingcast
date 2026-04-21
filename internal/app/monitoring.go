@@ -107,6 +107,13 @@ func (s *MonitoringService) DeleteMaintenanceWindow(ctx context.Context, id int6
 	return s.maintenance.Delete(ctx, id, userID)
 }
 
+// ListIncidentsForExport returns every incident belonging to userID as
+// flat rows, joined to the monitor name. Powers the Pro-only CSV
+// export at /api/incidents/export.csv.
+func (s *MonitoringService) ListIncidentsForExport(ctx context.Context, userID uuid.UUID) ([]port.IncidentExportRow, error) {
+	return s.incidents.ListForExport(ctx, userID)
+}
+
 // ListIncidentUpdates returns the timeline for an incident. Public read
 // — the HTTP layer exposes this on /api/incidents/{id}/updates without
 // auth for rendering status-page timelines.

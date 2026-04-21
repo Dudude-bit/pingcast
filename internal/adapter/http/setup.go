@@ -52,6 +52,15 @@ func SetupApp(
 	// Registered outside the apigen router so we own the Content-Type.
 	app.Get("/status/:slug/badge.svg", server.GetStatusBadge)
 
+	// CSV incident export (Pro-only). Registered outside apigen so we
+	// own the text/csv content type + streaming body. Chain: auth →
+	// RequirePro → handler.
+	app.Get("/api/incidents/export.csv",
+		AuthMiddleware(authService, apiKeyRepo),
+		RequirePro(),
+		server.ExportIncidentsCSV,
+	)
+
 	// JSON API — uses oapi-codegen generated RegisterHandlers.
 	// Auth middleware gates every /api/* path except register, login,
 	// and the public status page. Rate-limiters run AFTER auth so

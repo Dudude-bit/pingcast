@@ -122,12 +122,18 @@ func NewScheduler(deps SchedulerDeps) (*Scheduler, error) {
 					slog.Warn("cleanup lock failed", "error", err)
 					continue
 				}
-				cutoff := time.Now().Add(-time.Duration(deps.RetentionDays) * 24 * time.Hour)
-				deleted, err := checkResultRepo.DeleteOlderThan(ctx, cutoff)
+				// Plan-aware retention (sprint 2 §6): Free users keep 30
+				// days; Pro users keep 365. RETENTION_DAYS is still the
+				// Free baseline so ops can tune it without a code change.
+				freeCutoff := time.Now().Add(-time.Duration(deps.RetentionDays) * 24 * time.Hour)
+				proCutoff := time.Now().AddDate(-1, 0, 0)
+				deleted, err := checkResultRepo.DeleteByPlan(ctx, freeCutoff, proCutoff)
 				if err != nil {
 					slog.Error("retention cleanup failed", "error", err)
 				} else if deleted > 0 {
-					slog.Info("retention cleanup", "deleted_rows", deleted)
+					slog.Info("retention cleanup",
+						"deleted_rows", deleted,
+						"free_cutoff", freeCutoff, "pro_cutoff", proCutoff)
 				}
 				rangeStart := time.Date(time.Now().Year(), time.Now().Month()+1, 1, 0, 0, 0, 0, time.UTC)
 				rangeEnd := rangeStart.AddDate(0, 1, 0)

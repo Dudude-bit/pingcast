@@ -59,6 +59,10 @@ type CheckResultRepo interface {
 	Insert(ctx context.Context, cr *domain.CheckResult) error
 	ConsecutiveFailures(ctx context.Context, monitorID uuid.UUID) (int, error)
 	DeleteOlderThan(ctx context.Context, cutoff time.Time) (int64, error)
+	// DeleteByPlan deletes results older than the given cutoffs, where
+	// freeCutoff applies to Free-tier users' results and proCutoff to
+	// Pro-tier users'. Enables the sprint-2 1-year-retention promise.
+	DeleteByPlan(ctx context.Context, freeCutoff, proCutoff time.Time) (int64, error)
 	GetResponseTimeChart(ctx context.Context, monitorID uuid.UUID, since time.Time) ([]domain.ChartPoint, error)
 }
 
@@ -76,6 +80,22 @@ type IncidentRepo interface {
 	GetOpen(ctx context.Context, monitorID uuid.UUID) (*domain.Incident, error)
 	IsInCooldown(ctx context.Context, monitorID uuid.UUID) (bool, error)
 	ListByMonitorID(ctx context.Context, monitorID uuid.UUID, limit int) ([]domain.Incident, error)
+	ListForExport(ctx context.Context, userID uuid.UUID) ([]IncidentExportRow, error)
+}
+
+// IncidentExportRow is a flat row used by the CSV export — the joined
+// monitor name is carried here so the handler doesn't need to reach
+// back into the monitor repo per incident.
+type IncidentExportRow struct {
+	ID          int64
+	MonitorID   uuid.UUID
+	MonitorName string
+	StartedAt   time.Time
+	ResolvedAt  *time.Time
+	Cause       string
+	State       domain.IncidentState
+	IsManual    bool
+	Title       *string
 }
 
 // CreateIncidentInput unifies the parameters for incident creation so

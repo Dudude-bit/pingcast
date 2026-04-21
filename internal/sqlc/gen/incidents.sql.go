@@ -7,6 +7,7 @@ package gen
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -133,6 +134,60 @@ func (q *Queries) ListIncidentsByMonitorID(ctx context.Context, arg ListIncident
 		if err := rows.Scan(
 			&i.ID,
 			&i.MonitorID,
+			&i.StartedAt,
+			&i.ResolvedAt,
+			&i.Cause,
+			&i.State,
+			&i.IsManual,
+			&i.Title,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listIncidentsByUserIDForExport = `-- name: ListIncidentsByUserIDForExport :many
+SELECT i.id, i.monitor_id, m.name AS monitor_name, i.started_at,
+       i.resolved_at, i.cause, i.state, i.is_manual, i.title
+FROM incidents i
+JOIN monitors m ON i.monitor_id = m.id
+WHERE m.user_id = $1 AND m.deleted_at IS NULL
+ORDER BY i.started_at DESC
+`
+
+type ListIncidentsByUserIDForExportRow struct {
+	ID          int64              `json:"id"`
+	MonitorID   uuid.UUID          `json:"monitor_id"`
+	MonitorName string             `json:"monitor_name"`
+	StartedAt   time.Time          `json:"started_at"`
+	ResolvedAt  pgtype.Timestamptz `json:"resolved_at"`
+	Cause       string             `json:"cause"`
+	State       IncidentState      `json:"state"`
+	IsManual    bool               `json:"is_manual"`
+	Title       *string            `json:"title"`
+}
+
+// Flat incident rows joined to monitor name for CSV export. Ordered
+// newest-first so the CSV opens in spreadsheets with recent events at
+// the top.
+func (q *Queries) ListIncidentsByUserIDForExport(ctx context.Context, userID uuid.UUID) ([]ListIncidentsByUserIDForExportRow, error) {
+	rows, err := q.db.Query(ctx, listIncidentsByUserIDForExport, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListIncidentsByUserIDForExportRow{}
+	for rows.Next() {
+		var i ListIncidentsByUserIDForExportRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.MonitorID,
+			&i.MonitorName,
 			&i.StartedAt,
 			&i.ResolvedAt,
 			&i.Cause,

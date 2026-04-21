@@ -5018,6 +5018,78 @@ func (_c *MockCheckResultRepo_ConsecutiveFailures_Call) RunAndReturn(run func(ct
 	return _c
 }
 
+// DeleteByPlan provides a mock function for the type MockCheckResultRepo
+func (_mock *MockCheckResultRepo) DeleteByPlan(ctx context.Context, freeCutoff time.Time, proCutoff time.Time) (int64, error) {
+	ret := _mock.Called(ctx, freeCutoff, proCutoff)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteByPlan")
+	}
+
+	var r0 int64
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Time, time.Time) (int64, error)); ok {
+		return returnFunc(ctx, freeCutoff, proCutoff)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Time, time.Time) int64); ok {
+		r0 = returnFunc(ctx, freeCutoff, proCutoff)
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, time.Time, time.Time) error); ok {
+		r1 = returnFunc(ctx, freeCutoff, proCutoff)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCheckResultRepo_DeleteByPlan_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeleteByPlan'
+type MockCheckResultRepo_DeleteByPlan_Call struct {
+	*mock.Call
+}
+
+// DeleteByPlan is a helper method to define mock.On call
+//   - ctx context.Context
+//   - freeCutoff time.Time
+//   - proCutoff time.Time
+func (_e *MockCheckResultRepo_Expecter) DeleteByPlan(ctx interface{}, freeCutoff interface{}, proCutoff interface{}) *MockCheckResultRepo_DeleteByPlan_Call {
+	return &MockCheckResultRepo_DeleteByPlan_Call{Call: _e.mock.On("DeleteByPlan", ctx, freeCutoff, proCutoff)}
+}
+
+func (_c *MockCheckResultRepo_DeleteByPlan_Call) Run(run func(ctx context.Context, freeCutoff time.Time, proCutoff time.Time)) *MockCheckResultRepo_DeleteByPlan_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 time.Time
+		if args[1] != nil {
+			arg1 = args[1].(time.Time)
+		}
+		var arg2 time.Time
+		if args[2] != nil {
+			arg2 = args[2].(time.Time)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCheckResultRepo_DeleteByPlan_Call) Return(n int64, err error) *MockCheckResultRepo_DeleteByPlan_Call {
+	_c.Call.Return(n, err)
+	return _c
+}
+
+func (_c *MockCheckResultRepo_DeleteByPlan_Call) RunAndReturn(run func(ctx context.Context, freeCutoff time.Time, proCutoff time.Time) (int64, error)) *MockCheckResultRepo_DeleteByPlan_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // DeleteOlderThan provides a mock function for the type MockCheckResultRepo
 func (_mock *MockCheckResultRepo) DeleteOlderThan(ctx context.Context, cutoff time.Time) (int64, error) {
 	ret := _mock.Called(ctx, cutoff)
@@ -5824,6 +5896,74 @@ func (_c *MockIncidentRepo_ListByMonitorID_Call) Return(incidents []domain.Incid
 }
 
 func (_c *MockIncidentRepo_ListByMonitorID_Call) RunAndReturn(run func(ctx context.Context, monitorID uuid.UUID, limit int) ([]domain.Incident, error)) *MockIncidentRepo_ListByMonitorID_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListForExport provides a mock function for the type MockIncidentRepo
+func (_mock *MockIncidentRepo) ListForExport(ctx context.Context, userID uuid.UUID) ([]port.IncidentExportRow, error) {
+	ret := _mock.Called(ctx, userID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListForExport")
+	}
+
+	var r0 []port.IncidentExportRow
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID) ([]port.IncidentExportRow, error)); ok {
+		return returnFunc(ctx, userID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID) []port.IncidentExportRow); ok {
+		r0 = returnFunc(ctx, userID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]port.IncidentExportRow)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uuid.UUID) error); ok {
+		r1 = returnFunc(ctx, userID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockIncidentRepo_ListForExport_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListForExport'
+type MockIncidentRepo_ListForExport_Call struct {
+	*mock.Call
+}
+
+// ListForExport is a helper method to define mock.On call
+//   - ctx context.Context
+//   - userID uuid.UUID
+func (_e *MockIncidentRepo_Expecter) ListForExport(ctx interface{}, userID interface{}) *MockIncidentRepo_ListForExport_Call {
+	return &MockIncidentRepo_ListForExport_Call{Call: _e.mock.On("ListForExport", ctx, userID)}
+}
+
+func (_c *MockIncidentRepo_ListForExport_Call) Run(run func(ctx context.Context, userID uuid.UUID)) *MockIncidentRepo_ListForExport_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uuid.UUID
+		if args[1] != nil {
+			arg1 = args[1].(uuid.UUID)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockIncidentRepo_ListForExport_Call) Return(incidentExportRows []port.IncidentExportRow, err error) *MockIncidentRepo_ListForExport_Call {
+	_c.Call.Return(incidentExportRows, err)
+	return _c
+}
+
+func (_c *MockIncidentRepo_ListForExport_Call) RunAndReturn(run func(ctx context.Context, userID uuid.UUID) ([]port.IncidentExportRow, error)) *MockIncidentRepo_ListForExport_Call {
 	_c.Call.Return(run)
 	return _c
 }

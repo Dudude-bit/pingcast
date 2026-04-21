@@ -82,6 +82,28 @@ func (r *IncidentRepo) IsInCooldown(ctx context.Context, monitorID uuid.UUID) (b
 	return r.q.IsInCooldown(ctx, monitorID)
 }
 
+func (r *IncidentRepo) ListForExport(ctx context.Context, userID uuid.UUID) ([]port.IncidentExportRow, error) {
+	rows, err := r.q.ListIncidentsByUserIDForExport(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]port.IncidentExportRow, len(rows))
+	for i, row := range rows {
+		out[i] = port.IncidentExportRow{
+			ID:          row.ID,
+			MonitorID:   row.MonitorID,
+			MonitorName: row.MonitorName,
+			StartedAt:   row.StartedAt,
+			ResolvedAt:  pgtypeTimestamptzToPtr(row.ResolvedAt),
+			Cause:       row.Cause,
+			State:       domain.IncidentState(row.State),
+			IsManual:    row.IsManual,
+			Title:       row.Title,
+		}
+	}
+	return out, nil
+}
+
 func (r *IncidentRepo) ListByMonitorID(ctx context.Context, monitorID uuid.UUID, limit int) ([]domain.Incident, error) {
 	rows, err := r.q.ListIncidentsByMonitorID(ctx, gen.ListIncidentsByMonitorIDParams{
 		MonitorID: monitorID,

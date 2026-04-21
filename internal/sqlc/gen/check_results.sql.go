@@ -33,6 +33,33 @@ func (q *Queries) ConsecutiveFailures(ctx context.Context, monitorID uuid.UUID) 
 	return column_1, err
 }
 
+const deleteCheckResultsByPlan = `-- name: DeleteCheckResultsByPlan :execrows
+DELETE FROM check_results cr
+USING monitors m, users u
+WHERE cr.monitor_id = m.id
+  AND m.user_id = u.id
+  AND (
+    (u.plan = 'free' AND cr.checked_at < $1)
+    OR (u.plan = 'pro' AND cr.checked_at < $2)
+  )
+`
+
+type DeleteCheckResultsByPlanParams struct {
+	CheckedAt   time.Time `json:"checked_at"`
+	CheckedAt_2 time.Time `json:"checked_at_2"`
+}
+
+// Plan-aware retention: Free users keep up to $1 worth of results, Pro
+// users keep up to $2 worth. Both cutoffs are absolute timestamps
+// computed in Go so the partition pruner can use them.
+func (q *Queries) DeleteCheckResultsByPlan(ctx context.Context, arg DeleteCheckResultsByPlanParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteCheckResultsByPlan, arg.CheckedAt, arg.CheckedAt_2)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteCheckResultsOlderThan = `-- name: DeleteCheckResultsOlderThan :execrows
 DELETE FROM check_results WHERE checked_at < $1
 `
