@@ -35,6 +35,32 @@ function GithubIcon({ className }: { className?: string }) {
 }
 import { buttonVariants } from "@/components/ui/button";
 import { LandingDemo } from "@/components/site/landing-demo";
+import { FaqPageJsonLd } from "@/components/seo/jsonld";
+
+// Single source of truth for the FAQ — rendered visibly below and as
+// FAQPage JSON-LD so Google can surface rich snippets in SERP.
+const FAQS = [
+  {
+    q: "Is there a free tier?",
+    a: "Yes. 5 monitors, 1-minute checks, unlimited status pages, and Telegram + email + webhook notifications — all free, no credit card.",
+  },
+  {
+    q: "How quickly do alerts fire?",
+    a: "Checks run at your configured interval (down to 1 minute). A monitor is only marked down after the configured consecutive-failure threshold, so a single flaky check won't page you.",
+  },
+  {
+    q: "Can I embed my status page?",
+    a: "Every monitor you mark public appears on /status/your-slug. The page is SSR + ISR with a 30-second revalidate — share the URL anywhere, embed it in an iframe, or point your own subdomain at it.",
+  },
+  {
+    q: "What happens if PingCast itself goes down?",
+    a: "The checker is a separate service from the API and dashboard. Alerts keep firing even if the dashboard is unreachable. For full independence, self-host — the stack is a single docker-compose file.",
+  },
+  {
+    q: "Is the data portable?",
+    a: "Yes. Every field exposed in the dashboard is available over the REST API, and the database is standard Postgres. You can self-host the whole stack or export whenever you want.",
+  },
+];
 
 const jsonLd = {
   "@context": "https://schema.org",
@@ -325,27 +351,11 @@ export default function LandingPage() {
           Frequently asked
         </h2>
         <div className="space-y-3">
-          <FAQItem
-            q="Is there a free tier?"
-            a="Yes. 5 monitors, 1-minute checks, unlimited status pages, and Telegram + email + webhook notifications — all free, no credit card."
-          />
-          <FAQItem
-            q="How quickly do alerts fire?"
-            a="Checks run at your configured interval (down to 1 minute). A monitor is only marked down after the configured consecutive-failure threshold, so a single flaky check won't page you."
-          />
-          <FAQItem
-            q="Can I embed my status page?"
-            a="Every monitor you mark public appears on /status/your-slug. The page is SSR + ISR with a 30-second revalidate — share the URL anywhere, embed it in an iframe, or point your own subdomain at it."
-          />
-          <FAQItem
-            q="What happens if PingCast itself goes down?"
-            a="The checker is a separate service from the API and dashboard. Alerts keep firing even if the dashboard is unreachable. For full independence, self-host — the stack is a single docker-compose file."
-          />
-          <FAQItem
-            q="Is the data portable?"
-            a="Yes. Every field exposed in the dashboard is available over the REST API, and the database is standard Postgres. You can self-host the whole stack or export whenever you want."
-          />
+          {FAQS.map((faq) => (
+            <FAQItem key={faq.q} q={faq.q} a={faq.a} />
+          ))}
         </div>
+        <FaqPageJsonLd items={FAQS} />
       </section>
 
       {/* Built in public — honest replacement for manufactured
