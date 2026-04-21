@@ -21,6 +21,13 @@ type APIConfig struct {
 	NatsURL                   string `env:"NATS_URL"                    envDefault:"nats://localhost:4222"`
 	OTelEndpoint              string `env:"OTEL_EXPORTER_OTLP_ENDPOINT"`
 	LemonSqueezyWebhookSecret string `env:"LEMONSQUEEZY_WEBHOOK_SECRET"`
+	LemonSqueezyFounderVariantID string `env:"LEMONSQUEEZY_FOUNDER_VARIANT_ID"`
+	LemonSqueezyRetailVariantID  string `env:"LEMONSQUEEZY_RETAIL_VARIANT_ID"`
+	// FounderCap is the max number of active subscriptions eligible for
+	// the $9 founder's price. Once hit, the pricing UI switches to the
+	// $19 retail variant and the webhook stops flagging new
+	// subscriptions as 'founder'.
+	FounderCap                int    `env:"FOUNDER_CAP"                 envDefault:"100"`
 	BaseURL                   string `env:"BASE_URL"                    envDefault:"http://localhost:8080"`
 	EncryptionConfig
 }
