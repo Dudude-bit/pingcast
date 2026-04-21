@@ -4,6 +4,7 @@ import "@fontsource-variable/jetbrains-mono";
 import "./globals.css";
 import { Providers } from "./providers";
 import NextTopLoader from "nextjs-toploader";
+import { PlausibleScript } from "@/components/analytics/plausible";
 
 // Self-hosted via @fontsource-variable so builds don't call out to
 // fonts.googleapis.com (Dokploy build env can't reach it). The CSS
@@ -48,6 +49,7 @@ export default function RootLayout({
           showSpinner={false}
         />
         <Providers>{children}</Providers>
+        <PlausibleScript />
       </body>
     </html>
   );

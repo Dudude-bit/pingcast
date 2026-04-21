@@ -94,5 +94,8 @@ export async function register(
     };
   }
   await copySessionCookie(res);
-  redirect("/dashboard");
+  // ?registered=1 lets the dashboard fire the `register_completed`
+  // Plausible event exactly once per funnel completion; the client
+  // component scrubs the query param immediately after emitting.
+  redirect("/dashboard?registered=1");
 }
