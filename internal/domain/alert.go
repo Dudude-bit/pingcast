@@ -15,8 +15,9 @@ const (
 type AlertEventType string
 
 const (
-	AlertDown AlertEventType = "down"
-	AlertUp   AlertEventType = "up"
+	AlertDown         AlertEventType = "down"
+	AlertUp           AlertEventType = "up"
+	AlertSSLExpiring  AlertEventType = "ssl_expiring"
 )
 
 type AlertEvent struct {

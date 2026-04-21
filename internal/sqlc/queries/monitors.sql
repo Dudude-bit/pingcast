@@ -22,6 +22,19 @@ ORDER BY m.name;
 SELECT id, user_id, name, type, check_config, interval_seconds, alert_after_failures, is_paused, is_public, current_status, created_at, deleted_at
 FROM monitors WHERE is_paused = FALSE AND deleted_at IS NULL;
 
+-- name: ListProHTTPMonitors :many
+-- Used by the daily SSL-expiry scan: every HTTP monitor owned by a Pro
+-- user, joined to user_id for alert publication. Skips paused and
+-- soft-deleted monitors.
+SELECT m.id, m.user_id, m.name, m.check_config
+FROM monitors m
+JOIN users u ON m.user_id = u.id
+WHERE u.plan = 'pro'
+  AND m.type = 'http'
+  AND m.is_paused = FALSE
+  AND m.deleted_at IS NULL
+  AND u.deleted_at IS NULL;
+
 -- name: CountMonitorsByUserID :one
 SELECT COUNT(*)::int FROM monitors WHERE user_id = $1 AND deleted_at IS NULL;
 

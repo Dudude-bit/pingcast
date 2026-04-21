@@ -53,6 +53,18 @@ type MonitorRepo interface {
 	// TogglePause atomically flips is_paused and returns the full updated monitor.
 	TogglePause(ctx context.Context, id, userID uuid.UUID) (*domain.Monitor, error)
 	Delete(ctx context.Context, id, userID uuid.UUID) error
+	// ListProHTTPForSSLScan returns all Pro-tier HTTP monitors eligible
+	// for the daily SSL-expiry probe. Only minimal fields are carried
+	// to keep the row narrow for the scan loop.
+	ListProHTTPForSSLScan(ctx context.Context) ([]ProHTTPMonitor, error)
+}
+
+// ProHTTPMonitor is the narrow row returned by ListProHTTPForSSLScan.
+type ProHTTPMonitor struct {
+	ID          uuid.UUID
+	UserID      uuid.UUID
+	Name        string
+	CheckConfig json.RawMessage
 }
 
 type CheckResultRepo interface {

@@ -245,6 +245,52 @@ func (q *Queries) ListMonitorsByUserID(ctx context.Context, userID uuid.UUID) ([
 	return items, nil
 }
 
+const listProHTTPMonitors = `-- name: ListProHTTPMonitors :many
+SELECT m.id, m.user_id, m.name, m.check_config
+FROM monitors m
+JOIN users u ON m.user_id = u.id
+WHERE u.plan = 'pro'
+  AND m.type = 'http'
+  AND m.is_paused = FALSE
+  AND m.deleted_at IS NULL
+  AND u.deleted_at IS NULL
+`
+
+type ListProHTTPMonitorsRow struct {
+	ID          uuid.UUID `json:"id"`
+	UserID      uuid.UUID `json:"user_id"`
+	Name        string    `json:"name"`
+	CheckConfig []byte    `json:"check_config"`
+}
+
+// Used by the daily SSL-expiry scan: every HTTP monitor owned by a Pro
+// user, joined to user_id for alert publication. Skips paused and
+// soft-deleted monitors.
+func (q *Queries) ListProHTTPMonitors(ctx context.Context) ([]ListProHTTPMonitorsRow, error) {
+	rows, err := q.db.Query(ctx, listProHTTPMonitors)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProHTTPMonitorsRow{}
+	for rows.Next() {
+		var i ListProHTTPMonitorsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Name,
+			&i.CheckConfig,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPublicMonitorsByUserSlug = `-- name: ListPublicMonitorsByUserSlug :many
 SELECT m.id, m.user_id, m.name, m.type, m.check_config, m.interval_seconds, m.alert_after_failures, m.is_paused, m.is_public, m.current_status, m.created_at, m.deleted_at
 FROM monitors m

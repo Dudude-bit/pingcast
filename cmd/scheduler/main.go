@@ -75,11 +75,12 @@ func main() {
 	}
 
 	sched, err := bootstrap.NewScheduler(bootstrap.SchedulerDeps{
-		Pool:          pool,
-		Redis:         rdb,
-		JS:            js,
-		Cipher:        cipher,
-		RetentionDays: cfg.RetentionDays,
+		Pool:           pool,
+		Redis:          rdb,
+		JS:             js,
+		Cipher:         cipher,
+		RetentionDays:  cfg.RetentionDays,
+		SSLScanEnabled: true,
 	})
 	if err != nil {
 		slog.Error("compose scheduler", "error", err)

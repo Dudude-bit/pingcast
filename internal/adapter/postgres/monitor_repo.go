@@ -126,6 +126,30 @@ func (r *MonitorRepo) ListPublicBySlug(ctx context.Context, slug string) ([]doma
 	return out, nil
 }
 
+func (r *MonitorRepo) ListProHTTPForSSLScan(ctx context.Context) ([]port.ProHTTPMonitor, error) {
+	rows, err := r.queries(ctx).ListProHTTPMonitors(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]port.ProHTTPMonitor, 0, len(rows))
+	for _, row := range rows {
+		// CheckConfig is cipher-encrypted at rest; decrypt for the
+		// URL-extracting scan. Mirror what decryptConfig does in the
+		// rest of this file.
+		cfg, err := r.decryptConfig(ctx, row.CheckConfig)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt ssl-scan config for monitor %s: %w", row.ID, err)
+		}
+		out = append(out, port.ProHTTPMonitor{
+			ID:          row.ID,
+			UserID:      row.UserID,
+			Name:        row.Name,
+			CheckConfig: cfg,
+		})
+	}
+	return out, nil
+}
+
 func (r *MonitorRepo) ListActive(ctx context.Context) ([]domain.Monitor, error) {
 	rows, err := r.queries(ctx).ListActiveMonitors(ctx)
 	if err != nil {

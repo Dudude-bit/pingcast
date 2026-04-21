@@ -2,10 +2,12 @@ package bootstrap
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -32,6 +34,12 @@ type SchedulerDeps struct {
 
 	RetentionDays int
 
+	// SSLScanEnabled enables the daily Pro-tier SSL-expiry probe. On by
+	// default; tests flip it off to avoid real TCP dials. The ticker
+	// cadence is fixed at 24h — misses only matter for certs already
+	// within 24h of expiry, which surface on the next scan.
+	SSLScanEnabled bool
+
 	// SkipLeaderElection is TEST-ONLY. When true, the leader loop skips
 	// the distributed-lock dance and behaves as if this instance is
 	// always leader — so the harness can call DispatchAll synchronously.
@@ -44,6 +52,7 @@ type Scheduler struct {
 
 	monitorSub    *natsadapter.MonitorSubscriber
 	cleanupFunc   func(context.Context)
+	sslScanFunc   func(context.Context)
 	cleanupCancel context.CancelFunc
 	cleanupWg     sync.WaitGroup
 }
@@ -152,7 +161,109 @@ func NewScheduler(deps SchedulerDeps) (*Scheduler, error) {
 		}
 	}
 
+	// Daily SSL-expiry scan closure — Pro-only. Sprint 2 S2T2: probes
+	// the TLS cert of every non-paused HTTP monitor owned by a Pro
+	// user and publishes ssl_expiring alerts at 14/7/1 days remaining.
+	if deps.SSLScanEnabled {
+		alertPub := natsadapter.NewAlertPublisher(deps.JS)
+		sslMutex := rs.NewMutex("lock:cleanup:ssl-scan", redsync.WithExpiry(1*time.Hour))
+		s.sslScanFunc = func(ctx context.Context) {
+			defer s.cleanupWg.Done()
+			ticker := time.NewTicker(24 * time.Hour)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					if err := sslMutex.Lock(); err != nil {
+						if errors.Is(err, redsync.ErrFailed) {
+							continue
+						}
+						slog.Warn("ssl-scan lock failed", "error", err)
+						continue
+					}
+					runSSLScan(ctx, monitorRepo, alertPub)
+					if _, err := sslMutex.Unlock(); err != nil {
+						slog.Warn("ssl-scan unlock failed", "error", err)
+					}
+				}
+			}
+		}
+	}
+
 	return s, nil
+}
+
+// runSSLScan probes every Pro-tier HTTP monitor's cert and publishes a
+// ssl_expiring alert when days-remaining crosses a 14/7/1 threshold.
+// Extracted so tests can drive it with fakes instead of waiting for the
+// 24h ticker.
+func runSSLScan(
+	ctx context.Context,
+	monitorRepo port.MonitorRepo,
+	alertPub port.AlertEventPublisher,
+) {
+	monitors, err := monitorRepo.ListProHTTPForSSLScan(ctx)
+	if err != nil {
+		slog.Error("ssl scan: list monitors", "error", err)
+		return
+	}
+	now := time.Now()
+	alerted := 0
+	for _, m := range monitors {
+		url, ok := extractHTTPURL(m.CheckConfig)
+		if !ok {
+			continue
+		}
+		notAfter, err := checker.CheckSSLExpiry(ctx, url)
+		if err != nil {
+			slog.Warn("ssl probe failed", "monitor_id", m.ID, "error", err)
+			continue
+		}
+		days := checker.DaysUntilExpiry(notAfter, now)
+		// Thresholds: 14, 7, 1. Single-day windows so each daily run
+		// fires at most one alert per monitor.
+		if days != 14 && days != 7 && days != 1 {
+			continue
+		}
+		cause := fmt.Sprintf("TLS certificate for %s expires in %d days (at %s)",
+			url, days, notAfter.UTC().Format(time.RFC3339))
+		if err := alertPub.PublishAlert(ctx, &domain.AlertEvent{
+			MonitorID:     m.ID,
+			UserID:        m.UserID,
+			MonitorName:   m.Name,
+			MonitorTarget: url,
+			Event:         domain.AlertSSLExpiring,
+			Cause:         cause,
+		}); err != nil {
+			slog.Error("ssl alert publish failed",
+				"monitor_id", m.ID, "days", days, "error", err)
+			continue
+		}
+		alerted++
+	}
+	slog.Info("ssl scan complete",
+		"monitors_scanned", len(monitors), "alerts_published", alerted)
+}
+
+// extractHTTPURL pulls the `url` field from an http monitor's
+// check_config JSON, which is the probe target. Returns ok=false if
+// absent (malformed config or non-http monitor leaking through).
+func extractHTTPURL(cfg []byte) (string, bool) {
+	var m map[string]interface{}
+	if err := json.Unmarshal(cfg, &m); err != nil {
+		return "", false
+	}
+	url, _ := m["url"].(string)
+	if url == "" {
+		return "", false
+	}
+	// Only probe https URLs — http:// has no TLS cert.
+	if !strings.HasPrefix(url, "https://") {
+		return "", false
+	}
+	return url, true
 }
 
 // Start launches the leader scheduler loop and the retention cleanup
@@ -163,6 +274,11 @@ func (s *Scheduler) Start(ctx context.Context) {
 
 	s.cleanupWg.Add(1)
 	go s.cleanupFunc(cleanupCtx)
+
+	if s.sslScanFunc != nil {
+		s.cleanupWg.Add(1)
+		go s.sslScanFunc(cleanupCtx)
+	}
 
 	go s.Leader.Run(ctx)
 }

@@ -4654,6 +4654,68 @@ func (_c *MockMonitorRepo_ListByUserID_Call) RunAndReturn(run func(ctx context.C
 	return _c
 }
 
+// ListProHTTPForSSLScan provides a mock function for the type MockMonitorRepo
+func (_mock *MockMonitorRepo) ListProHTTPForSSLScan(ctx context.Context) ([]port.ProHTTPMonitor, error) {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListProHTTPForSSLScan")
+	}
+
+	var r0 []port.ProHTTPMonitor
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]port.ProHTTPMonitor, error)); ok {
+		return returnFunc(ctx)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context) []port.ProHTTPMonitor); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]port.ProHTTPMonitor)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockMonitorRepo_ListProHTTPForSSLScan_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListProHTTPForSSLScan'
+type MockMonitorRepo_ListProHTTPForSSLScan_Call struct {
+	*mock.Call
+}
+
+// ListProHTTPForSSLScan is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockMonitorRepo_Expecter) ListProHTTPForSSLScan(ctx interface{}) *MockMonitorRepo_ListProHTTPForSSLScan_Call {
+	return &MockMonitorRepo_ListProHTTPForSSLScan_Call{Call: _e.mock.On("ListProHTTPForSSLScan", ctx)}
+}
+
+func (_c *MockMonitorRepo_ListProHTTPForSSLScan_Call) Run(run func(ctx context.Context)) *MockMonitorRepo_ListProHTTPForSSLScan_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockMonitorRepo_ListProHTTPForSSLScan_Call) Return(proHTTPMonitors []port.ProHTTPMonitor, err error) *MockMonitorRepo_ListProHTTPForSSLScan_Call {
+	_c.Call.Return(proHTTPMonitors, err)
+	return _c
+}
+
+func (_c *MockMonitorRepo_ListProHTTPForSSLScan_Call) RunAndReturn(run func(ctx context.Context) ([]port.ProHTTPMonitor, error)) *MockMonitorRepo_ListProHTTPForSSLScan_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ListPublicBySlug provides a mock function for the type MockMonitorRepo
 func (_mock *MockMonitorRepo) ListPublicBySlug(ctx context.Context, slug string) ([]domain.Monitor, error) {
 	ret := _mock.Called(ctx, slug)
