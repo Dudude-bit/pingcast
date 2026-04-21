@@ -74,7 +74,8 @@ func setupTestApp(t *testing.T) *testEnv {
 
 	statsRepo := mocks.NewMockStatsRepo(t)
 	billingService := app.NewBillingService(userRepo, 100)
-	server := NewServer(authService, monitoringService, alertService, billingService, rls, apiKeyRepo, statsRepo)
+	atlassianImporter := app.NewAtlassianImporter(monitorRepo, incidentRepo, incidentUpdateRepo, txManager, sysclock.New())
+	server := NewServer(authService, monitoringService, alertService, billingService, atlassianImporter, rls, apiKeyRepo, statsRepo)
 	webhookHandler := NewWebhookHandler(authService, alertService, billingService, "test-secret", "")
 
 	healthChecker := &HealthChecker{}

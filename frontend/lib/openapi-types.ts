@@ -244,6 +244,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/import/atlassian": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Accepts a raw Atlassian Statuspage v1 JSON export body. Creates
+         *     monitors from components, incidents with preserved states, and
+         *     the full incident_updates timeline. Pro-gated; all-or-nothing
+         *     transaction.
+         */
+        post: operations["importAtlassian"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/billing/founder-status": {
         parameters: {
             query?: never;
@@ -494,6 +516,12 @@ export interface components {
             posted_by_user_id: string;
             /** Format: date-time */
             posted_at: string;
+        };
+        AtlassianImportResult: {
+            monitors_created: number;
+            incidents_created: number;
+            updates_created: number;
+            components_skipped: number;
         };
         FounderStatus: {
             available: boolean;
@@ -1153,6 +1181,46 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["IncidentUpdate"][];
                 };
+            };
+        };
+    };
+    importAtlassian: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Import result counters */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AtlassianImportResult"];
+                };
+            };
+            /** @description Invalid or unsupported export */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Pro subscription required */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

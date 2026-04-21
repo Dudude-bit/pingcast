@@ -212,6 +212,14 @@ type APIKeyCreated struct {
 	RawKey *string `json:"raw_key,omitempty"`
 }
 
+// AtlassianImportResult defines model for AtlassianImportResult.
+type AtlassianImportResult struct {
+	ComponentsSkipped int `json:"components_skipped"`
+	IncidentsCreated  int `json:"incidents_created"`
+	MonitorsCreated   int `json:"monitors_created"`
+	UpdatesCreated    int `json:"updates_created"`
+}
+
 // AuthResponse defines model for AuthResponse.
 type AuthResponse struct {
 	SessionId *string `json:"session_id,omitempty"`
@@ -491,6 +499,9 @@ type User struct {
 // UserPlan defines model for User.Plan.
 type UserPlan string
 
+// ImportAtlassianJSONBody defines parameters for ImportAtlassian.
+type ImportAtlassianJSONBody map[string]interface{}
+
 // BindChannelJSONBody defines parameters for BindChannel.
 type BindChannelJSONBody struct {
 	ChannelId openapi_types.UUID `json:"channel_id"`
@@ -510,6 +521,9 @@ type CreateChannelJSONRequestBody = CreateChannelRequest
 
 // UpdateChannelJSONRequestBody defines body for UpdateChannel for application/json ContentType.
 type UpdateChannelJSONRequestBody = UpdateChannelRequest
+
+// ImportAtlassianJSONRequestBody defines body for ImportAtlassian for application/json ContentType.
+type ImportAtlassianJSONRequestBody ImportAtlassianJSONBody
 
 // CreateIncidentJSONRequestBody defines body for CreateIncident for application/json ContentType.
 type CreateIncidentJSONRequestBody = CreateIncidentRequest
@@ -567,6 +581,9 @@ type ServerInterface interface {
 
 	// (PUT /api/channels/{id})
 	UpdateChannel(c *fiber.Ctx, id openapi_types.UUID) error
+
+	// (POST /api/import/atlassian)
+	ImportAtlassian(c *fiber.Ctx) error
 
 	// (POST /api/incidents)
 	CreateIncident(c *fiber.Ctx) error
@@ -761,6 +778,16 @@ func (siw *ServerInterfaceWrapper) UpdateChannel(c *fiber.Ctx) error {
 	c.Context().SetUserValue(SessionAuthScopes, []string{})
 
 	return siw.Handler.UpdateChannel(c, id)
+}
+
+// ImportAtlassian operation middleware
+func (siw *ServerInterfaceWrapper) ImportAtlassian(c *fiber.Ctx) error {
+
+	c.Context().SetUserValue(SessionAuthScopes, []string{})
+
+	c.Context().SetUserValue(BearerAuthScopes, []string{})
+
+	return siw.Handler.ImportAtlassian(c)
 }
 
 // CreateIncident operation middleware
@@ -1021,6 +1048,8 @@ func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, option
 	router.Get(options.BaseURL+"/api/channels/:id", wrapper.GetChannel)
 
 	router.Put(options.BaseURL+"/api/channels/:id", wrapper.UpdateChannel)
+
+	router.Post(options.BaseURL+"/api/import/atlassian", wrapper.ImportAtlassian)
 
 	router.Post(options.BaseURL+"/api/incidents", wrapper.CreateIncident)
 

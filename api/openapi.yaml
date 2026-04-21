@@ -455,6 +455,37 @@ paths:
                 items:
                   $ref: "#/components/schemas/IncidentUpdate"
 
+  /api/import/atlassian:
+    post:
+      operationId: importAtlassian
+      tags: [import]
+      security:
+        - sessionAuth: []
+        - bearerAuth: []
+      description: |
+        Accepts a raw Atlassian Statuspage v1 JSON export body. Creates
+        monitors from components, incidents with preserved states, and
+        the full incident_updates timeline. Pro-gated; all-or-nothing
+        transaction.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Import result counters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AtlassianImportResult"
+        "400":
+          description: Invalid or unsupported export
+        "402":
+          description: Pro subscription required
+
   /api/billing/founder-status:
     get:
       operationId: getFounderStatus
@@ -869,6 +900,15 @@ components:
         posted_at:
           type: string
           format: date-time
+
+    AtlassianImportResult:
+      type: object
+      required: [monitors_created, incidents_created, updates_created, components_skipped]
+      properties:
+        monitors_created: { type: integer }
+        incidents_created: { type: integer }
+        updates_created: { type: integer }
+        components_skipped: { type: integer }
 
     FounderStatus:
       type: object

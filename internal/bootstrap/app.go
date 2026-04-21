@@ -149,6 +149,7 @@ func NewApp(deps AppDeps) (*App, error) {
 		founderCap = 100 // matches .env.example default and spec §5
 	}
 	billingSvc := app.NewBillingService(userRepo, founderCap)
+	atlassianImporter := app.NewAtlassianImporter(monitorRepo, incidentRepo, incidentUpdateRepo, txm, clock)
 
 	// Per-scope rate limiters (spec §5). Each bucket has its own prefix
 	// so they don't share keys, and its own max/window per scope. Tests
@@ -156,7 +157,7 @@ func NewApp(deps AppDeps) (*App, error) {
 	rls := buildRateLimiters(deps.Redis, deps.RateLimits)
 
 	// HTTP handlers
-	server := httpadapter.NewServer(authSvc, monitoringSvc, alertSvc, billingSvc, rls, apiKeyRepo, statsRepo)
+	server := httpadapter.NewServer(authSvc, monitoringSvc, alertSvc, billingSvc, atlassianImporter, rls, apiKeyRepo, statsRepo)
 	webhookHandler := httpadapter.NewWebhookHandler(
 		authSvc, alertSvc, billingSvc, deps.LemonSqueezySecret,
 		deps.LemonSqueezyFounderVariantID,

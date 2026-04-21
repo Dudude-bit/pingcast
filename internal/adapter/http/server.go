@@ -23,13 +23,14 @@ import (
 
 // Server implements apigen.ServerInterface using app services.
 type Server struct {
-	auth       *app.AuthService
-	monitoring *app.MonitoringService
-	alerts     *app.AlertService
-	billing    *app.BillingService
-	rl         *port.RateLimiters
-	apiKeys    port.APIKeyRepo
-	stats      port.StatsRepo
+	auth              *app.AuthService
+	monitoring        *app.MonitoringService
+	alerts            *app.AlertService
+	billing           *app.BillingService
+	atlassianImporter *app.AtlassianImporter
+	rl                *port.RateLimiters
+	apiKeys           port.APIKeyRepo
+	stats             port.StatsRepo
 
 	// publicStats memo-caches the stats query for 5 min; the underlying
 	// COUNTs are cheap but this is a public endpoint linked from the
@@ -50,18 +51,20 @@ func NewServer(
 	monitoring *app.MonitoringService,
 	alerts *app.AlertService,
 	billing *app.BillingService,
+	atlassianImporter *app.AtlassianImporter,
 	rl *port.RateLimiters,
 	apiKeys port.APIKeyRepo,
 	stats port.StatsRepo,
 ) *Server {
 	return &Server{
-		auth:       auth,
-		monitoring: monitoring,
-		alerts:     alerts,
-		billing:    billing,
-		rl:         rl,
-		apiKeys:    apiKeys,
-		stats:      stats,
+		auth:              auth,
+		monitoring:        monitoring,
+		alerts:            alerts,
+		billing:           billing,
+		atlassianImporter: atlassianImporter,
+		rl:                rl,
+		apiKeys:           apiKeys,
+		stats:             stats,
 	}
 }
 
