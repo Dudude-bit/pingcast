@@ -87,6 +87,7 @@ func authMiddlewareSelector(authService *app.AuthService, apiKeyRepo port.APIKey
 		// Public API endpoints (no auth needed)
 		if path == "/api/auth/register" || path == "/api/auth/login" ||
 			path == "/api/stats/public" ||
+			path == "/api/billing/founder-status" ||
 			(len(path) > 12 && path[:12] == "/api/status/") {
 			return c.Next()
 		}

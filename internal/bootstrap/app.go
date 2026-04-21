@@ -37,7 +37,10 @@ type AppDeps struct {
 	JS     jetstream.JetStream
 	Cipher port.Cipher
 
-	LemonSqueezySecret string
+	LemonSqueezySecret        string
+	LemonSqueezyFounderVariantID string
+	LemonSqueezyRetailVariantID  string
+	FounderCap                int
 
 	// Deterministic injection points. If nil, sysclock/sysrand defaults
 	// are wired; tests override with Fake impls.
@@ -141,14 +144,23 @@ func NewApp(deps AppDeps) (*App, error) {
 	)
 	alertSvc := app.NewAlertService(channelRepo, monitorRepo, channelReg, failedAlertRepo, metrics)
 
+	founderCap := deps.FounderCap
+	if founderCap <= 0 {
+		founderCap = 100 // matches .env.example default and spec §5
+	}
+	billingSvc := app.NewBillingService(userRepo, founderCap)
+
 	// Per-scope rate limiters (spec §5). Each bucket has its own prefix
 	// so they don't share keys, and its own max/window per scope. Tests
 	// override windows via deps.RateLimits.WindowOverride.
 	rls := buildRateLimiters(deps.Redis, deps.RateLimits)
 
 	// HTTP handlers
-	server := httpadapter.NewServer(authSvc, monitoringSvc, alertSvc, rls, apiKeyRepo, statsRepo)
-	webhookHandler := httpadapter.NewWebhookHandler(authSvc, alertSvc, deps.LemonSqueezySecret)
+	server := httpadapter.NewServer(authSvc, monitoringSvc, alertSvc, billingSvc, rls, apiKeyRepo, statsRepo)
+	webhookHandler := httpadapter.NewWebhookHandler(
+		authSvc, alertSvc, billingSvc, deps.LemonSqueezySecret,
+		deps.LemonSqueezyFounderVariantID,
+	)
 	healthChecker := httpadapter.NewHealthChecker(deps.Pool, deps.Redis, deps.NATS)
 
 	fiberApp := httpadapter.SetupApp(authSvc, server, webhookHandler, apiKeyRepo, healthChecker, rls)

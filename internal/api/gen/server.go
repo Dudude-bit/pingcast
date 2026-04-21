@@ -294,6 +294,13 @@ type ErrorResponse struct {
 	Error *string `json:"error,omitempty"`
 }
 
+// FounderStatus defines model for FounderStatus.
+type FounderStatus struct {
+	Available bool  `json:"available"`
+	Cap       int   `json:"cap"`
+	Used      int64 `json:"used"`
+}
+
 // HealthResponse defines model for HealthResponse.
 type HealthResponse struct {
 	Status *string `json:"status,omitempty"`
@@ -540,6 +547,9 @@ type ServerInterface interface {
 	// (POST /api/auth/register)
 	Register(c *fiber.Ctx) error
 
+	// (GET /api/billing/founder-status)
+	GetFounderStatus(c *fiber.Ctx) error
+
 	// (GET /api/channel-types)
 	ListChannelTypes(c *fiber.Ctx) error
 
@@ -669,6 +679,12 @@ func (siw *ServerInterfaceWrapper) Logout(c *fiber.Ctx) error {
 func (siw *ServerInterfaceWrapper) Register(c *fiber.Ctx) error {
 
 	return siw.Handler.Register(c)
+}
+
+// GetFounderStatus operation middleware
+func (siw *ServerInterfaceWrapper) GetFounderStatus(c *fiber.Ctx) error {
+
+	return siw.Handler.GetFounderStatus(c)
 }
 
 // ListChannelTypes operation middleware
@@ -991,6 +1007,8 @@ func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, option
 	router.Post(options.BaseURL+"/api/auth/logout", wrapper.Logout)
 
 	router.Post(options.BaseURL+"/api/auth/register", wrapper.Register)
+
+	router.Get(options.BaseURL+"/api/billing/founder-status", wrapper.GetFounderStatus)
 
 	router.Get(options.BaseURL+"/api/channel-types", wrapper.ListChannelTypes)
 

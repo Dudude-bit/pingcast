@@ -17,11 +17,30 @@ import (
 type WebhookHandler struct {
 	auth               *app.AuthService
 	alerts             *app.AlertService
+	billing            *app.BillingService
 	lemonSqueezySecret string
+	// founderVariantID is the LemonSqueezy variant ID for the $9/mo
+	// founder tier. When an incoming subscription_created webhook
+	// references this variant, we tag the user with subscription_variant=
+	// 'founder' so CountActiveFounderSubscriptions reflects the new
+	// seat. Unset → every subscription records as 'retail'.
+	founderVariantID string
 }
 
-func NewWebhookHandler(auth *app.AuthService, alerts *app.AlertService, lemonSqueezySecret string) *WebhookHandler {
-	return &WebhookHandler{auth: auth, alerts: alerts, lemonSqueezySecret: lemonSqueezySecret}
+func NewWebhookHandler(
+	auth *app.AuthService,
+	alerts *app.AlertService,
+	billing *app.BillingService,
+	lemonSqueezySecret string,
+	founderVariantID string,
+) *WebhookHandler {
+	return &WebhookHandler{
+		auth:               auth,
+		alerts:             alerts,
+		billing:            billing,
+		lemonSqueezySecret: lemonSqueezySecret,
+		founderVariantID:   founderVariantID,
+	}
 }
 
 type lemonSqueezyWebhook struct {
@@ -33,6 +52,7 @@ type lemonSqueezyWebhook struct {
 			CustomerID int    `json:"customer_id"`
 			Status     string `json:"status"`
 			UserEmail  string `json:"user_email"`
+			VariantID  int    `json:"variant_id"`
 		} `json:"attributes"`
 		ID string `json:"id"`
 	} `json:"data"`
@@ -76,6 +96,21 @@ func (h *WebhookHandler) HandleLemonSqueezy(c *fiber.Ctx) error {
 				slog.Error("failed to upgrade user", "user_id", user.ID, "error", err)
 			} else {
 				slog.Info("user upgraded to pro", "user_id", user.ID)
+			}
+			// Mark variant so CountActiveFounderSubscriptions reflects
+			// the new seat. 'founder' vs 'retail' decision is based on
+			// the variant ID LemonSqueezy sent us against the env we
+			// stashed at boot. Errors are logged but don't fail the
+			// webhook — the upgrade itself is what the user cares
+			// about; variant is just for cap accounting.
+			variant := "retail"
+			if h.founderVariantID != "" &&
+				fmt.Sprintf("%d", webhook.Data.Attributes.VariantID) == h.founderVariantID {
+				variant = "founder"
+			}
+			if err := h.billing.SetSubscriptionVariant(c.UserContext(), user.ID, variant); err != nil {
+				slog.Error("failed to set subscription variant",
+					"user_id", user.ID, "variant", variant, "error", err)
 			}
 		}
 	case "subscription_cancelled":

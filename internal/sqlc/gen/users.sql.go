@@ -13,6 +13,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countActiveFounderSubscriptions = `-- name: CountActiveFounderSubscriptions :one
+SELECT COUNT(*)::bigint AS count
+FROM users
+WHERE plan = 'pro'
+  AND subscription_variant = 'founder'
+  AND deleted_at IS NULL
+`
+
+func (q *Queries) CountActiveFounderSubscriptions(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveFounderSubscriptions)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, slug, password_hash)
 VALUES ($1, $2, $3)
@@ -142,6 +157,20 @@ func (q *Queries) GetUserBySlug(ctx context.Context, slug string) (GetUserBySlug
 		&i.DeletedAt,
 	)
 	return i, err
+}
+
+const setSubscriptionVariant = `-- name: SetSubscriptionVariant :exec
+UPDATE users SET subscription_variant = $2 WHERE id = $1 AND deleted_at IS NULL
+`
+
+type SetSubscriptionVariantParams struct {
+	ID                  uuid.UUID `json:"id"`
+	SubscriptionVariant *string   `json:"subscription_variant"`
+}
+
+func (q *Queries) SetSubscriptionVariant(ctx context.Context, arg SetSubscriptionVariantParams) error {
+	_, err := q.db.Exec(ctx, setSubscriptionVariant, arg.ID, arg.SubscriptionVariant)
+	return err
 }
 
 const updateUserLemonSqueezy = `-- name: UpdateUserLemonSqueezy :exec

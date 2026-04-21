@@ -74,3 +74,18 @@ func (r *UserRepo) UpdateLemonSqueezy(ctx context.Context, id uuid.UUID, custome
 		LemonSqueezySubscriptionID: &subscriptionID,
 	})
 }
+
+func (r *UserRepo) SetSubscriptionVariant(ctx context.Context, id uuid.UUID, variant string) error {
+	v := &variant
+	if variant == "" {
+		v = nil
+	}
+	return r.q.SetSubscriptionVariant(ctx, gen.SetSubscriptionVariantParams{
+		ID:                  id,
+		SubscriptionVariant: v,
+	})
+}
+
+func (r *UserRepo) CountActiveFounderSubscriptions(ctx context.Context) (int64, error) {
+	return r.q.CountActiveFounderSubscriptions(ctx)
+}

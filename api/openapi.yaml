@@ -455,6 +455,23 @@ paths:
                 items:
                   $ref: "#/components/schemas/IncidentUpdate"
 
+  /api/billing/founder-status:
+    get:
+      operationId: getFounderStatus
+      tags: [billing]
+      description: |
+        Returns whether the $9 founder's-price variant still has seats
+        left. The landing and pricing pages call this to decide which
+        LemonSqueezy checkout URL to expose. Public (no auth). Cached
+        60s at the handler.
+      responses:
+        "200":
+          description: Founder cap status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FounderStatus"
+
   /api/stats/public:
     get:
       operationId: getPublicStats
@@ -852,6 +869,18 @@ components:
         posted_at:
           type: string
           format: date-time
+
+    FounderStatus:
+      type: object
+      required: [available, used, cap]
+      properties:
+        available:
+          type: boolean
+        used:
+          type: integer
+          format: int64
+        cap:
+          type: integer
 
     PublicStats:
       type: object

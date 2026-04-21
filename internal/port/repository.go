@@ -16,6 +16,8 @@ type UserRepo interface {
 	GetBySlug(ctx context.Context, slug string) (*domain.User, error)
 	UpdatePlan(ctx context.Context, id uuid.UUID, plan domain.Plan) error
 	UpdateLemonSqueezy(ctx context.Context, id uuid.UUID, customerID, subscriptionID string) error
+	SetSubscriptionVariant(ctx context.Context, id uuid.UUID, variant string) error
+	CountActiveFounderSubscriptions(ctx context.Context) (int64, error)
 }
 
 type SessionRepo interface {

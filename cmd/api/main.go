@@ -94,12 +94,15 @@ func main() {
 
 	// Compose the API app (wires repos, services, handlers, routes)
 	bootApp, err := bootstrap.NewApp(bootstrap.AppDeps{
-		Pool:               pool,
-		Redis:              rdb,
-		NATS:               nc,
-		JS:                 js,
-		Cipher:             cipher,
-		LemonSqueezySecret: cfg.LemonSqueezyWebhookSecret,
+		Pool:                         pool,
+		Redis:                        rdb,
+		NATS:                         nc,
+		JS:                           js,
+		Cipher:                       cipher,
+		LemonSqueezySecret:           cfg.LemonSqueezyWebhookSecret,
+		LemonSqueezyFounderVariantID: cfg.LemonSqueezyFounderVariantID,
+		LemonSqueezyRetailVariantID:  cfg.LemonSqueezyRetailVariantID,
+		FounderCap:                   cfg.FounderCap,
 	})
 	if err != nil {
 		slog.Error("failed to compose app", "error", err)

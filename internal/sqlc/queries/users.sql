@@ -22,3 +22,13 @@ UPDATE users SET plan = $2 WHERE id = $1 AND deleted_at IS NULL;
 UPDATE users
 SET lemon_squeezy_customer_id = $2, lemon_squeezy_subscription_id = $3
 WHERE id = $1 AND deleted_at IS NULL;
+
+-- name: SetSubscriptionVariant :exec
+UPDATE users SET subscription_variant = $2 WHERE id = $1 AND deleted_at IS NULL;
+
+-- name: CountActiveFounderSubscriptions :one
+SELECT COUNT(*)::bigint AS count
+FROM users
+WHERE plan = 'pro'
+  AND subscription_variant = 'founder'
+  AND deleted_at IS NULL;

@@ -244,6 +244,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/billing/founder-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Returns whether the $9 founder's-price variant still has seats
+         *     left. The landing and pricing pages call this to decide which
+         *     LemonSqueezy checkout URL to expose. Public (no auth). Cached
+         *     60s at the handler.
+         */
+        get: operations["getFounderStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/stats/public": {
         parameters: {
             query?: never;
@@ -472,6 +494,12 @@ export interface components {
             posted_by_user_id: string;
             /** Format: date-time */
             posted_at: string;
+        };
+        FounderStatus: {
+            available: boolean;
+            /** Format: int64 */
+            used: number;
+            cap: number;
         };
         PublicStats: {
             /** Format: int64 */
@@ -1124,6 +1152,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IncidentUpdate"][];
+                };
+            };
+        };
+    };
+    getFounderStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Founder cap status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FounderStatus"];
                 };
             };
         };

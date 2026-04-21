@@ -26,6 +26,7 @@ type Server struct {
 	auth       *app.AuthService
 	monitoring *app.MonitoringService
 	alerts     *app.AlertService
+	billing    *app.BillingService
 	rl         *port.RateLimiters
 	apiKeys    port.APIKeyRepo
 	stats      port.StatsRepo
@@ -36,12 +37,19 @@ type Server struct {
 	psMu      sync.RWMutex
 	psCached  port.PublicStats
 	psExpires time.Time
+
+	// founderStatus caches for 60s — pricing page hits this on every
+	// render, and the cap is slowly-changing state.
+	fsMu      sync.RWMutex
+	fsCached  app.FounderStatus
+	fsExpires time.Time
 }
 
 func NewServer(
 	auth *app.AuthService,
 	monitoring *app.MonitoringService,
 	alerts *app.AlertService,
+	billing *app.BillingService,
 	rl *port.RateLimiters,
 	apiKeys port.APIKeyRepo,
 	stats port.StatsRepo,
@@ -50,6 +58,7 @@ func NewServer(
 		auth:       auth,
 		monitoring: monitoring,
 		alerts:     alerts,
+		billing:    billing,
 		rl:         rl,
 		apiKeys:    apiKeys,
 		stats:      stats,
@@ -382,6 +391,39 @@ func (s *Server) GetStatusPage(c *fiber.Ctx, slug string) error {
 
 func (s *Server) HealthCheck(c *fiber.Ctx) error {
 	return c.JSON(apigen.HealthResponse{Status: new("ok")})
+}
+
+// GetFounderStatus returns whether the $9 founder's-price variant is
+// still open. Cached 60s in-process so the pricing and upgrade flows
+// can hit this on every render without hammering Postgres.
+func (s *Server) GetFounderStatus(c *fiber.Ctx) error {
+	s.fsMu.RLock()
+	if time.Now().Before(s.fsExpires) {
+		cached := s.fsCached
+		s.fsMu.RUnlock()
+		return c.JSON(apigen.FounderStatus{
+			Available: cached.Available,
+			Used:      cached.Used,
+			Cap:       cached.Cap,
+		})
+	}
+	s.fsMu.RUnlock()
+
+	status, err := s.billing.FounderStatus(c.UserContext())
+	if err != nil {
+		return httperr.Write(c, fmt.Errorf("get founder status: %w", err))
+	}
+
+	s.fsMu.Lock()
+	s.fsCached = status
+	s.fsExpires = time.Now().Add(60 * time.Second)
+	s.fsMu.Unlock()
+
+	return c.JSON(apigen.FounderStatus{
+		Available: status.Available,
+		Used:      status.Used,
+		Cap:       status.Cap,
+	})
 }
 
 // GetPublicStats returns landing-page counters with a 5-minute memo

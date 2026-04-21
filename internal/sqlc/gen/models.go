@@ -173,4 +173,5 @@ type User struct {
 	LemonSqueezySubscriptionID *string            `json:"lemon_squeezy_subscription_id"`
 	CreatedAt                  time.Time          `json:"created_at"`
 	DeletedAt                  pgtype.Timestamptz `json:"deleted_at"`
+	SubscriptionVariant        *string            `json:"subscription_variant"`
 }

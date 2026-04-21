@@ -73,8 +73,9 @@ func setupTestApp(t *testing.T) *testEnv {
 	alertService := app.NewAlertService(channelRepo, monitorRepo, channelRegistry, failedAlertRepo, metrics)
 
 	statsRepo := mocks.NewMockStatsRepo(t)
-	server := NewServer(authService, monitoringService, alertService, rls, apiKeyRepo, statsRepo)
-	webhookHandler := NewWebhookHandler(authService, alertService, "test-secret")
+	billingService := app.NewBillingService(userRepo, 100)
+	server := NewServer(authService, monitoringService, alertService, billingService, rls, apiKeyRepo, statsRepo)
+	webhookHandler := NewWebhookHandler(authService, alertService, billingService, "test-secret", "")
 
 	healthChecker := &HealthChecker{}
 	fiberApp := SetupApp(authService, server, webhookHandler, apiKeyRepo, healthChecker, rls)
