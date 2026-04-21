@@ -7,6 +7,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { MonitorList } from "@/components/features/monitors/monitor-list";
 import { GettingStarted } from "@/components/features/common/getting-started";
 import { RegisterCompletedBeacon } from "@/components/analytics/register-completed-beacon";
+import { UpgradeButton } from "@/components/features/billing/upgrade-button";
 
 export default function DashboardPage() {
   return (
@@ -21,12 +22,15 @@ export default function DashboardPage() {
             Your endpoints, checked every minute. Live status updates every 15 seconds.
           </p>
         </div>
-        <Link
-          href="/monitors/new"
-          className={`${buttonVariants()} shrink-0 self-start sm:self-auto`}
-        >
-          <Plus className="mr-2 h-4 w-4" /> New monitor
-        </Link>
+        <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+          <UpgradeButton size="default" />
+          <Link
+            href="/monitors/new"
+            className={buttonVariants()}
+          >
+            <Plus className="mr-2 h-4 w-4" /> New monitor
+          </Link>
+        </div>
       </div>
       <GettingStarted />
       <MonitorList />
