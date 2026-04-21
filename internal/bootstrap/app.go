@@ -113,6 +113,7 @@ func NewApp(deps AppDeps) (*App, error) {
 	checkResultRepo := postgres.NewCheckResultRepo(queries)
 	incidentRepo := postgres.NewIncidentRepo(queries)
 	incidentUpdateRepo := postgres.NewIncidentUpdateRepo(queries)
+	maintenanceRepo := postgres.NewMaintenanceWindowRepo(queries)
 	uptimeRepo := postgres.NewUptimeRepo(queries)
 	txm := postgres.NewTxManager(deps.Pool)
 	apiKeyRepo := postgres.NewAPIKeyRepo(queries)
@@ -138,7 +139,7 @@ func NewApp(deps AppDeps) (*App, error) {
 	// App services
 	authSvc := app.NewAuthService(userRepo, sessionRepo, clock, rng)
 	monitoringSvc := app.NewMonitoringService(
-		monitorRepo, channelRepo, checkResultRepo, incidentRepo, incidentUpdateRepo,
+		monitorRepo, channelRepo, checkResultRepo, incidentRepo, incidentUpdateRepo, maintenanceRepo,
 		userRepo, uptimeRepo, txm, alertPub, monitorPub, checkerReg, metrics,
 		clock,
 	)

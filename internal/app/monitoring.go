@@ -25,6 +25,7 @@ type MonitoringService struct {
 	checkResults    port.CheckResultRepo
 	incidents       port.IncidentRepo
 	incidentUpdates port.IncidentUpdateRepo
+	maintenance     port.MaintenanceWindowRepo
 	users           port.UserRepo
 	uptime          port.UptimeRepo
 	txm             port.TxManager
@@ -41,6 +42,7 @@ func NewMonitoringService(
 	checkResults port.CheckResultRepo,
 	incidents port.IncidentRepo,
 	incidentUpdates port.IncidentUpdateRepo,
+	maintenance port.MaintenanceWindowRepo,
 	users port.UserRepo,
 	uptime port.UptimeRepo,
 	txm port.TxManager,
@@ -56,6 +58,7 @@ func NewMonitoringService(
 		checkResults:    checkResults,
 		incidents:       incidents,
 		incidentUpdates: incidentUpdates,
+		maintenance:     maintenance,
 		users:           users,
 		uptime:          uptime,
 		txm:             txm,
@@ -65,6 +68,43 @@ func NewMonitoringService(
 		metrics:         metrics,
 		clock:           clock,
 	}
+}
+
+// --- Maintenance windows (Pro-gated at HTTP layer) ---
+
+type ScheduleMaintenanceInput struct {
+	MonitorID uuid.UUID
+	UserID    uuid.UUID
+	StartsAt  time.Time
+	EndsAt    time.Time
+	Reason    string
+}
+
+func (s *MonitoringService) ScheduleMaintenance(ctx context.Context, in ScheduleMaintenanceInput) (*domain.MaintenanceWindow, error) {
+	if !in.EndsAt.After(in.StartsAt) {
+		return nil, fmt.Errorf("ends_at must be after starts_at")
+	}
+	monitor, err := s.monitors.GetByID(ctx, in.MonitorID)
+	if err != nil {
+		return nil, err
+	}
+	if monitor.UserID != in.UserID {
+		return nil, domain.ErrForbidden
+	}
+	return s.maintenance.Create(ctx, port.CreateMaintenanceWindowInput{
+		MonitorID: in.MonitorID,
+		StartsAt:  in.StartsAt,
+		EndsAt:    in.EndsAt,
+		Reason:    in.Reason,
+	})
+}
+
+func (s *MonitoringService) ListMaintenanceWindows(ctx context.Context, userID uuid.UUID) ([]domain.MaintenanceWindow, error) {
+	return s.maintenance.ListByUserID(ctx, userID)
+}
+
+func (s *MonitoringService) DeleteMaintenanceWindow(ctx context.Context, id int64, userID uuid.UUID) error {
+	return s.maintenance.Delete(ctx, id, userID)
 }
 
 // ListIncidentUpdates returns the timeline for an incident. Public read
@@ -511,6 +551,19 @@ func (s *MonitoringService) handleDown(ctx context.Context, monitor *domain.Moni
 	}
 	if inCooldown {
 		return nil
+	}
+
+	// Skip incident creation if the monitor is currently inside a
+	// scheduled maintenance window. We still record the failed check
+	// result so uptime math stays honest; we just don't alert and
+	// don't open an incident.
+	if s.maintenance != nil {
+		inMaintenance, mErr := s.maintenance.HasActive(ctx, monitor.ID)
+		if mErr != nil {
+			slog.Error("maintenance window check failed", "monitor_id", monitor.ID, "error", mErr)
+		} else if inMaintenance {
+			return nil
+		}
 	}
 
 	cause := ""

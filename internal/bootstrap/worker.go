@@ -64,8 +64,9 @@ func NewWorker(deps WorkerDeps) (*Worker, error) {
 	}
 
 	incidentUpdateRepo := postgres.NewIncidentUpdateRepo(queries)
+	maintenanceRepo := postgres.NewMaintenanceWindowRepo(queries)
 	svc := app.NewMonitoringService(
-		monitorRepo, channelRepo, checkResultRepo, incidentRepo, incidentUpdateRepo,
+		monitorRepo, channelRepo, checkResultRepo, incidentRepo, incidentUpdateRepo, maintenanceRepo,
 		userRepo, uptimeRepo, txm, alertPub, nil, registry, metrics, clock,
 	)
 

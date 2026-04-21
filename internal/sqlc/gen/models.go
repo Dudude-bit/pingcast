@@ -117,6 +117,15 @@ type IncidentUpdate struct {
 	PostedAt       time.Time     `json:"posted_at"`
 }
 
+type MaintenanceWindow struct {
+	ID        int64     `json:"id"`
+	MonitorID uuid.UUID `json:"monitor_id"`
+	StartsAt  time.Time `json:"starts_at"`
+	EndsAt    time.Time `json:"ends_at"`
+	Reason    string    `json:"reason"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type Monitor struct {
 	ID                 uuid.UUID          `json:"id"`
 	UserID             uuid.UUID          `json:"user_id"`

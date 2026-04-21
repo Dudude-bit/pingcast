@@ -105,6 +105,21 @@ type FailedAlertRepo interface {
 	Create(ctx context.Context, event json.RawMessage, errMsg string, failedChannelIDs []uuid.UUID) error
 }
 
+type MaintenanceWindowRepo interface {
+	Create(ctx context.Context, in CreateMaintenanceWindowInput) (*domain.MaintenanceWindow, error)
+	ListByMonitorID(ctx context.Context, monitorID uuid.UUID) ([]domain.MaintenanceWindow, error)
+	ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.MaintenanceWindow, error)
+	Delete(ctx context.Context, id int64, userID uuid.UUID) error
+	HasActive(ctx context.Context, monitorID uuid.UUID) (bool, error)
+}
+
+type CreateMaintenanceWindowInput struct {
+	MonitorID uuid.UUID
+	StartsAt  time.Time
+	EndsAt    time.Time
+	Reason    string
+}
+
 // PublicStats is the shape returned by the unauthenticated /api/stats/public
 // endpoint. Powers the landing-page trust-bar live counter.
 type PublicStats struct {

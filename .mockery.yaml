@@ -22,6 +22,7 @@ packages:
       HostLimiter: {}
       IncidentRepo: {}
       IncidentUpdateRepo: {}
+      MaintenanceWindowRepo: {}
       Metrics: {}
       MonitorEventPublisher: {}
       MonitorEventSubscriber: {}

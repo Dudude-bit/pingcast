@@ -486,6 +486,62 @@ paths:
         "402":
           description: Pro subscription required
 
+  /api/maintenance-windows:
+    get:
+      operationId: listMaintenanceWindows
+      tags: [maintenance]
+      security:
+        - sessionAuth: []
+        - bearerAuth: []
+      responses:
+        "200":
+          description: User's maintenance windows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MaintenanceWindow"
+    post:
+      operationId: scheduleMaintenanceWindow
+      tags: [maintenance]
+      security:
+        - sessionAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScheduleMaintenanceWindowRequest"
+      responses:
+        "201":
+          description: Scheduled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaintenanceWindow"
+        "402":
+          description: Pro required
+
+  /api/maintenance-windows/{id}:
+    delete:
+      operationId: deleteMaintenanceWindow
+      tags: [maintenance]
+      security:
+        - sessionAuth: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        "204":
+          description: Deleted
+        "402":
+          description: Pro required
+
   /api/me/branding:
     get:
       operationId: getMyBranding
@@ -945,6 +1001,26 @@ components:
         incidents_created: { type: integer }
         updates_created: { type: integer }
         components_skipped: { type: integer }
+
+    MaintenanceWindow:
+      type: object
+      required: [id, monitor_id, starts_at, ends_at, reason, created_at]
+      properties:
+        id:         { type: integer, format: int64 }
+        monitor_id: { type: string,  format: uuid }
+        starts_at:  { type: string,  format: date-time }
+        ends_at:    { type: string,  format: date-time }
+        reason:     { type: string }
+        created_at: { type: string,  format: date-time }
+
+    ScheduleMaintenanceWindowRequest:
+      type: object
+      required: [monitor_id, starts_at, ends_at, reason]
+      properties:
+        monitor_id: { type: string,  format: uuid }
+        starts_at:  { type: string,  format: date-time }
+        ends_at:    { type: string,  format: date-time }
+        reason:     { type: string,  minLength: 1, maxLength: 500 }
 
     Branding:
       type: object

@@ -127,6 +127,14 @@ func proGateSelector() apigen.MiddlewareFunc {
 		if method == fiber.MethodPatch && path == "/api/me/branding" {
 			return gate(c)
 		}
+		// Maintenance window scheduling — Pro-only. GET is free-tier
+		// readable so users can see their history even after a downgrade.
+		if path == "/api/maintenance-windows" && method == fiber.MethodPost {
+			return gate(c)
+		}
+		if strings.HasPrefix(path, "/api/maintenance-windows/") && method == fiber.MethodDelete {
+			return gate(c)
+		}
 		// PATCH /api/incidents/{id}/state — change state + post update
 		if method == fiber.MethodPatch &&
 			strings.HasPrefix(path, "/api/incidents/") &&

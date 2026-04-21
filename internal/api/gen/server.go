@@ -356,6 +356,16 @@ type LoginRequest struct {
 	Password string              `json:"password"`
 }
 
+// MaintenanceWindow defines model for MaintenanceWindow.
+type MaintenanceWindow struct {
+	CreatedAt time.Time          `json:"created_at"`
+	EndsAt    time.Time          `json:"ends_at"`
+	Id        int64              `json:"id"`
+	MonitorId openapi_types.UUID `json:"monitor_id"`
+	Reason    string             `json:"reason"`
+	StartsAt  time.Time          `json:"starts_at"`
+}
+
 // Monitor defines model for Monitor.
 type Monitor struct {
 	AlertAfterFailures *int                    `json:"alert_after_failures,omitempty"`
@@ -453,6 +463,14 @@ type RegisterRequest struct {
 	Slug     string              `json:"slug"`
 }
 
+// ScheduleMaintenanceWindowRequest defines model for ScheduleMaintenanceWindowRequest.
+type ScheduleMaintenanceWindowRequest struct {
+	EndsAt    time.Time          `json:"ends_at"`
+	MonitorId openapi_types.UUID `json:"monitor_id"`
+	Reason    string             `json:"reason"`
+	StartsAt  time.Time          `json:"starts_at"`
+}
+
 // StatusMonitor defines model for StatusMonitor.
 type StatusMonitor struct {
 	CurrentStatus *string  `json:"current_status,omitempty"`
@@ -542,6 +560,9 @@ type CreateIncidentJSONRequestBody = CreateIncidentRequest
 // UpdateIncidentStateJSONRequestBody defines body for UpdateIncidentState for application/json ContentType.
 type UpdateIncidentStateJSONRequestBody = UpdateIncidentStateRequest
 
+// ScheduleMaintenanceWindowJSONRequestBody defines body for ScheduleMaintenanceWindow for application/json ContentType.
+type ScheduleMaintenanceWindowJSONRequestBody = ScheduleMaintenanceWindowRequest
+
 // UpdateMyBrandingJSONRequestBody defines body for UpdateMyBranding for application/json ContentType.
 type UpdateMyBrandingJSONRequestBody = Branding
 
@@ -607,6 +628,15 @@ type ServerInterface interface {
 
 	// (GET /api/incidents/{id}/updates)
 	ListIncidentUpdates(c *fiber.Ctx, id int64) error
+
+	// (GET /api/maintenance-windows)
+	ListMaintenanceWindows(c *fiber.Ctx) error
+
+	// (POST /api/maintenance-windows)
+	ScheduleMaintenanceWindow(c *fiber.Ctx) error
+
+	// (DELETE /api/maintenance-windows/{id})
+	DeleteMaintenanceWindow(c *fiber.Ctx, id int64) error
 
 	// (GET /api/me/branding)
 	GetMyBranding(c *fiber.Ctx) error
@@ -856,6 +886,46 @@ func (siw *ServerInterfaceWrapper) ListIncidentUpdates(c *fiber.Ctx) error {
 	return siw.Handler.ListIncidentUpdates(c, id)
 }
 
+// ListMaintenanceWindows operation middleware
+func (siw *ServerInterfaceWrapper) ListMaintenanceWindows(c *fiber.Ctx) error {
+
+	c.Context().SetUserValue(SessionAuthScopes, []string{})
+
+	c.Context().SetUserValue(BearerAuthScopes, []string{})
+
+	return siw.Handler.ListMaintenanceWindows(c)
+}
+
+// ScheduleMaintenanceWindow operation middleware
+func (siw *ServerInterfaceWrapper) ScheduleMaintenanceWindow(c *fiber.Ctx) error {
+
+	c.Context().SetUserValue(SessionAuthScopes, []string{})
+
+	c.Context().SetUserValue(BearerAuthScopes, []string{})
+
+	return siw.Handler.ScheduleMaintenanceWindow(c)
+}
+
+// DeleteMaintenanceWindow operation middleware
+func (siw *ServerInterfaceWrapper) DeleteMaintenanceWindow(c *fiber.Ctx) error {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Params("id"), &id, runtime.BindStyledParameterOptions{Explode: false, Required: true, Type: "integer", Format: "int64"})
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter id: %w", err).Error())
+	}
+
+	c.Context().SetUserValue(SessionAuthScopes, []string{})
+
+	c.Context().SetUserValue(BearerAuthScopes, []string{})
+
+	return siw.Handler.DeleteMaintenanceWindow(c, id)
+}
+
 // GetMyBranding operation middleware
 func (siw *ServerInterfaceWrapper) GetMyBranding(c *fiber.Ctx) error {
 
@@ -1096,6 +1166,12 @@ func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, option
 	router.Patch(options.BaseURL+"/api/incidents/:id/state", wrapper.UpdateIncidentState)
 
 	router.Get(options.BaseURL+"/api/incidents/:id/updates", wrapper.ListIncidentUpdates)
+
+	router.Get(options.BaseURL+"/api/maintenance-windows", wrapper.ListMaintenanceWindows)
+
+	router.Post(options.BaseURL+"/api/maintenance-windows", wrapper.ScheduleMaintenanceWindow)
+
+	router.Delete(options.BaseURL+"/api/maintenance-windows/:id", wrapper.DeleteMaintenanceWindow)
 
 	router.Get(options.BaseURL+"/api/me/branding", wrapper.GetMyBranding)
 
