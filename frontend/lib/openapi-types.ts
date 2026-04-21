@@ -196,6 +196,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/incidents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createIncident"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/incidents/{id}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateIncidentState"];
+        trace?: never;
+    };
+    "/api/incidents/{id}/updates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listIncidentUpdates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/stats/public": {
         parameters: {
             query?: never;
@@ -388,14 +436,42 @@ export interface components {
         };
         Incident: {
             /** Format: int64 */
-            id?: number;
+            id: number;
             /** Format: uuid */
-            monitor_id?: string;
+            monitor_id: string;
             /** Format: date-time */
-            started_at?: string;
+            started_at: string;
             /** Format: date-time */
             resolved_at?: string | null;
-            cause?: string;
+            cause: string;
+            /** @enum {string} */
+            state: "investigating" | "identified" | "monitoring" | "resolved";
+            is_manual: boolean;
+            title?: string | null;
+        };
+        CreateIncidentRequest: {
+            /** Format: uuid */
+            monitor_id: string;
+            title: string;
+            body: string;
+        };
+        UpdateIncidentStateRequest: {
+            /** @enum {string} */
+            state: "investigating" | "identified" | "monitoring" | "resolved";
+            body: string;
+        };
+        IncidentUpdate: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            incident_id: number;
+            /** @enum {string} */
+            state: "investigating" | "identified" | "monitoring" | "resolved";
+            body: string;
+            /** Format: uuid */
+            posted_by_user_id: string;
+            /** Format: date-time */
+            posted_at: string;
         };
         PublicStats: {
             /** Format: int64 */
@@ -935,6 +1011,120 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    createIncident: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateIncidentRequest"];
+            };
+        };
+        responses: {
+            /** @description Manual incident opened */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Incident"];
+                };
+            };
+            /** @description Pro subscription required */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not the owner of the monitor */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateIncidentState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateIncidentStateRequest"];
+            };
+        };
+        responses: {
+            /** @description State changed; returns the new IncidentUpdate */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentUpdate"];
+                };
+            };
+            /** @description Pro subscription required */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not the owner of the monitor */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid state transition */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listIncidentUpdates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Chronological timeline for the incident (newest first) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentUpdate"][];
+                };
             };
         };
     };

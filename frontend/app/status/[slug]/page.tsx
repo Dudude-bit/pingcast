@@ -4,6 +4,19 @@ import { notFound } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
 import type { components } from "@/lib/openapi-types";
 import { Activity, AlertCircle, CheckCircle2 } from "lucide-react";
+import { IncidentStateBadge } from "@/components/features/incidents/incident-state-badge";
+import { IncidentTimeline } from "@/components/features/incidents/incident-timeline";
+
+type IncidentUpdate = components["schemas"]["IncidentUpdate"];
+type Incident = components["schemas"]["Incident"];
+
+async function fetchIncidentUpdates(id: number): Promise<IncidentUpdate[]> {
+  try {
+    return await apiFetch<IncidentUpdate[]>(`/incidents/${id}/updates`);
+  } catch {
+    return [];
+  }
+}
 
 export const revalidate = 30;
 
@@ -63,7 +76,14 @@ export default async function StatusPageRoute({
 
   const allUp = data.all_up ?? true;
   const monitors = data.monitors ?? [];
-  const incidents = data.incidents ?? [];
+  const incidents: Incident[] = data.incidents ?? [];
+
+  // Fetch timelines for every incident in parallel. Auto-detected
+  // incidents will have zero updates → IncidentTimeline renders
+  // nothing. Manual incidents get their full state-machine history.
+  const timelines = await Promise.all(
+    incidents.map((inc) => fetchIncidentUpdates(inc.id)),
+  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -150,34 +170,42 @@ export default async function StatusPageRoute({
               Recent incidents
             </h2>
             <ul className="divide-y divide-border/60 rounded-lg border border-border/60 bg-card">
-              {incidents.map((inc) => (
-                <li key={inc.id} className="p-4">
-                  <div className="flex items-start gap-3">
-                    <AlertCircle
-                      className={`mt-0.5 h-4 w-4 shrink-0 ${
-                        inc.resolved_at
-                          ? "text-muted-foreground"
-                          : "text-red-500"
-                      }`}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium">
-                        {inc.cause || "Check failed"}
-                      </div>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        Started {formatDate(inc.started_at)}
-                        {inc.resolved_at ? (
-                          <> · Resolved {formatDate(inc.resolved_at)}</>
-                        ) : (
-                          <span className="text-red-600 dark:text-red-400">
-                            {" · Ongoing"}
+              {incidents.map((inc, idx) => {
+                const timeline = timelines[idx] ?? [];
+                const headline = inc.title ?? inc.cause ?? "Check failed";
+                return (
+                  <li key={inc.id} className="p-4">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle
+                        className={`mt-0.5 h-4 w-4 shrink-0 ${
+                          inc.resolved_at
+                            ? "text-muted-foreground"
+                            : "text-red-500"
+                        }`}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium">
+                            {headline}
                           </span>
-                        )}
+                          <IncidentStateBadge state={inc.state} />
+                        </div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          Started {formatDate(inc.started_at)}
+                          {inc.resolved_at ? (
+                            <> · Resolved {formatDate(inc.resolved_at)}</>
+                          ) : (
+                            <span className="text-red-600 dark:text-red-400">
+                              {" · Ongoing"}
+                            </span>
+                          )}
+                        </div>
+                        <IncidentTimeline updates={timeline} />
                       </div>
                     </div>
-                  </div>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           </section>
         ) : null}
