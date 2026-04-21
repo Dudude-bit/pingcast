@@ -100,33 +100,32 @@ func (s *MonitoringService) ChangeIncidentState(ctx context.Context, in ChangeIn
 	if monitor.UserID != in.UserID {
 		return nil, domain.ErrForbidden
 	}
-	if err := inc.State.CanTransitionTo(in.NewState); err != nil {
-		return nil, err
+	if tErr := inc.State.CanTransitionTo(in.NewState); tErr != nil {
+		return nil, tErr
 	}
 
 	var created *domain.IncidentUpdate
-	err = s.txm.Do(ctx, func(ctx context.Context) error {
-		if err := s.incidents.UpdateState(ctx, in.IncidentID, in.NewState); err != nil {
-			return fmt.Errorf("update state: %w", err)
+	if err := s.txm.Do(ctx, func(ctx context.Context) error {
+		if updErr := s.incidents.UpdateState(ctx, in.IncidentID, in.NewState); updErr != nil {
+			return fmt.Errorf("update state: %w", updErr)
 		}
 		if in.NewState == domain.IncidentStateResolved {
-			if err := s.incidents.Resolve(ctx, in.IncidentID, s.clock.Now()); err != nil {
-				return fmt.Errorf("resolve: %w", err)
+			if rErr := s.incidents.Resolve(ctx, in.IncidentID, s.clock.Now()); rErr != nil {
+				return fmt.Errorf("resolve: %w", rErr)
 			}
 		}
-		u, err := s.incidentUpdates.Create(ctx, port.CreateIncidentUpdateInput{
+		u, cErr := s.incidentUpdates.Create(ctx, port.CreateIncidentUpdateInput{
 			IncidentID:     in.IncidentID,
 			State:          in.NewState,
 			Body:           in.UpdateBody,
 			PostedByUserID: in.UserID,
 		})
-		if err != nil {
-			return fmt.Errorf("append update: %w", err)
+		if cErr != nil {
+			return fmt.Errorf("append update: %w", cErr)
 		}
 		created = u
 		return nil
-	})
-	if err != nil {
+	}); err != nil {
 		return nil, err
 	}
 	return created, nil
@@ -164,31 +163,30 @@ func (s *MonitoringService) CreateManualIncident(ctx context.Context, in CreateM
 
 	var inc *domain.Incident
 	var upd *domain.IncidentUpdate
-	err = s.txm.Do(ctx, func(ctx context.Context) error {
-		created, err := s.incidents.Create(ctx, port.CreateIncidentInput{
+	if err := s.txm.Do(ctx, func(ctx context.Context) error {
+		created, cErr := s.incidents.Create(ctx, port.CreateIncidentInput{
 			MonitorID: in.MonitorID,
 			Cause:     title, // cause falls back to title for auto-rendered summaries
 			State:     domain.IncidentStateInvestigating,
 			IsManual:  true,
 			Title:     &title,
 		})
-		if err != nil {
-			return fmt.Errorf("create incident: %w", err)
+		if cErr != nil {
+			return fmt.Errorf("create incident: %w", cErr)
 		}
-		u, err := s.incidentUpdates.Create(ctx, port.CreateIncidentUpdateInput{
+		u, uErr := s.incidentUpdates.Create(ctx, port.CreateIncidentUpdateInput{
 			IncidentID:     created.ID,
 			State:          domain.IncidentStateInvestigating,
 			Body:           body,
 			PostedByUserID: in.UserID,
 		})
-		if err != nil {
-			return fmt.Errorf("append initial update: %w", err)
+		if uErr != nil {
+			return fmt.Errorf("append initial update: %w", uErr)
 		}
 		inc = created
 		upd = u
 		return nil
-	})
-	if err != nil {
+	}); err != nil {
 		return nil, nil, err
 	}
 	return inc, upd, nil
