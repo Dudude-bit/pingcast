@@ -69,6 +69,49 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 	return i, err
 }
 
+const getUserBranding = `-- name: GetUserBranding :one
+SELECT logo_url, accent_color, custom_footer_text
+FROM users WHERE id = $1 AND deleted_at IS NULL
+`
+
+type GetUserBrandingRow struct {
+	LogoUrl          *string `json:"logo_url"`
+	AccentColor      *string `json:"accent_color"`
+	CustomFooterText *string `json:"custom_footer_text"`
+}
+
+func (q *Queries) GetUserBranding(ctx context.Context, id uuid.UUID) (GetUserBrandingRow, error) {
+	row := q.db.QueryRow(ctx, getUserBranding, id)
+	var i GetUserBrandingRow
+	err := row.Scan(&i.LogoUrl, &i.AccentColor, &i.CustomFooterText)
+	return i, err
+}
+
+const getUserBrandingBySlug = `-- name: GetUserBrandingBySlug :one
+SELECT u.plan, u.logo_url, u.accent_color, u.custom_footer_text
+FROM users u
+WHERE u.slug = $1 AND u.deleted_at IS NULL
+`
+
+type GetUserBrandingBySlugRow struct {
+	Plan             string  `json:"plan"`
+	LogoUrl          *string `json:"logo_url"`
+	AccentColor      *string `json:"accent_color"`
+	CustomFooterText *string `json:"custom_footer_text"`
+}
+
+func (q *Queries) GetUserBrandingBySlug(ctx context.Context, slug string) (GetUserBrandingBySlugRow, error) {
+	row := q.db.QueryRow(ctx, getUserBrandingBySlug, slug)
+	var i GetUserBrandingBySlugRow
+	err := row.Scan(
+		&i.Plan,
+		&i.LogoUrl,
+		&i.AccentColor,
+		&i.CustomFooterText,
+	)
+	return i, err
+}
+
 const getUserByEmail = `-- name: GetUserByEmail :one
 SELECT id, email, slug, password_hash, plan, created_at, deleted_at
 FROM users WHERE email = $1 AND deleted_at IS NULL
@@ -170,6 +213,29 @@ type SetSubscriptionVariantParams struct {
 
 func (q *Queries) SetSubscriptionVariant(ctx context.Context, arg SetSubscriptionVariantParams) error {
 	_, err := q.db.Exec(ctx, setSubscriptionVariant, arg.ID, arg.SubscriptionVariant)
+	return err
+}
+
+const updateUserBranding = `-- name: UpdateUserBranding :exec
+UPDATE users
+SET logo_url = $2, accent_color = $3, custom_footer_text = $4
+WHERE id = $1 AND deleted_at IS NULL
+`
+
+type UpdateUserBrandingParams struct {
+	ID               uuid.UUID `json:"id"`
+	LogoUrl          *string   `json:"logo_url"`
+	AccentColor      *string   `json:"accent_color"`
+	CustomFooterText *string   `json:"custom_footer_text"`
+}
+
+func (q *Queries) UpdateUserBranding(ctx context.Context, arg UpdateUserBrandingParams) error {
+	_, err := q.db.Exec(ctx, updateUserBranding,
+		arg.ID,
+		arg.LogoUrl,
+		arg.AccentColor,
+		arg.CustomFooterText,
+	)
 	return err
 }
 

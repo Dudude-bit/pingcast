@@ -18,6 +18,18 @@ type UserRepo interface {
 	UpdateLemonSqueezy(ctx context.Context, id uuid.UUID, customerID, subscriptionID string) error
 	SetSubscriptionVariant(ctx context.Context, id uuid.UUID, variant string) error
 	CountActiveFounderSubscriptions(ctx context.Context) (int64, error)
+	GetBranding(ctx context.Context, id uuid.UUID) (Branding, error)
+	GetBrandingBySlug(ctx context.Context, slug string) (plan domain.Plan, b Branding, err error)
+	UpdateBranding(ctx context.Context, id uuid.UUID, b Branding) error
+}
+
+// Branding is the Pro-tier status-page customisation. Free users can
+// still read their own values (stored for them in case they upgrade)
+// but the status-page renderer ignores them when plan=free.
+type Branding struct {
+	LogoURL          *string
+	AccentColor      *string
+	CustomFooterText *string
 }
 
 type SessionRepo interface {

@@ -266,6 +266,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/branding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getMyBranding"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateMyBranding"];
+        trace?: never;
+    };
     "/api/billing/founder-status": {
         parameters: {
             query?: never;
@@ -523,6 +539,12 @@ export interface components {
             updates_created: number;
             components_skipped: number;
         };
+        Branding: {
+            logo_url?: string | null;
+            /** @description Hex like #3b82f6. Rendered as --accent CSS var on the status page. */
+            accent_color?: string | null;
+            custom_footer_text?: string | null;
+        };
         FounderStatus: {
             available: boolean;
             /** Format: int64 */
@@ -540,7 +562,9 @@ export interface components {
         StatusPageResponse: {
             slug?: string;
             all_up?: boolean;
+            /** @description True when the page should show the 'powered by PingCast' watermark — i.e. owner is on the Free tier. */
             show_branding?: boolean;
+            branding?: components["schemas"]["Branding"];
             monitors?: components["schemas"]["StatusMonitor"][];
             incidents?: components["schemas"]["Incident"][];
         };
@@ -1214,6 +1238,57 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Pro subscription required */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getMyBranding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current branding */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Branding"];
+                };
+            };
+        };
+    };
+    updateMyBranding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Branding"];
+            };
+        };
+        responses: {
+            /** @description Updated branding */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Branding"];
+                };
             };
             /** @description Pro subscription required */
             402: {

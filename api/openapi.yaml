@@ -486,6 +486,42 @@ paths:
         "402":
           description: Pro subscription required
 
+  /api/me/branding:
+    get:
+      operationId: getMyBranding
+      tags: [branding]
+      security:
+        - sessionAuth: []
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current branding
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Branding"
+    patch:
+      operationId: updateMyBranding
+      tags: [branding]
+      security:
+        - sessionAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Branding"
+      responses:
+        "200":
+          description: Updated branding
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Branding"
+        "402":
+          description: Pro subscription required
+
   /api/billing/founder-status:
     get:
       operationId: getFounderStatus
@@ -910,6 +946,20 @@ components:
         updates_created: { type: integer }
         components_skipped: { type: integer }
 
+    Branding:
+      type: object
+      properties:
+        logo_url:
+          type: string
+          nullable: true
+        accent_color:
+          type: string
+          nullable: true
+          description: "Hex like #3b82f6. Rendered as --accent CSS var on the status page."
+        custom_footer_text:
+          type: string
+          nullable: true
+
     FounderStatus:
       type: object
       required: [available, used, cap]
@@ -945,6 +995,9 @@ components:
           type: boolean
         show_branding:
           type: boolean
+          description: "True when the page should show the 'powered by PingCast' watermark — i.e. owner is on the Free tier."
+        branding:
+          $ref: "#/components/schemas/Branding"
         monitors:
           type: array
           items:

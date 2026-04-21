@@ -138,6 +138,19 @@ func (s *AuthService) DowngradeToFree(ctx context.Context, userID uuid.UUID) err
 	return s.users.UpdatePlan(ctx, userID, domain.PlanFree)
 }
 
+// GetBranding returns the user's stored status-page branding. Safe for
+// Free users — the renderer discards the values for them, but we still
+// surface them so the dashboard can show a preview / retain values on
+// upgrade.
+func (s *AuthService) GetBranding(ctx context.Context, userID uuid.UUID) (port.Branding, error) {
+	return s.users.GetBranding(ctx, userID)
+}
+
+// UpdateBranding writes the branding. Pro-gated at the HTTP layer.
+func (s *AuthService) UpdateBranding(ctx context.Context, userID uuid.UUID, b port.Branding) error {
+	return s.users.UpdateBranding(ctx, userID, b)
+}
+
 func (s *AuthService) GetUserByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
 	return s.users.GetByID(ctx, id)
 }

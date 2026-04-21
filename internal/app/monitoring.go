@@ -666,6 +666,7 @@ type StatusPageData struct {
 	Slug         string
 	AllUp        bool
 	ShowBranding bool
+	Branding     port.Branding
 	Monitors     []StatusMonitor
 	Incidents    []domain.Incident
 }
@@ -706,10 +707,23 @@ func (s *MonitoringService) GetStatusPage(ctx context.Context, slug string) (*St
 		incidents = append(incidents, monIncidents...)
 	}
 
+	// Branding is Pro-only: fetch but only include it in the response
+	// when the owner is on Pro. Free tier keeps the PingCast watermark
+	// (ShowBranding=true) and ignores any stored logo/accent/footer.
+	var branding port.Branding
+	if user.Plan == domain.PlanPro {
+		if b, bErr := s.users.GetBranding(ctx, user.ID); bErr != nil {
+			slog.Error("failed to load user branding", "user_id", user.ID, "error", bErr)
+		} else {
+			branding = b
+		}
+	}
+
 	return &StatusPageData{
 		Slug:         slug,
 		AllUp:        allUp,
 		ShowBranding: user.Plan == domain.PlanFree,
+		Branding:     branding,
 		Monitors:     statusMons,
 		Incidents:    incidents,
 	}, nil

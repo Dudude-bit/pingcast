@@ -119,6 +119,10 @@ func proGateSelector() apigen.MiddlewareFunc {
 		if method == fiber.MethodPost && path == "/api/incidents" {
 			return gate(c)
 		}
+		// PATCH /api/me/branding — Pro-only status-page customisation
+		if method == fiber.MethodPatch && path == "/api/me/branding" {
+			return gate(c)
+		}
 		// PATCH /api/incidents/{id}/state — change state + post update
 		if method == fiber.MethodPatch &&
 			strings.HasPrefix(path, "/api/incidents/") &&

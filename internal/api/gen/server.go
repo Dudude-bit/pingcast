@@ -226,6 +226,14 @@ type AuthResponse struct {
 	User      *User   `json:"user,omitempty"`
 }
 
+// Branding defines model for Branding.
+type Branding struct {
+	// AccentColor Hex like #3b82f6. Rendered as --accent CSS var on the status page.
+	AccentColor      *string `json:"accent_color,omitempty"`
+	CustomFooterText *string `json:"custom_footer_text,omitempty"`
+	LogoUrl          *string `json:"logo_url,omitempty"`
+}
+
 // ChannelTypeInfo defines model for ChannelTypeInfo.
 type ChannelTypeInfo struct {
 	Label  *string       `json:"label,omitempty"`
@@ -454,11 +462,14 @@ type StatusMonitor struct {
 
 // StatusPageResponse defines model for StatusPageResponse.
 type StatusPageResponse struct {
-	AllUp        *bool            `json:"all_up,omitempty"`
-	Incidents    *[]Incident      `json:"incidents,omitempty"`
-	Monitors     *[]StatusMonitor `json:"monitors,omitempty"`
-	ShowBranding *bool            `json:"show_branding,omitempty"`
-	Slug         *string          `json:"slug,omitempty"`
+	AllUp     *bool            `json:"all_up,omitempty"`
+	Branding  *Branding        `json:"branding,omitempty"`
+	Incidents *[]Incident      `json:"incidents,omitempty"`
+	Monitors  *[]StatusMonitor `json:"monitors,omitempty"`
+
+	// ShowBranding True when the page should show the 'powered by PingCast' watermark — i.e. owner is on the Free tier.
+	ShowBranding *bool   `json:"show_branding,omitempty"`
+	Slug         *string `json:"slug,omitempty"`
 }
 
 // UpdateChannelRequest defines model for UpdateChannelRequest.
@@ -531,6 +542,9 @@ type CreateIncidentJSONRequestBody = CreateIncidentRequest
 // UpdateIncidentStateJSONRequestBody defines body for UpdateIncidentState for application/json ContentType.
 type UpdateIncidentStateJSONRequestBody = UpdateIncidentStateRequest
 
+// UpdateMyBrandingJSONRequestBody defines body for UpdateMyBranding for application/json ContentType.
+type UpdateMyBrandingJSONRequestBody = Branding
+
 // CreateMonitorJSONRequestBody defines body for CreateMonitor for application/json ContentType.
 type CreateMonitorJSONRequestBody = CreateMonitorRequest
 
@@ -593,6 +607,12 @@ type ServerInterface interface {
 
 	// (GET /api/incidents/{id}/updates)
 	ListIncidentUpdates(c *fiber.Ctx, id int64) error
+
+	// (GET /api/me/branding)
+	GetMyBranding(c *fiber.Ctx) error
+
+	// (PATCH /api/me/branding)
+	UpdateMyBranding(c *fiber.Ctx) error
 
 	// (GET /api/monitor-types)
 	ListMonitorTypes(c *fiber.Ctx) error
@@ -836,6 +856,26 @@ func (siw *ServerInterfaceWrapper) ListIncidentUpdates(c *fiber.Ctx) error {
 	return siw.Handler.ListIncidentUpdates(c, id)
 }
 
+// GetMyBranding operation middleware
+func (siw *ServerInterfaceWrapper) GetMyBranding(c *fiber.Ctx) error {
+
+	c.Context().SetUserValue(SessionAuthScopes, []string{})
+
+	c.Context().SetUserValue(BearerAuthScopes, []string{})
+
+	return siw.Handler.GetMyBranding(c)
+}
+
+// UpdateMyBranding operation middleware
+func (siw *ServerInterfaceWrapper) UpdateMyBranding(c *fiber.Ctx) error {
+
+	c.Context().SetUserValue(SessionAuthScopes, []string{})
+
+	c.Context().SetUserValue(BearerAuthScopes, []string{})
+
+	return siw.Handler.UpdateMyBranding(c)
+}
+
 // ListMonitorTypes operation middleware
 func (siw *ServerInterfaceWrapper) ListMonitorTypes(c *fiber.Ctx) error {
 
@@ -1056,6 +1096,10 @@ func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, option
 	router.Patch(options.BaseURL+"/api/incidents/:id/state", wrapper.UpdateIncidentState)
 
 	router.Get(options.BaseURL+"/api/incidents/:id/updates", wrapper.ListIncidentUpdates)
+
+	router.Get(options.BaseURL+"/api/me/branding", wrapper.GetMyBranding)
+
+	router.Patch(options.BaseURL+"/api/me/branding", wrapper.UpdateMyBranding)
 
 	router.Get(options.BaseURL+"/api/monitor-types", wrapper.ListMonitorTypes)
 

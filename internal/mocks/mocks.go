@@ -3282,6 +3282,144 @@ func (_c *MockUserRepo_Create_Call) RunAndReturn(run func(ctx context.Context, e
 	return _c
 }
 
+// GetBranding provides a mock function for the type MockUserRepo
+func (_mock *MockUserRepo) GetBranding(ctx context.Context, id uuid.UUID) (port.Branding, error) {
+	ret := _mock.Called(ctx, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetBranding")
+	}
+
+	var r0 port.Branding
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID) (port.Branding, error)); ok {
+		return returnFunc(ctx, id)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID) port.Branding); ok {
+		r0 = returnFunc(ctx, id)
+	} else {
+		r0 = ret.Get(0).(port.Branding)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, uuid.UUID) error); ok {
+		r1 = returnFunc(ctx, id)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockUserRepo_GetBranding_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetBranding'
+type MockUserRepo_GetBranding_Call struct {
+	*mock.Call
+}
+
+// GetBranding is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id uuid.UUID
+func (_e *MockUserRepo_Expecter) GetBranding(ctx interface{}, id interface{}) *MockUserRepo_GetBranding_Call {
+	return &MockUserRepo_GetBranding_Call{Call: _e.mock.On("GetBranding", ctx, id)}
+}
+
+func (_c *MockUserRepo_GetBranding_Call) Run(run func(ctx context.Context, id uuid.UUID)) *MockUserRepo_GetBranding_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uuid.UUID
+		if args[1] != nil {
+			arg1 = args[1].(uuid.UUID)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockUserRepo_GetBranding_Call) Return(branding port.Branding, err error) *MockUserRepo_GetBranding_Call {
+	_c.Call.Return(branding, err)
+	return _c
+}
+
+func (_c *MockUserRepo_GetBranding_Call) RunAndReturn(run func(ctx context.Context, id uuid.UUID) (port.Branding, error)) *MockUserRepo_GetBranding_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetBrandingBySlug provides a mock function for the type MockUserRepo
+func (_mock *MockUserRepo) GetBrandingBySlug(ctx context.Context, slug string) (domain.Plan, port.Branding, error) {
+	ret := _mock.Called(ctx, slug)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetBrandingBySlug")
+	}
+
+	var r0 domain.Plan
+	var r1 port.Branding
+	var r2 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (domain.Plan, port.Branding, error)); ok {
+		return returnFunc(ctx, slug)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) domain.Plan); ok {
+		r0 = returnFunc(ctx, slug)
+	} else {
+		r0 = ret.Get(0).(domain.Plan)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) port.Branding); ok {
+		r1 = returnFunc(ctx, slug)
+	} else {
+		r1 = ret.Get(1).(port.Branding)
+	}
+	if returnFunc, ok := ret.Get(2).(func(context.Context, string) error); ok {
+		r2 = returnFunc(ctx, slug)
+	} else {
+		r2 = ret.Error(2)
+	}
+	return r0, r1, r2
+}
+
+// MockUserRepo_GetBrandingBySlug_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetBrandingBySlug'
+type MockUserRepo_GetBrandingBySlug_Call struct {
+	*mock.Call
+}
+
+// GetBrandingBySlug is a helper method to define mock.On call
+//   - ctx context.Context
+//   - slug string
+func (_e *MockUserRepo_Expecter) GetBrandingBySlug(ctx interface{}, slug interface{}) *MockUserRepo_GetBrandingBySlug_Call {
+	return &MockUserRepo_GetBrandingBySlug_Call{Call: _e.mock.On("GetBrandingBySlug", ctx, slug)}
+}
+
+func (_c *MockUserRepo_GetBrandingBySlug_Call) Run(run func(ctx context.Context, slug string)) *MockUserRepo_GetBrandingBySlug_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockUserRepo_GetBrandingBySlug_Call) Return(plan domain.Plan, b port.Branding, err error) *MockUserRepo_GetBrandingBySlug_Call {
+	_c.Call.Return(plan, b, err)
+	return _c
+}
+
+func (_c *MockUserRepo_GetBrandingBySlug_Call) RunAndReturn(run func(ctx context.Context, slug string) (domain.Plan, port.Branding, error)) *MockUserRepo_GetBrandingBySlug_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetByEmail provides a mock function for the type MockUserRepo
 func (_mock *MockUserRepo) GetByEmail(ctx context.Context, email string) (*domain.User, string, error) {
 	ret := _mock.Called(ctx, email)
@@ -3551,6 +3689,69 @@ func (_c *MockUserRepo_SetSubscriptionVariant_Call) Return(err error) *MockUserR
 }
 
 func (_c *MockUserRepo_SetSubscriptionVariant_Call) RunAndReturn(run func(ctx context.Context, id uuid.UUID, variant string) error) *MockUserRepo_SetSubscriptionVariant_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpdateBranding provides a mock function for the type MockUserRepo
+func (_mock *MockUserRepo) UpdateBranding(ctx context.Context, id uuid.UUID, b port.Branding) error {
+	ret := _mock.Called(ctx, id, b)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateBranding")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, port.Branding) error); ok {
+		r0 = returnFunc(ctx, id, b)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockUserRepo_UpdateBranding_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateBranding'
+type MockUserRepo_UpdateBranding_Call struct {
+	*mock.Call
+}
+
+// UpdateBranding is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id uuid.UUID
+//   - b port.Branding
+func (_e *MockUserRepo_Expecter) UpdateBranding(ctx interface{}, id interface{}, b interface{}) *MockUserRepo_UpdateBranding_Call {
+	return &MockUserRepo_UpdateBranding_Call{Call: _e.mock.On("UpdateBranding", ctx, id, b)}
+}
+
+func (_c *MockUserRepo_UpdateBranding_Call) Run(run func(ctx context.Context, id uuid.UUID, b port.Branding)) *MockUserRepo_UpdateBranding_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uuid.UUID
+		if args[1] != nil {
+			arg1 = args[1].(uuid.UUID)
+		}
+		var arg2 port.Branding
+		if args[2] != nil {
+			arg2 = args[2].(port.Branding)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockUserRepo_UpdateBranding_Call) Return(err error) *MockUserRepo_UpdateBranding_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockUserRepo_UpdateBranding_Call) RunAndReturn(run func(ctx context.Context, id uuid.UUID, b port.Branding) error) *MockUserRepo_UpdateBranding_Call {
 	_c.Call.Return(run)
 	return _c
 }

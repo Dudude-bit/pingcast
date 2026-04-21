@@ -174,4 +174,7 @@ type User struct {
 	CreatedAt                  time.Time          `json:"created_at"`
 	DeletedAt                  pgtype.Timestamptz `json:"deleted_at"`
 	SubscriptionVariant        *string            `json:"subscription_variant"`
+	LogoUrl                    *string            `json:"logo_url"`
+	AccentColor                *string            `json:"accent_color"`
+	CustomFooterText           *string            `json:"custom_footer_text"`
 }

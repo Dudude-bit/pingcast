@@ -85,10 +85,24 @@ export default async function StatusPageRoute({
     incidents.map((inc) => fetchIncidentUpdates(inc.id)),
   );
 
+  const branding = data.branding;
+  const accent = branding?.accent_color ?? undefined;
+
   return (
-    <div className="min-h-screen bg-background">
+    <div
+      className="min-h-screen bg-background"
+      style={accent ? ({ ["--brand-accent" as string]: accent } as React.CSSProperties) : undefined}
+    >
       <div className="container mx-auto px-4 py-12 max-w-2xl">
         <header className="mb-10 text-center">
+          {branding?.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={branding.logo_url}
+              alt={`${data.slug} logo`}
+              className="mx-auto mb-4 h-12 w-auto object-contain"
+            />
+          ) : null}
           <div className="inline-flex items-center justify-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
             <Activity className="h-3 w-3" />
             <span>{data.slug}</span>
@@ -210,8 +224,14 @@ export default async function StatusPageRoute({
           </section>
         ) : null}
 
+        {branding?.custom_footer_text ? (
+          <footer className="mt-8 text-center text-xs text-muted-foreground whitespace-pre-line">
+            {branding.custom_footer_text}
+          </footer>
+        ) : null}
+
         {data.show_branding ? (
-          <footer className="text-center text-xs text-muted-foreground">
+          <footer className="mt-8 text-center text-xs text-muted-foreground">
             Powered by{" "}
             <Link href="/" className="underline hover:text-foreground">
               PingCast

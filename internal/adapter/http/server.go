@@ -387,9 +387,54 @@ func (s *Server) GetStatusPage(c *fiber.Ctx, slug string) error {
 		Slug:         &data.Slug,
 		AllUp:        &data.AllUp,
 		ShowBranding: &data.ShowBranding,
-		Monitors:     &statusMonitors,
-		Incidents:    &apiIncidents,
+		Branding: &apigen.Branding{
+			LogoUrl:          data.Branding.LogoURL,
+			AccentColor:      data.Branding.AccentColor,
+			CustomFooterText: data.Branding.CustomFooterText,
+		},
+		Monitors:  &statusMonitors,
+		Incidents: &apiIncidents,
 	})
+}
+
+// GetMyBranding returns the caller's current branding config. Works for
+// both Free and Pro users — Free users can edit (see below) but their
+// values are just ignored at render time.
+func (s *Server) GetMyBranding(c *fiber.Ctx) error {
+	user := requireUser(c)
+	if user == nil {
+		return nil
+	}
+	b, err := s.auth.GetBranding(c.UserContext(), user.ID)
+	if err != nil {
+		return httperr.Write(c, err)
+	}
+	return c.JSON(apigen.Branding{
+		LogoUrl:          b.LogoURL,
+		AccentColor:      b.AccentColor,
+		CustomFooterText: b.CustomFooterText,
+	})
+}
+
+// UpdateMyBranding saves the caller's branding. Pro-gated upstream via
+// proGateSelector — by the time this handler runs, the user is on Pro.
+func (s *Server) UpdateMyBranding(c *fiber.Ctx) error {
+	user := requireUser(c)
+	if user == nil {
+		return nil
+	}
+	var req apigen.Branding
+	if err := c.BodyParser(&req); err != nil {
+		return httperr.WriteMalformedJSON(c)
+	}
+	if err := s.auth.UpdateBranding(c.UserContext(), user.ID, port.Branding{
+		LogoURL:          req.LogoUrl,
+		AccentColor:      req.AccentColor,
+		CustomFooterText: req.CustomFooterText,
+	}); err != nil {
+		return httperr.Write(c, err)
+	}
+	return c.JSON(req)
 }
 
 func (s *Server) HealthCheck(c *fiber.Ctx) error {

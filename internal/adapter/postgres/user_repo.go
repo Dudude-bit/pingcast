@@ -89,3 +89,36 @@ func (r *UserRepo) SetSubscriptionVariant(ctx context.Context, id uuid.UUID, var
 func (r *UserRepo) CountActiveFounderSubscriptions(ctx context.Context) (int64, error) {
 	return r.q.CountActiveFounderSubscriptions(ctx)
 }
+
+func (r *UserRepo) GetBranding(ctx context.Context, id uuid.UUID) (port.Branding, error) {
+	row, err := r.q.GetUserBranding(ctx, id)
+	if err != nil {
+		return port.Branding{}, err
+	}
+	return port.Branding{
+		LogoURL:          row.LogoUrl,
+		AccentColor:      row.AccentColor,
+		CustomFooterText: row.CustomFooterText,
+	}, nil
+}
+
+func (r *UserRepo) GetBrandingBySlug(ctx context.Context, slug string) (domain.Plan, port.Branding, error) {
+	row, err := r.q.GetUserBrandingBySlug(ctx, slug)
+	if err != nil {
+		return "", port.Branding{}, err
+	}
+	return domain.Plan(row.Plan), port.Branding{
+		LogoURL:          row.LogoUrl,
+		AccentColor:      row.AccentColor,
+		CustomFooterText: row.CustomFooterText,
+	}, nil
+}
+
+func (r *UserRepo) UpdateBranding(ctx context.Context, id uuid.UUID, b port.Branding) error {
+	return r.q.UpdateUserBranding(ctx, gen.UpdateUserBrandingParams{
+		ID:               id,
+		LogoUrl:          b.LogoURL,
+		AccentColor:      b.AccentColor,
+		CustomFooterText: b.CustomFooterText,
+	})
+}
