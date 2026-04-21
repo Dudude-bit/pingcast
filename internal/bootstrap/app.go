@@ -42,6 +42,15 @@ type AppDeps struct {
 	LemonSqueezyRetailVariantID  string
 	FounderCap                int
 
+	// SMTP_* mirrors the notifier. Empty SMTPHost → logging noop.
+	SMTPHost, SMTPUser, SMTPPass, SMTPFrom string
+	SMTPPort                               int
+
+	// BaseURL is the public site origin used for subscription confirm +
+	// unsubscribe links in outbound emails. Defaults to
+	// http://localhost:8080 via APIConfig.
+	BaseURL string
+
 	// Deterministic injection points. If nil, sysclock/sysrand defaults
 	// are wired; tests override with Fake impls.
 	Clock  port.Clock
@@ -152,6 +161,9 @@ func NewApp(deps AppDeps) (*App, error) {
 	}
 	billingSvc := app.NewBillingService(userRepo, founderCap)
 	atlassianImporter := app.NewAtlassianImporter(monitorRepo, incidentRepo, incidentUpdateRepo, txm, clock)
+	statusSubRepo := postgres.NewStatusSubscriberRepo(queries)
+	mailer := smtpadapter.NewMailer(deps.SMTPHost, deps.SMTPPort, deps.SMTPUser, deps.SMTPPass, deps.SMTPFrom)
+	subscriptionsSvc := app.NewSubscriptionService(statusSubRepo, mailer, deps.BaseURL)
 
 	// Per-scope rate limiters (spec §5). Each bucket has its own prefix
 	// so they don't share keys, and its own max/window per scope. Tests
@@ -159,7 +171,7 @@ func NewApp(deps AppDeps) (*App, error) {
 	rls := buildRateLimiters(deps.Redis, deps.RateLimits)
 
 	// HTTP handlers
-	server := httpadapter.NewServer(authSvc, monitoringSvc, alertSvc, billingSvc, atlassianImporter, rls, apiKeyRepo, statsRepo)
+	server := httpadapter.NewServer(authSvc, monitoringSvc, alertSvc, billingSvc, atlassianImporter, subscriptionsSvc, rls, apiKeyRepo, statsRepo)
 	webhookHandler := httpadapter.NewWebhookHandler(
 		authSvc, alertSvc, billingSvc, deps.LemonSqueezySecret,
 		deps.LemonSqueezyFounderVariantID,

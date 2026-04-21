@@ -704,6 +704,65 @@ paths:
               schema:
                 $ref: "#/components/schemas/PublicStats"
 
+  /api/status/{slug}/subscribe:
+    post:
+      operationId: subscribeToStatusPage
+      tags: [status]
+      description: Public. Creates a pending subscriber and emails a confirmation link. Double-opt-in.
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "202": { description: Acknowledged — check your inbox to confirm. }
+        "400": { description: Invalid email }
+
+  /api/status/{slug}/confirm:
+    get:
+      operationId: confirmStatusSubscription
+      tags: [status]
+      description: Public. Clicked from the confirmation email. Flips confirmed_at.
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+        - name: token
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Confirmation page (text/html) }
+        "404": { description: Invalid or expired token }
+
+  /api/status/{slug}/unsubscribe:
+    get:
+      operationId: unsubscribeFromStatusPage
+      tags: [status]
+      description: Public. Clicked from any outbound email. Deletes the subscriber.
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+        - name: token
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Unsubscribed (text/html) }
+        "404": { description: Invalid token }
+
   /api/status/{slug}:
     get:
       operationId: getStatusPage

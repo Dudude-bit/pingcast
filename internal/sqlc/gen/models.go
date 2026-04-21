@@ -180,6 +180,16 @@ type Session struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type StatusSubscriber struct {
+	ID               int64              `json:"id"`
+	Slug             string             `json:"slug"`
+	Email            string             `json:"email"`
+	ConfirmToken     string             `json:"confirm_token"`
+	UnsubscribeToken string             `json:"unsubscribe_token"`
+	ConfirmedAt      pgtype.Timestamptz `json:"confirmed_at"`
+	CreatedAt        time.Time          `json:"created_at"`
+}
+
 type User struct {
 	ID                         uuid.UUID          `json:"id"`
 	Email                      string             `json:"email"`

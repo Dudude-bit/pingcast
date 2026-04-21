@@ -137,6 +137,13 @@ type FailedAlertRepo interface {
 	Create(ctx context.Context, event json.RawMessage, errMsg string, failedChannelIDs []uuid.UUID) error
 }
 
+type StatusSubscriberRepo interface {
+	Create(ctx context.Context, slug, email, confirmToken, unsubscribeToken string) (*domain.StatusSubscriber, error)
+	Confirm(ctx context.Context, confirmToken string) (*domain.StatusSubscriber, error)
+	Unsubscribe(ctx context.Context, unsubscribeToken string) (*domain.StatusSubscriber, error)
+	ListConfirmedBySlug(ctx context.Context, slug string) ([]domain.StatusSubscriber, error)
+}
+
 type MonitorGroupRepo interface {
 	Create(ctx context.Context, userID uuid.UUID, name string, ordering int) (*domain.MonitorGroup, error)
 	ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.MonitorGroup, error)

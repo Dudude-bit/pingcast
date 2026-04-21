@@ -5,6 +5,7 @@ package gen
 
 import (
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -555,6 +556,21 @@ type BindChannelJSONBody struct {
 	ChannelId openapi_types.UUID `json:"channel_id"`
 }
 
+// ConfirmStatusSubscriptionParams defines parameters for ConfirmStatusSubscription.
+type ConfirmStatusSubscriptionParams struct {
+	Token string `form:"token" json:"token"`
+}
+
+// SubscribeToStatusPageJSONBody defines parameters for SubscribeToStatusPage.
+type SubscribeToStatusPageJSONBody struct {
+	Email openapi_types.Email `json:"email"`
+}
+
+// UnsubscribeFromStatusPageParams defines parameters for UnsubscribeFromStatusPage.
+type UnsubscribeFromStatusPageParams struct {
+	Token string `form:"token" json:"token"`
+}
+
 // CreateAPIKeyJSONRequestBody defines body for CreateAPIKey for application/json ContentType.
 type CreateAPIKeyJSONRequestBody = CreateAPIKeyRequest
 
@@ -602,6 +618,9 @@ type BindChannelJSONRequestBody BindChannelJSONBody
 
 // AssignMonitorToGroupJSONRequestBody defines body for AssignMonitorToGroup for application/json ContentType.
 type AssignMonitorToGroupJSONRequestBody = AssignMonitorGroupRequest
+
+// SubscribeToStatusPageJSONRequestBody defines body for SubscribeToStatusPage for application/json ContentType.
+type SubscribeToStatusPageJSONRequestBody SubscribeToStatusPageJSONBody
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -719,6 +738,15 @@ type ServerInterface interface {
 
 	// (GET /api/status/{slug})
 	GetStatusPage(c *fiber.Ctx, slug string) error
+
+	// (GET /api/status/{slug}/confirm)
+	ConfirmStatusSubscription(c *fiber.Ctx, slug string, params ConfirmStatusSubscriptionParams) error
+
+	// (POST /api/status/{slug}/subscribe)
+	SubscribeToStatusPage(c *fiber.Ctx, slug string) error
+
+	// (GET /api/status/{slug}/unsubscribe)
+	UnsubscribeFromStatusPage(c *fiber.Ctx, slug string, params UnsubscribeFromStatusPageParams) error
 
 	// (GET /health)
 	HealthCheck(c *fiber.Ctx) error
@@ -1229,6 +1257,102 @@ func (siw *ServerInterfaceWrapper) GetStatusPage(c *fiber.Ctx) error {
 	return siw.Handler.GetStatusPage(c, slug)
 }
 
+// ConfirmStatusSubscription operation middleware
+func (siw *ServerInterfaceWrapper) ConfirmStatusSubscription(c *fiber.Ctx) error {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", c.Params("slug"), &slug, runtime.BindStyledParameterOptions{Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter slug: %w", err).Error())
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ConfirmStatusSubscriptionParams
+
+	var query url.Values
+	query, err = url.ParseQuery(string(c.Request().URI().QueryString()))
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for query string: %w", err).Error())
+	}
+
+	// ------------- Required query parameter "token" -------------
+
+	if paramValue := c.Query("token"); paramValue != "" {
+
+	} else {
+		err = fmt.Errorf("Query argument token is required, but not found")
+		c.Status(fiber.StatusBadRequest).JSON(err)
+		return err
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "token", query, &params.Token, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter token: %w", err).Error())
+	}
+
+	return siw.Handler.ConfirmStatusSubscription(c, slug, params)
+}
+
+// SubscribeToStatusPage operation middleware
+func (siw *ServerInterfaceWrapper) SubscribeToStatusPage(c *fiber.Ctx) error {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", c.Params("slug"), &slug, runtime.BindStyledParameterOptions{Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter slug: %w", err).Error())
+	}
+
+	return siw.Handler.SubscribeToStatusPage(c, slug)
+}
+
+// UnsubscribeFromStatusPage operation middleware
+func (siw *ServerInterfaceWrapper) UnsubscribeFromStatusPage(c *fiber.Ctx) error {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", c.Params("slug"), &slug, runtime.BindStyledParameterOptions{Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter slug: %w", err).Error())
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UnsubscribeFromStatusPageParams
+
+	var query url.Values
+	query, err = url.ParseQuery(string(c.Request().URI().QueryString()))
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for query string: %w", err).Error())
+	}
+
+	// ------------- Required query parameter "token" -------------
+
+	if paramValue := c.Query("token"); paramValue != "" {
+
+	} else {
+		err = fmt.Errorf("Query argument token is required, but not found")
+		c.Status(fiber.StatusBadRequest).JSON(err)
+		return err
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "token", query, &params.Token, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter token: %w", err).Error())
+	}
+
+	return siw.Handler.UnsubscribeFromStatusPage(c, slug, params)
+}
+
 // HealthCheck operation middleware
 func (siw *ServerInterfaceWrapper) HealthCheck(c *fiber.Ctx) error {
 
@@ -1331,6 +1455,12 @@ func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, option
 	router.Get(options.BaseURL+"/api/stats/public", wrapper.GetPublicStats)
 
 	router.Get(options.BaseURL+"/api/status/:slug", wrapper.GetStatusPage)
+
+	router.Get(options.BaseURL+"/api/status/:slug/confirm", wrapper.ConfirmStatusSubscription)
+
+	router.Post(options.BaseURL+"/api/status/:slug/subscribe", wrapper.SubscribeToStatusPage)
+
+	router.Get(options.BaseURL+"/api/status/:slug/unsubscribe", wrapper.UnsubscribeFromStatusPage)
 
 	router.Get(options.BaseURL+"/health", wrapper.HealthCheck)
 

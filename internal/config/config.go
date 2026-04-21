@@ -20,6 +20,15 @@ type APIConfig struct {
 	RedisURL                  string `env:"REDIS_URL"                   envDefault:"redis://localhost:6379"`
 	NatsURL                   string `env:"NATS_URL"                    envDefault:"nats://localhost:4222"`
 	OTelEndpoint              string `env:"OTEL_EXPORTER_OTLP_ENDPOINT"`
+	// SMTP_* mirrors what the notifier already reads. The API service
+	// uses these to send status-subscription confirmation + unsubscribe
+	// + incident-update emails (S3T5). Empty SMTPHost falls back to a
+	// logging noop mailer so dev sign-ups don't blow up.
+	SMTPHost                  string `env:"SMTP_HOST"`
+	SMTPPort                  int    `env:"SMTP_PORT"                   envDefault:"587"`
+	SMTPUser                  string `env:"SMTP_USER"`
+	SMTPPass                  string `env:"SMTP_PASS"`
+	SMTPFrom                  string `env:"SMTP_FROM"                   envDefault:"noreply@pingcast.io"`
 	LemonSqueezyWebhookSecret string `env:"LEMONSQUEEZY_WEBHOOK_SECRET"`
 	LemonSqueezyFounderVariantID string `env:"LEMONSQUEEZY_FOUNDER_VARIANT_ID"`
 	LemonSqueezyRetailVariantID  string `env:"LEMONSQUEEZY_RETAIL_VARIANT_ID"`

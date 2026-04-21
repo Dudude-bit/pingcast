@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 
+	smtpadapter "github.com/kirillinakin/pingcast/internal/adapter/smtp"
 	"github.com/kirillinakin/pingcast/internal/adapter/sysclock"
 	"github.com/kirillinakin/pingcast/internal/adapter/sysrand"
 	"github.com/kirillinakin/pingcast/internal/app"
@@ -77,7 +78,10 @@ func setupTestApp(t *testing.T) *testEnv {
 	statsRepo := mocks.NewMockStatsRepo(t)
 	billingService := app.NewBillingService(userRepo, 100)
 	atlassianImporter := app.NewAtlassianImporter(monitorRepo, incidentRepo, incidentUpdateRepo, txManager, sysclock.New())
-	server := NewServer(authService, monitoringService, alertService, billingService, atlassianImporter, rls, apiKeyRepo, statsRepo)
+	statusSubRepo := mocks.NewMockStatusSubscriberRepo(t)
+	mailerStub := smtpadapter.NewMailer("", 0, "", "", "")
+	subscriptionsService := app.NewSubscriptionService(statusSubRepo, mailerStub, "http://test")
+	server := NewServer(authService, monitoringService, alertService, billingService, atlassianImporter, subscriptionsService, rls, apiKeyRepo, statsRepo)
 	webhookHandler := NewWebhookHandler(authService, alertService, billingService, "test-secret", "")
 
 	healthChecker := &HealthChecker{}

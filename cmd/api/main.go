@@ -103,6 +103,12 @@ func main() {
 		LemonSqueezyFounderVariantID: cfg.LemonSqueezyFounderVariantID,
 		LemonSqueezyRetailVariantID:  cfg.LemonSqueezyRetailVariantID,
 		FounderCap:                   cfg.FounderCap,
+		SMTPHost:                     cfg.SMTPHost,
+		SMTPPort:                     cfg.SMTPPort,
+		SMTPUser:                     cfg.SMTPUser,
+		SMTPPass:                     cfg.SMTPPass,
+		SMTPFrom:                     cfg.SMTPFrom,
+		BaseURL:                      cfg.BaseURL,
 	})
 	if err != nil {
 		slog.Error("failed to compose app", "error", err)

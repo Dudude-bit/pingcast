@@ -31,6 +31,7 @@ packages:
       RateLimiter: {}
       SessionRepo: {}
       StatsRepo: {}
+      StatusSubscriberRepo: {}
       TxManager: {}
       UptimeRepo: {}
       UserRepo: {}
