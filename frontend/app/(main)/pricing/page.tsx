@@ -1,76 +1,76 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Check, Server, Zap } from "lucide-react";
+import { Check, Server, Zap, Sparkles } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
+import { FounderSeatsCounter } from "@/components/features/billing/founder-seats-counter";
+import { UpgradeButton } from "@/components/features/billing/upgrade-button";
 
 export const metadata: Metadata = {
   title: "Pricing",
   description:
-    "PingCast is free to use and MIT-licensed to self-host. Hosted plan limits and self-host setup on one page.",
+    "PingCast Pro: branded status pages for SaaS at $9/mo founder's price (first 100 customers). Free tier with 5 monitors. Self-host under MIT.",
 };
 
-// Intentionally honest: PingCast is early and free. A Pro tier will
-// show up here when it actually exists — I'd rather ship a real
-// /pricing page with the current state than stage a fake upgrade CTA.
 export default function PricingPage() {
   return (
-    <div className="container mx-auto px-4 py-16 max-w-5xl">
+    <div className="container mx-auto px-4 py-16 max-w-6xl">
       <div className="text-center mb-12">
         <h1 className="text-4xl md:text-5xl font-bold tracking-tight">
           Pricing
         </h1>
         <p className="mt-4 text-muted-foreground max-w-xl mx-auto">
-          One free tier on the hosted version, one MIT license on your own
-          hardware. No usage-based surprises, no upsell to SMS packs.
+          One open-source project, three ways to use it. Pro is how we pay for
+          the hosted infra; free and self-host stay free forever.
         </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-3 items-stretch">
         <Plan
           icon={<Zap className="h-5 w-5" />}
-          name="Hosted · Free"
+          name="Free"
           price="$0"
           priceHint="/ forever"
           cta="Start monitoring"
           href="/register"
-          primary
           features={[
-            "5 HTTP/TCP/DNS monitors",
+            "5 HTTP / TCP / DNS monitors",
             "1-minute check interval",
-            "Telegram, email, and webhook alerts",
-            "Unlimited public status pages",
+            "Telegram, email, webhook alerts",
+            "Public status page (with PingCast watermark)",
+            "30 days of incident history",
             "Scoped REST API keys",
-            "30-day incident history",
           ]}
-          footnote="No credit card, no 14-day trial countdown. If you outgrow the free tier, self-host."
+          footnote="No credit card. No trial countdown. If you outgrow the free tier, self-host for free or upgrade to Pro."
         />
+
+        <PlanPro />
 
         <Plan
           icon={<Server className="h-5 w-5" />}
-          name="Self-hosted · MIT"
+          name="Self-hosted"
           price="Free"
           priceHint="on your infra"
           cta="See the repo"
           href="https://github.com/kirillinakin/pingcast"
           external
           features={[
-            "Unlimited monitors, channels, and keys",
+            "Unlimited monitors, channels, keys",
             "No check-interval ceiling",
-            "Runs on one docker-compose file",
-            "Postgres + Redis + NATS JetStream",
+            "One docker-compose file",
             "Your data never leaves your network",
-            "Upgrade on your own schedule",
+            "MIT license, upgrade on your schedule",
+            "All Pro features unlocked",
           ]}
-          footnote="Typical deploy: 4 containers, ~150 MB total, one Traefik label for TLS. Instructions in the README."
+          footnote="Typical deploy: 4 containers (~150 MB), Postgres + Redis + NATS. One Traefik label for TLS. Instructions in the README."
         />
       </div>
 
       <div className="mt-16 rounded-xl border border-border/60 bg-card p-8 text-center">
-        <h2 className="text-xl font-semibold">Running high volume?</h2>
+        <h2 className="text-xl font-semibold">Running 100+ monitors?</h2>
         <p className="mt-2 text-sm text-muted-foreground max-w-xl mx-auto">
-          The hosted tier is tuned for side-projects and small SaaS. If you
-          need 100+ monitors, sub-30-second checks, or a dedicated instance,
-          open an issue and we&apos;ll figure it out.
+          Pro covers side-projects and small SaaS. If you need sub-30-second
+          checks, a dedicated region, or white-label status pages, open an
+          issue and we&apos;ll figure it out.
         </p>
         <Link
           href="https://github.com/kirillinakin/pingcast/issues/new"
@@ -79,6 +79,64 @@ export default function PricingPage() {
           Open an issue
         </Link>
       </div>
+    </div>
+  );
+}
+
+function PlanPro() {
+  // Pro column lives in its own component so the founder-seats live
+  // counter (client-only) is scoped inside a server-rendered card.
+  return (
+    <div className="flex flex-col rounded-2xl border-2 border-primary/40 bg-card ring-1 ring-primary/20 p-8 relative">
+      <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+        <FounderSeatsCounter />
+      </div>
+
+      <div className="flex items-center gap-3">
+        <div className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
+          <Sparkles className="h-5 w-5" />
+        </div>
+        <h3 className="font-semibold">Pro</h3>
+      </div>
+
+      <div className="mt-6 flex items-baseline gap-2">
+        <span className="text-4xl font-bold tracking-tight">$9</span>
+        <span className="text-sm text-muted-foreground">
+          / mo · founder&apos;s price
+        </span>
+      </div>
+      <p className="text-xs text-muted-foreground mt-1">
+        $9 locked for the first 100 customers, then $19/mo retail.
+      </p>
+
+      <ul className="mt-6 space-y-2.5 text-sm">
+        {[
+          "50 monitors · 30s interval",
+          "Custom domain: status.yourcompany.com",
+          "Branded status page (logo, accent colour, no watermark)",
+          "Incident updates with state timeline",
+          "Email subscriptions for your customers",
+          "Atlassian Statuspage importer (1-click)",
+          "SVG status badge for READMEs",
+          "Embeddable JS incident widget",
+          "SSL expiry warnings (T-14d / T-7d / T-1d)",
+          "1 year of incident history + CSV export",
+          "Maintenance windows",
+          "Priority email support",
+        ].map((f) => (
+          <li key={f} className="flex gap-2 items-start">
+            <Check className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+            <span>{f}</span>
+          </li>
+        ))}
+      </ul>
+
+      <p className="mt-6 text-xs text-muted-foreground leading-relaxed">
+        Cancel anytime. Price-locked for the lifetime of your subscription —
+        even after we raise retail.
+      </p>
+
+      <UpgradeButton className="mt-6 w-full" size="default" />
     </div>
   );
 }
@@ -92,7 +150,6 @@ function Plan({
   cta,
   href,
   footnote,
-  primary,
   external,
 }: {
   icon: React.ReactNode;
@@ -103,17 +160,10 @@ function Plan({
   cta: string;
   href: string;
   footnote: string;
-  primary?: boolean;
   external?: boolean;
 }) {
   return (
-    <div
-      className={`flex flex-col rounded-2xl border p-8 ${
-        primary
-          ? "border-primary/40 bg-card ring-1 ring-primary/20"
-          : "border-border/60 bg-card"
-      }`}
-    >
+    <div className="flex flex-col rounded-2xl border border-border/60 bg-card p-8">
       <div className="flex items-center gap-3">
         <div className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
           {icon}
@@ -137,9 +187,7 @@ function Plan({
       </p>
       <Link
         href={href}
-        className={`${buttonVariants({
-          variant: primary ? "default" : "outline",
-        })} mt-6`}
+        className={`${buttonVariants({ variant: "outline" })} mt-6`}
         {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
       >
         {cta}
