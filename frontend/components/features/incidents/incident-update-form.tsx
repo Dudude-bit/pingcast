@@ -70,7 +70,10 @@ export function IncidentUpdateForm({
         >
           New state
         </label>
-        <Select value={state} onValueChange={setState}>
+        <Select
+          value={state}
+          onValueChange={(v) => v && setState(v)}
+        >
           <SelectTrigger id="state" className="w-60">
             <SelectValue />
           </SelectTrigger>
