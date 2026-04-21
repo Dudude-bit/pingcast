@@ -76,8 +76,9 @@ type App struct {
 	MonitorRepo    port.MonitorRepo
 	ChannelRepo    port.ChannelRepo
 	APIKeyRepo     port.APIKeyRepo
-	IncidentRepo   port.IncidentRepo
-	CheckResultRepo port.CheckResultRepo
+	IncidentRepo       port.IncidentRepo
+	IncidentUpdateRepo port.IncidentUpdateRepo
+	CheckResultRepo    port.CheckResultRepo
 }
 
 // NewApp wires the full API composition and returns the Fiber app plus
@@ -108,6 +109,7 @@ func NewApp(deps AppDeps) (*App, error) {
 	channelRepo := postgres.NewChannelRepo(deps.Pool, queries, deps.Cipher)
 	checkResultRepo := postgres.NewCheckResultRepo(queries)
 	incidentRepo := postgres.NewIncidentRepo(queries)
+	incidentUpdateRepo := postgres.NewIncidentUpdateRepo(queries)
 	uptimeRepo := postgres.NewUptimeRepo(queries)
 	txm := postgres.NewTxManager(deps.Pool)
 	apiKeyRepo := postgres.NewAPIKeyRepo(queries)
@@ -165,7 +167,8 @@ func NewApp(deps AppDeps) (*App, error) {
 		MonitorRepo:     monitorRepo,
 		ChannelRepo:     channelRepo,
 		APIKeyRepo:      apiKeyRepo,
-		IncidentRepo:    incidentRepo,
-		CheckResultRepo: checkResultRepo,
+		IncidentRepo:       incidentRepo,
+		IncidentUpdateRepo: incidentUpdateRepo,
+		CheckResultRepo:    checkResultRepo,
 	}, nil
 }

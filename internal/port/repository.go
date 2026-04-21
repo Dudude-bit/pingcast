@@ -75,6 +75,18 @@ type CreateIncidentInput struct {
 	Title     *string
 }
 
+type IncidentUpdateRepo interface {
+	Create(ctx context.Context, in CreateIncidentUpdateInput) (*domain.IncidentUpdate, error)
+	ListByIncidentID(ctx context.Context, incidentID int64) ([]domain.IncidentUpdate, error)
+}
+
+type CreateIncidentUpdateInput struct {
+	IncidentID     int64
+	State          domain.IncidentState
+	Body           string
+	PostedByUserID uuid.UUID
+}
+
 type FailedAlertRepo interface {
 	Create(ctx context.Context, event json.RawMessage, errMsg string, failedChannelIDs []uuid.UUID) error
 }

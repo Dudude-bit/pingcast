@@ -108,6 +108,15 @@ type Incident struct {
 	Title      *string            `json:"title"`
 }
 
+type IncidentUpdate struct {
+	ID             int64         `json:"id"`
+	IncidentID     int64         `json:"incident_id"`
+	State          IncidentState `json:"state"`
+	Body           string        `json:"body"`
+	PostedByUserID uuid.UUID     `json:"posted_by_user_id"`
+	PostedAt       time.Time     `json:"posted_at"`
+}
+
 type Monitor struct {
 	ID                 uuid.UUID          `json:"id"`
 	UserID             uuid.UUID          `json:"user_id"`

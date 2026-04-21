@@ -21,6 +21,7 @@ packages:
       FailedAlertRepo: {}
       HostLimiter: {}
       IncidentRepo: {}
+      IncidentUpdateRepo: {}
       Metrics: {}
       MonitorEventPublisher: {}
       MonitorEventSubscriber: {}
