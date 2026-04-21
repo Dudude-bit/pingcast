@@ -20,6 +20,8 @@ import {
   Heart,
 } from "lucide-react";
 
+void Bell; // reserved for the Sprint 4 RU mirror's alerts section
+
 // Lucide dropped brand marks in 1.x, so ship the GitHub octocat inline.
 function GithubIcon({ className }: { className?: string }) {
   return (
@@ -69,16 +71,19 @@ const jsonLd = {
   applicationCategory: "DeveloperApplication",
   operatingSystem: "Web",
   description:
-    "Lightweight uptime monitoring with instant Telegram alerts and public status pages.",
+    "Branded status pages for SaaS plus uptime monitoring — custom domain, incident timeline, Atlassian Statuspage importer. Free tier; Pro from $9/mo (founder's price).",
   offers: {
     "@type": "Offer",
-    price: "0",
+    price: "9",
     priceCurrency: "USD",
   },
   featureList: [
-    "HTTP uptime checks",
-    "Telegram alerts",
-    "Public status pages",
+    "Branded public status pages",
+    "Custom domain support",
+    "Incident state timeline",
+    "Atlassian Statuspage importer",
+    "HTTP, TCP, DNS uptime monitoring",
+    "Telegram, email, webhook alerts",
     "REST API with scoped keys",
   ],
 };
@@ -107,10 +112,10 @@ export default function LandingPage() {
           transition={{ delay: 0.1, duration: 0.6, ease: "easeOut" }}
           className="mt-6 text-4xl md:text-6xl font-bold tracking-tight leading-[1.1]"
         >
-          Know when it breaks.
+          Branded status pages for SaaS,
           <br />
           <span className="bg-gradient-to-r from-blue-600 via-cyan-500 to-teal-500 bg-clip-text text-transparent">
-            Before your users do.
+            at a third of Atlassian&apos;s price.
           </span>
         </motion.h1>
 
@@ -120,8 +125,9 @@ export default function LandingPage() {
           transition={{ delay: 0.2, duration: 0.6, ease: "easeOut" }}
           className="mt-6 text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto"
         >
-          Lightweight uptime monitoring with instant Telegram alerts and public
-          status pages. Built for developers who ship fast.
+          Custom-domain status page plus uptime monitoring in one SaaS. Open
+          source under the hood. From <span className="font-semibold">$9/mo</span>{" "}
+          founder&apos;s price.
         </motion.p>
 
         <motion.div
@@ -130,14 +136,26 @@ export default function LandingPage() {
           transition={{ delay: 0.3, duration: 0.6, ease: "easeOut" }}
           className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4"
         >
-          <Link href="/register" className={buttonVariants({ size: "lg" })}>
-            Start monitoring
+          <Link
+            href="/register?intent=pro"
+            className={buttonVariants({ size: "lg" })}
+          >
+            Spin up a status page
             <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
-          <p className="text-sm text-muted-foreground">
-            No credit card · 30-second checks · unlimited status pages
-          </p>
+          <Link
+            href="https://github.com/kirillinakin/pingcast"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={buttonVariants({ variant: "outline", size: "lg" })}
+          >
+            <GithubIcon className="mr-2 h-4 w-4" />
+            Self-host for free
+          </Link>
         </motion.div>
+        <p className="mt-4 text-xs text-muted-foreground">
+          No credit card · status.yourcompany.com · MIT-licensed stack
+        </p>
       </section>
 
       <section className="pb-16">
@@ -187,19 +205,34 @@ export default function LandingPage() {
 
       <section className="py-16 grid gap-6 md:grid-cols-3 max-w-5xl mx-auto">
         <FeatureCard
-          icon={<Zap className="h-6 w-6" />}
-          title="30-second checks"
-          body="HTTP, TCP, and DNS checks with keyword matching, status-code validation, and TLS 1.2+ verification."
-        />
-        <FeatureCard
-          icon={<Bell className="h-6 w-6" />}
-          title="Instant alerts"
-          body="Telegram, email, and webhook destinations. Configurable failure thresholds to filter false positives."
+          icon={<Globe className="h-6 w-6" />}
+          title="Custom domain + branding"
+          body="Point status.yourcompany.com at us via a CNAME. Upload your logo, pick your accent colour, ship a status page that looks like part of your product."
         />
         <FeatureCard
           icon={<LineChart className="h-6 w-6" />}
-          title="Public status pages"
-          body="SSR + ISR status pages for your customers. Show uptime, incidents, build trust with transparency."
+          title="Incident updates with state timeline"
+          body="Investigating → identified → monitoring → resolved. Post narrative updates and your customers see the timeline render in real time."
+        />
+        <FeatureCard
+          icon={<Plug className="h-6 w-6" />}
+          title="Migrate from Atlassian in one click"
+          body="Paste your Statuspage export, we re-create your components, incidents, and full update history. Under 60 seconds, zero downtime."
+        />
+        <FeatureCard
+          icon={<Zap className="h-6 w-6" />}
+          title="30-second uptime monitoring"
+          body="HTTP, TCP, and DNS checks with keyword matching, status-code validation, and TLS 1.2+ verification — built-in, not a separate product."
+        />
+        <FeatureCard
+          icon={<Bell className="h-6 w-6" />}
+          title="Subscribers + badge + widget"
+          body="Your customers subscribe to status emails. Drop an SVG badge in your README or a JS widget on your site — every incident pushes a banner automatically."
+        />
+        <FeatureCard
+          icon={<Server className="h-6 w-6" />}
+          title="Open source under MIT"
+          body="If you outgrow the hosted plan (or don't trust it), self-host in one docker-compose command. No feature gates between hosted and self-host."
         />
       </section>
 
@@ -228,17 +261,17 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Comparison — puts PingCast next to the incumbents on the free
-          tier that most side-projects actually qualify for. Numbers from
-          each vendor's public pricing page as of 2026-04. Revisit when
-          their tiers shuffle. */}
+      {/* Why not Atlassian — direct positioning against the incumbent
+          we're actively poaching from. Numbers are the flooring on each
+          vendor's public pricing as of 2026-04. */}
       <section className="py-20 max-w-5xl mx-auto">
         <h2 className="text-center text-2xl md:text-3xl font-bold tracking-tight">
-          Free tier, honestly compared
+          Why not Atlassian Statuspage or Instatus?
         </h2>
         <p className="mt-3 text-center text-muted-foreground max-w-2xl mx-auto">
-          Most "free" uptime tools gate the things you actually need. Here is
-          what you get on each vendor&apos;s free plan — no asterisks.
+          Status pages used to cost $29-100/mo because they bundled with
+          PagerDuty-style incident tooling most indie SaaS don&apos;t need.
+          Here&apos;s how we stack up.
         </p>
         <div className="mt-10 overflow-x-auto rounded-xl border border-border/60 bg-card">
           <table className="w-full text-sm">
@@ -249,53 +282,56 @@ export default function LandingPage() {
                 </th>
                 <th className="text-left font-medium px-4 py-3">PingCast</th>
                 <th className="text-left font-medium px-4 py-3">
-                  UptimeRobot
+                  Atlassian Statuspage
                 </th>
-                <th className="text-left font-medium px-4 py-3">Pingdom</th>
-                <th className="text-left font-medium px-4 py-3">
-                  StatusCake
-                </th>
+                <th className="text-left font-medium px-4 py-3">Instatus</th>
+                <th className="text-left font-medium px-4 py-3">Openstatus</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
               <CompareRow
-                label="Check interval"
-                values={["1 min", "5 min", "paid only", "5 min"]}
+                label="Starting price"
+                values={["$9/mo (founder)", "$29/mo", "$20/mo", "$30/mo"]}
               />
               <CompareRow
-                label="Monitors included"
-                values={["5", "50", "1 trial", "10"]}
+                label="Custom domain"
+                values={[true, true, true, true]}
               />
               <CompareRow
-                label="Public status page"
-                values={[true, true, false, true]}
+                label="Branded page (logo + colour)"
+                values={[true, true, true, "limited"]}
               />
               <CompareRow
-                label="Telegram alerts"
-                values={[true, "paid", false, false]}
+                label="Uptime monitoring included"
+                values={[true, false, false, true]}
               />
               <CompareRow
-                label="Webhook alerts"
-                values={[true, "paid", "paid", true]}
+                label="1-click Atlassian import"
+                values={[true, "n/a", false, false]}
               />
               <CompareRow
-                label="REST API"
-                values={[true, "read-only", "paid", true]}
-              />
-              <CompareRow
-                label="Self-hostable"
+                label="Embeddable JS widget + SVG badge"
                 values={[true, false, false, false]}
               />
               <CompareRow
+                label="Sells in Russia since 2022"
+                values={[true, false, true, true]}
+              />
+              <CompareRow
+                label="Self-hostable"
+                values={[true, false, false, true]}
+              />
+              <CompareRow
                 label="Open source"
-                values={["MIT", false, false, false]}
+                values={["MIT", false, false, "AGPL"]}
               />
             </tbody>
           </table>
         </div>
         <p className="mt-4 text-xs text-center text-muted-foreground">
-          Sources: competitor pricing pages as of 2026-04. Your mileage may
-          vary when they update theirs.
+          Sources: vendor pricing pages as of 2026-04. Migration time: paste
+          your Atlassian JSON export into <Link href="/docs/atlassian-import" className="underline">our importer</Link>{" "}
+          and you&apos;re live in under a minute.
         </p>
       </section>
 
