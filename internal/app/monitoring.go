@@ -67,6 +67,13 @@ func NewMonitoringService(
 	}
 }
 
+// ListIncidentUpdates returns the timeline for an incident. Public read
+// — the HTTP layer exposes this on /api/incidents/{id}/updates without
+// auth for rendering status-page timelines.
+func (s *MonitoringService) ListIncidentUpdates(ctx context.Context, incidentID int64) ([]domain.IncidentUpdate, error) {
+	return s.incidentUpdates.ListByIncidentID(ctx, incidentID)
+}
+
 // --- Manual incident lifecycle (Pro-gated at HTTP layer) ---
 
 // ChangeIncidentStateInput captures a user-driven state transition on

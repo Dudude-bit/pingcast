@@ -373,6 +373,88 @@ paths:
         "204":
           description: Unbound
 
+  /api/incidents:
+    post:
+      operationId: createIncident
+      tags: [incidents]
+      security:
+        - sessionAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateIncidentRequest"
+      responses:
+        "201":
+          description: Manual incident opened
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Incident"
+        "402":
+          description: Pro subscription required
+        "403":
+          description: Not the owner of the monitor
+        "422":
+          description: Validation error
+
+  /api/incidents/{id}/state:
+    patch:
+      operationId: updateIncidentState
+      tags: [incidents]
+      security:
+        - sessionAuth: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateIncidentStateRequest"
+      responses:
+        "200":
+          description: State changed; returns the new IncidentUpdate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IncidentUpdate"
+        "402":
+          description: Pro subscription required
+        "403":
+          description: Not the owner of the monitor
+        "409":
+          description: Invalid state transition
+
+  /api/incidents/{id}/updates:
+    get:
+      operationId: listIncidentUpdates
+      tags: [incidents]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: Chronological timeline for the incident (newest first)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IncidentUpdate"
+
   /api/stats/public:
     get:
       operationId: getPublicStats
@@ -720,6 +802,56 @@ components:
         title:
           type: string
           nullable: true
+
+    CreateIncidentRequest:
+      type: object
+      required: [monitor_id, title, body]
+      properties:
+        monitor_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 3
+          maxLength: 200
+        body:
+          type: string
+          minLength: 1
+          maxLength: 4000
+
+    UpdateIncidentStateRequest:
+      type: object
+      required: [state, body]
+      properties:
+        state:
+          type: string
+          enum: [investigating, identified, monitoring, resolved]
+        body:
+          type: string
+          minLength: 1
+          maxLength: 4000
+
+    IncidentUpdate:
+      type: object
+      required: [id, incident_id, state, body, posted_at, posted_by_user_id]
+      properties:
+        id:
+          type: integer
+          format: int64
+        incident_id:
+          type: integer
+          format: int64
+        state:
+          type: string
+          enum: [investigating, identified, monitoring, resolved]
+        body:
+          type: string
+        posted_by_user_id:
+          type: string
+          format: uuid
+        posted_at:
+          type: string
+          format: date-time
 
     PublicStats:
       type: object

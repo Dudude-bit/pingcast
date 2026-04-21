@@ -51,11 +51,13 @@ func SetupApp(
 	// JSON API — uses oapi-codegen generated RegisterHandlers.
 	// Auth middleware gates every /api/* path except register, login,
 	// and the public status page. Rate-limiters run AFTER auth so
-	// write/read buckets can key on user.ID.
+	// write/read buckets can key on user.ID. The Pro gate runs last so
+	// the user is already resolved in Locals before we check their plan.
 	apigen.RegisterHandlersWithOptions(app, server, apigen.FiberServerOptions{
 		Middlewares: []apigen.MiddlewareFunc{
 			authMiddlewareSelector(authService, apiKeyRepo),
 			apiRateLimitSelector(rls),
+			proGateSelector(),
 		},
 	})
 
@@ -88,9 +90,45 @@ func authMiddlewareSelector(authService *app.AuthService, apiKeyRepo port.APIKey
 			(len(path) > 12 && path[:12] == "/api/status/") {
 			return c.Next()
 		}
+		// GET /api/incidents/{id}/updates is public: it powers the
+		// timeline on public status pages and is safe by construction
+		// (only surfaces what's already on the public page).
+		if c.Method() == fiber.MethodGet &&
+			strings.HasPrefix(path, "/api/incidents/") &&
+			strings.HasSuffix(path, "/updates") {
+			return c.Next()
+		}
 
 		// All other /api/ routes need auth (session cookie or API key)
 		return AuthMiddleware(authService, apiKeyRepo)(c)
+	}
+}
+
+// proGateSelector enforces RequirePro on the routes exposed to Pro
+// subscribers only. The gate reads *domain.User from Locals (populated
+// by AuthMiddleware upstream) and 402s free users. Public routes and
+// routes outside this match list pass through untouched.
+func proGateSelector() apigen.MiddlewareFunc {
+	gate := RequirePro()
+	return func(c *fiber.Ctx) error {
+		path := c.Path()
+		method := c.Method()
+
+		// POST /api/incidents — open manual incident
+		if method == fiber.MethodPost && path == "/api/incidents" {
+			return gate(c)
+		}
+		// PATCH /api/incidents/{id}/state — change state + post update
+		if method == fiber.MethodPatch &&
+			strings.HasPrefix(path, "/api/incidents/") &&
+			strings.HasSuffix(path, "/state") {
+			return gate(c)
+		}
+		// POST /api/import/atlassian — Atlassian Statuspage importer
+		if method == fiber.MethodPost && path == "/api/import/atlassian" {
+			return gate(c)
+		}
+		return c.Next()
 	}
 }
 

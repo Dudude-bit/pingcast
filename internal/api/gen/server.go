@@ -43,22 +43,46 @@ func (e CreateAPIKeyRequestScopes) Valid() bool {
 
 // Defines values for IncidentState.
 const (
-	Identified    IncidentState = "identified"
-	Investigating IncidentState = "investigating"
-	Monitoring    IncidentState = "monitoring"
-	Resolved      IncidentState = "resolved"
+	IncidentStateIdentified    IncidentState = "identified"
+	IncidentStateInvestigating IncidentState = "investigating"
+	IncidentStateMonitoring    IncidentState = "monitoring"
+	IncidentStateResolved      IncidentState = "resolved"
 )
 
 // Valid indicates whether the value is a known member of the IncidentState enum.
 func (e IncidentState) Valid() bool {
 	switch e {
-	case Identified:
+	case IncidentStateIdentified:
 		return true
-	case Investigating:
+	case IncidentStateInvestigating:
 		return true
-	case Monitoring:
+	case IncidentStateMonitoring:
 		return true
-	case Resolved:
+	case IncidentStateResolved:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IncidentUpdateState.
+const (
+	IncidentUpdateStateIdentified    IncidentUpdateState = "identified"
+	IncidentUpdateStateInvestigating IncidentUpdateState = "investigating"
+	IncidentUpdateStateMonitoring    IncidentUpdateState = "monitoring"
+	IncidentUpdateStateResolved      IncidentUpdateState = "resolved"
+)
+
+// Valid indicates whether the value is a known member of the IncidentUpdateState enum.
+func (e IncidentUpdateState) Valid() bool {
+	switch e {
+	case IncidentUpdateStateIdentified:
+		return true
+	case IncidentUpdateStateInvestigating:
+		return true
+	case IncidentUpdateStateMonitoring:
+		return true
+	case IncidentUpdateStateResolved:
 		return true
 	default:
 		return false
@@ -122,6 +146,30 @@ func (e MonitorWithUptimeCurrentStatus) Valid() bool {
 	case Unknown:
 		return true
 	case Up:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateIncidentStateRequestState.
+const (
+	Identified    UpdateIncidentStateRequestState = "identified"
+	Investigating UpdateIncidentStateRequestState = "investigating"
+	Monitoring    UpdateIncidentStateRequestState = "monitoring"
+	Resolved      UpdateIncidentStateRequestState = "resolved"
+)
+
+// Valid indicates whether the value is a known member of the UpdateIncidentStateRequestState enum.
+func (e UpdateIncidentStateRequestState) Valid() bool {
+	switch e {
+	case Identified:
+		return true
+	case Investigating:
+		return true
+	case Monitoring:
+		return true
+	case Resolved:
 		return true
 	default:
 		return false
@@ -224,6 +272,13 @@ type CreateChannelRequest struct {
 	Type   string                 `json:"type"`
 }
 
+// CreateIncidentRequest defines model for CreateIncidentRequest.
+type CreateIncidentRequest struct {
+	Body      string             `json:"body"`
+	MonitorId openapi_types.UUID `json:"monitor_id"`
+	Title     string             `json:"title"`
+}
+
 // CreateMonitorRequest defines model for CreateMonitorRequest.
 type CreateMonitorRequest struct {
 	AlertAfterFailures *int                   `json:"alert_after_failures,omitempty"`
@@ -258,6 +313,19 @@ type Incident struct {
 
 // IncidentState defines model for Incident.State.
 type IncidentState string
+
+// IncidentUpdate defines model for IncidentUpdate.
+type IncidentUpdate struct {
+	Body           string              `json:"body"`
+	Id             int64               `json:"id"`
+	IncidentId     int64               `json:"incident_id"`
+	PostedAt       time.Time           `json:"posted_at"`
+	PostedByUserId openapi_types.UUID  `json:"posted_by_user_id"`
+	State          IncidentUpdateState `json:"state"`
+}
+
+// IncidentUpdateState defines model for IncidentUpdate.State.
+type IncidentUpdateState string
 
 // LoginRequest defines model for LoginRequest.
 type LoginRequest struct {
@@ -385,6 +453,15 @@ type UpdateChannelRequest struct {
 	Name      *string                 `json:"name,omitempty"`
 }
 
+// UpdateIncidentStateRequest defines model for UpdateIncidentStateRequest.
+type UpdateIncidentStateRequest struct {
+	Body  string                          `json:"body"`
+	State UpdateIncidentStateRequestState `json:"state"`
+}
+
+// UpdateIncidentStateRequestState defines model for UpdateIncidentStateRequest.State.
+type UpdateIncidentStateRequestState string
+
 // UpdateMonitorRequest defines model for UpdateMonitorRequest.
 type UpdateMonitorRequest struct {
 	AlertAfterFailures *int                    `json:"alert_after_failures,omitempty"`
@@ -426,6 +503,12 @@ type CreateChannelJSONRequestBody = CreateChannelRequest
 
 // UpdateChannelJSONRequestBody defines body for UpdateChannel for application/json ContentType.
 type UpdateChannelJSONRequestBody = UpdateChannelRequest
+
+// CreateIncidentJSONRequestBody defines body for CreateIncident for application/json ContentType.
+type CreateIncidentJSONRequestBody = CreateIncidentRequest
+
+// UpdateIncidentStateJSONRequestBody defines body for UpdateIncidentState for application/json ContentType.
+type UpdateIncidentStateJSONRequestBody = UpdateIncidentStateRequest
 
 // CreateMonitorJSONRequestBody defines body for CreateMonitor for application/json ContentType.
 type CreateMonitorJSONRequestBody = CreateMonitorRequest
@@ -474,6 +557,15 @@ type ServerInterface interface {
 
 	// (PUT /api/channels/{id})
 	UpdateChannel(c *fiber.Ctx, id openapi_types.UUID) error
+
+	// (POST /api/incidents)
+	CreateIncident(c *fiber.Ctx) error
+
+	// (PATCH /api/incidents/{id}/state)
+	UpdateIncidentState(c *fiber.Ctx, id int64) error
+
+	// (GET /api/incidents/{id}/updates)
+	ListIncidentUpdates(c *fiber.Ctx, id int64) error
 
 	// (GET /api/monitor-types)
 	ListMonitorTypes(c *fiber.Ctx) error
@@ -653,6 +745,52 @@ func (siw *ServerInterfaceWrapper) UpdateChannel(c *fiber.Ctx) error {
 	c.Context().SetUserValue(SessionAuthScopes, []string{})
 
 	return siw.Handler.UpdateChannel(c, id)
+}
+
+// CreateIncident operation middleware
+func (siw *ServerInterfaceWrapper) CreateIncident(c *fiber.Ctx) error {
+
+	c.Context().SetUserValue(SessionAuthScopes, []string{})
+
+	c.Context().SetUserValue(BearerAuthScopes, []string{})
+
+	return siw.Handler.CreateIncident(c)
+}
+
+// UpdateIncidentState operation middleware
+func (siw *ServerInterfaceWrapper) UpdateIncidentState(c *fiber.Ctx) error {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Params("id"), &id, runtime.BindStyledParameterOptions{Explode: false, Required: true, Type: "integer", Format: "int64"})
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter id: %w", err).Error())
+	}
+
+	c.Context().SetUserValue(SessionAuthScopes, []string{})
+
+	c.Context().SetUserValue(BearerAuthScopes, []string{})
+
+	return siw.Handler.UpdateIncidentState(c, id)
+}
+
+// ListIncidentUpdates operation middleware
+func (siw *ServerInterfaceWrapper) ListIncidentUpdates(c *fiber.Ctx) error {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Params("id"), &id, runtime.BindStyledParameterOptions{Explode: false, Required: true, Type: "integer", Format: "int64"})
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter id: %w", err).Error())
+	}
+
+	return siw.Handler.ListIncidentUpdates(c, id)
 }
 
 // ListMonitorTypes operation middleware
@@ -865,6 +1003,12 @@ func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, option
 	router.Get(options.BaseURL+"/api/channels/:id", wrapper.GetChannel)
 
 	router.Put(options.BaseURL+"/api/channels/:id", wrapper.UpdateChannel)
+
+	router.Post(options.BaseURL+"/api/incidents", wrapper.CreateIncident)
+
+	router.Patch(options.BaseURL+"/api/incidents/:id/state", wrapper.UpdateIncidentState)
+
+	router.Get(options.BaseURL+"/api/incidents/:id/updates", wrapper.ListIncidentUpdates)
 
 	router.Get(options.BaseURL+"/api/monitor-types", wrapper.ListMonitorTypes)
 
