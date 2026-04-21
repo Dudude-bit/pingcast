@@ -139,11 +139,20 @@ type Monitor struct {
 	Type               string             `json:"type"`
 	CheckConfig        []byte             `json:"check_config"`
 	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+	GroupID            pgtype.Int8        `json:"group_id"`
 }
 
 type MonitorChannel struct {
 	MonitorID uuid.UUID `json:"monitor_id"`
 	ChannelID uuid.UUID `json:"channel_id"`
+}
+
+type MonitorGroup struct {
+	ID        int64     `json:"id"`
+	UserID    uuid.UUID `json:"user_id"`
+	Name      string    `json:"name"`
+	Ordering  int32     `json:"ordering"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type MonitorUptimeHourly struct {

@@ -26,6 +26,7 @@ type MonitoringService struct {
 	incidents       port.IncidentRepo
 	incidentUpdates port.IncidentUpdateRepo
 	maintenance     port.MaintenanceWindowRepo
+	groups          port.MonitorGroupRepo
 	users           port.UserRepo
 	uptime          port.UptimeRepo
 	txm             port.TxManager
@@ -43,6 +44,7 @@ func NewMonitoringService(
 	incidents port.IncidentRepo,
 	incidentUpdates port.IncidentUpdateRepo,
 	maintenance port.MaintenanceWindowRepo,
+	groups port.MonitorGroupRepo,
 	users port.UserRepo,
 	uptime port.UptimeRepo,
 	txm port.TxManager,
@@ -59,6 +61,7 @@ func NewMonitoringService(
 		incidents:       incidents,
 		incidentUpdates: incidentUpdates,
 		maintenance:     maintenance,
+		groups:          groups,
 		users:           users,
 		uptime:          uptime,
 		txm:             txm,
@@ -68,6 +71,28 @@ func NewMonitoringService(
 		metrics:         metrics,
 		clock:           clock,
 	}
+}
+
+// --- Monitor groups (Pro-gated at HTTP layer) ---
+
+func (s *MonitoringService) CreateMonitorGroup(ctx context.Context, userID uuid.UUID, name string, ordering int) (*domain.MonitorGroup, error) {
+	return s.groups.Create(ctx, userID, name, ordering)
+}
+
+func (s *MonitoringService) ListMonitorGroups(ctx context.Context, userID uuid.UUID) ([]domain.MonitorGroup, error) {
+	return s.groups.ListByUserID(ctx, userID)
+}
+
+func (s *MonitoringService) UpdateMonitorGroup(ctx context.Context, id int64, userID uuid.UUID, name string, ordering int) error {
+	return s.groups.Update(ctx, id, userID, name, ordering)
+}
+
+func (s *MonitoringService) DeleteMonitorGroup(ctx context.Context, id int64, userID uuid.UUID) error {
+	return s.groups.Delete(ctx, id, userID)
+}
+
+func (s *MonitoringService) AssignMonitorGroup(ctx context.Context, monitorID, userID uuid.UUID, groupID *int64) error {
+	return s.groups.AssignMonitor(ctx, monitorID, userID, groupID)
 }
 
 // --- Maintenance windows (Pro-gated at HTTP layer) ---
@@ -720,6 +745,9 @@ type StatusMonitor struct {
 	Name          string
 	CurrentStatus domain.MonitorStatus
 	Uptime90d     float64
+	// GroupID, if set, pairs with StatusPageData.Groups for UI grouping.
+	// nil → renders in the ungrouped default section.
+	GroupID *int64
 }
 
 type StatusPageData struct {
@@ -729,6 +757,10 @@ type StatusPageData struct {
 	Branding     port.Branding
 	Monitors     []StatusMonitor
 	Incidents    []domain.Incident
+	// Groups is the set of user-defined monitor groups. Monitors inside
+	// StatusMonitor are ordered and carry GroupID so the renderer can
+	// collapse them into sections.
+	Groups []domain.MonitorGroup
 }
 
 func (s *MonitoringService) GetStatusPage(ctx context.Context, slug string) (*StatusPageData, error) {
@@ -779,6 +811,14 @@ func (s *MonitoringService) GetStatusPage(ctx context.Context, slug string) (*St
 		}
 	}
 
+	// Groups are Pro-only on the write side, but we surface them on the
+	// public read regardless — free users just won't have any to list.
+	groups, gErr := s.groups.ListByUserID(ctx, user.ID)
+	if gErr != nil {
+		slog.Error("failed to load monitor groups for status page", "user_id", user.ID, "error", gErr)
+		groups = nil
+	}
+
 	return &StatusPageData{
 		Slug:         slug,
 		AllUp:        allUp,
@@ -786,5 +826,6 @@ func (s *MonitoringService) GetStatusPage(ctx context.Context, slug string) (*St
 		Branding:     branding,
 		Monitors:     statusMons,
 		Incidents:    incidents,
+		Groups:       groups,
 	}, nil
 }

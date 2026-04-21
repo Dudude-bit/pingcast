@@ -26,6 +26,7 @@ packages:
       Metrics: {}
       MonitorEventPublisher: {}
       MonitorEventSubscriber: {}
+      MonitorGroupRepo: {}
       MonitorRepo: {}
       RateLimiter: {}
       SessionRepo: {}

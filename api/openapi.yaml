@@ -486,6 +486,102 @@ paths:
         "402":
           description: Pro subscription required
 
+  /api/monitor-groups:
+    get:
+      operationId: listMonitorGroups
+      tags: [groups]
+      security:
+        - sessionAuth: []
+        - bearerAuth: []
+      responses:
+        "200":
+          description: User's monitor groups
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MonitorGroup"
+    post:
+      operationId: createMonitorGroup
+      tags: [groups]
+      security:
+        - sessionAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMonitorGroupRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonitorGroup"
+        "402":
+          description: Pro required
+
+  /api/monitor-groups/{id}:
+    put:
+      operationId: updateMonitorGroup
+      tags: [groups]
+      security:
+        - sessionAuth: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMonitorGroupRequest"
+      responses:
+        "204": { description: Updated }
+        "402": { description: Pro required }
+    delete:
+      operationId: deleteMonitorGroup
+      tags: [groups]
+      security:
+        - sessionAuth: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        "204": { description: Deleted }
+        "402": { description: Pro required }
+
+  /api/monitors/{id}/group:
+    put:
+      operationId: assignMonitorToGroup
+      tags: [groups]
+      security:
+        - sessionAuth: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignMonitorGroupRequest"
+      responses:
+        "204": { description: Assigned }
+        "402": { description: Pro required }
+
   /api/maintenance-windows:
     get:
       operationId: listMaintenanceWindows
@@ -1001,6 +1097,30 @@ components:
         incidents_created: { type: integer }
         updates_created: { type: integer }
         components_skipped: { type: integer }
+
+    MonitorGroup:
+      type: object
+      required: [id, name, ordering, created_at]
+      properties:
+        id:         { type: integer, format: int64 }
+        name:       { type: string }
+        ordering:   { type: integer }
+        created_at: { type: string, format: date-time }
+
+    CreateMonitorGroupRequest:
+      type: object
+      required: [name]
+      properties:
+        name:     { type: string, minLength: 1, maxLength: 100 }
+        ordering: { type: integer, default: 0 }
+
+    AssignMonitorGroupRequest:
+      type: object
+      properties:
+        group_id:
+          type: integer
+          format: int64
+          nullable: true
 
     MaintenanceWindow:
       type: object

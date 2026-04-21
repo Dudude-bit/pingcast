@@ -212,6 +212,11 @@ type APIKeyCreated struct {
 	RawKey *string `json:"raw_key,omitempty"`
 }
 
+// AssignMonitorGroupRequest defines model for AssignMonitorGroupRequest.
+type AssignMonitorGroupRequest struct {
+	GroupId *int64 `json:"group_id,omitempty"`
+}
+
 // AtlassianImportResult defines model for AtlassianImportResult.
 type AtlassianImportResult struct {
 	ComponentsSkipped int `json:"components_skipped"`
@@ -293,6 +298,12 @@ type CreateIncidentRequest struct {
 	Body      string             `json:"body"`
 	MonitorId openapi_types.UUID `json:"monitor_id"`
 	Title     string             `json:"title"`
+}
+
+// CreateMonitorGroupRequest defines model for CreateMonitorGroupRequest.
+type CreateMonitorGroupRequest struct {
+	Name     string `json:"name"`
+	Ordering *int   `json:"ordering,omitempty"`
 }
 
 // CreateMonitorRequest defines model for CreateMonitorRequest.
@@ -410,6 +421,14 @@ type MonitorDetail struct {
 
 // MonitorDetailCurrentStatus defines model for MonitorDetail.CurrentStatus.
 type MonitorDetailCurrentStatus string
+
+// MonitorGroup defines model for MonitorGroup.
+type MonitorGroup struct {
+	CreatedAt time.Time `json:"created_at"`
+	Id        int64     `json:"id"`
+	Name      string    `json:"name"`
+	Ordering  int       `json:"ordering"`
+}
 
 // MonitorTypeInfo defines model for MonitorTypeInfo.
 type MonitorTypeInfo struct {
@@ -566,6 +585,12 @@ type ScheduleMaintenanceWindowJSONRequestBody = ScheduleMaintenanceWindowRequest
 // UpdateMyBrandingJSONRequestBody defines body for UpdateMyBranding for application/json ContentType.
 type UpdateMyBrandingJSONRequestBody = Branding
 
+// CreateMonitorGroupJSONRequestBody defines body for CreateMonitorGroup for application/json ContentType.
+type CreateMonitorGroupJSONRequestBody = CreateMonitorGroupRequest
+
+// UpdateMonitorGroupJSONRequestBody defines body for UpdateMonitorGroup for application/json ContentType.
+type UpdateMonitorGroupJSONRequestBody = CreateMonitorGroupRequest
+
 // CreateMonitorJSONRequestBody defines body for CreateMonitor for application/json ContentType.
 type CreateMonitorJSONRequestBody = CreateMonitorRequest
 
@@ -574,6 +599,9 @@ type UpdateMonitorJSONRequestBody = UpdateMonitorRequest
 
 // BindChannelJSONRequestBody defines body for BindChannel for application/json ContentType.
 type BindChannelJSONRequestBody BindChannelJSONBody
+
+// AssignMonitorToGroupJSONRequestBody defines body for AssignMonitorToGroup for application/json ContentType.
+type AssignMonitorToGroupJSONRequestBody = AssignMonitorGroupRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -644,6 +672,18 @@ type ServerInterface interface {
 	// (PATCH /api/me/branding)
 	UpdateMyBranding(c *fiber.Ctx) error
 
+	// (GET /api/monitor-groups)
+	ListMonitorGroups(c *fiber.Ctx) error
+
+	// (POST /api/monitor-groups)
+	CreateMonitorGroup(c *fiber.Ctx) error
+
+	// (DELETE /api/monitor-groups/{id})
+	DeleteMonitorGroup(c *fiber.Ctx, id int64) error
+
+	// (PUT /api/monitor-groups/{id})
+	UpdateMonitorGroup(c *fiber.Ctx, id int64) error
+
 	// (GET /api/monitor-types)
 	ListMonitorTypes(c *fiber.Ctx) error
 
@@ -667,6 +707,9 @@ type ServerInterface interface {
 
 	// (DELETE /api/monitors/{id}/channels/{channelId})
 	UnbindChannel(c *fiber.Ctx, id openapi_types.UUID, channelId openapi_types.UUID) error
+
+	// (PUT /api/monitors/{id}/group)
+	AssignMonitorToGroup(c *fiber.Ctx, id openapi_types.UUID) error
 
 	// (POST /api/monitors/{id}/pause)
 	ToggleMonitorPause(c *fiber.Ctx, id openapi_types.UUID) error
@@ -946,6 +989,66 @@ func (siw *ServerInterfaceWrapper) UpdateMyBranding(c *fiber.Ctx) error {
 	return siw.Handler.UpdateMyBranding(c)
 }
 
+// ListMonitorGroups operation middleware
+func (siw *ServerInterfaceWrapper) ListMonitorGroups(c *fiber.Ctx) error {
+
+	c.Context().SetUserValue(SessionAuthScopes, []string{})
+
+	c.Context().SetUserValue(BearerAuthScopes, []string{})
+
+	return siw.Handler.ListMonitorGroups(c)
+}
+
+// CreateMonitorGroup operation middleware
+func (siw *ServerInterfaceWrapper) CreateMonitorGroup(c *fiber.Ctx) error {
+
+	c.Context().SetUserValue(SessionAuthScopes, []string{})
+
+	c.Context().SetUserValue(BearerAuthScopes, []string{})
+
+	return siw.Handler.CreateMonitorGroup(c)
+}
+
+// DeleteMonitorGroup operation middleware
+func (siw *ServerInterfaceWrapper) DeleteMonitorGroup(c *fiber.Ctx) error {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Params("id"), &id, runtime.BindStyledParameterOptions{Explode: false, Required: true, Type: "integer", Format: "int64"})
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter id: %w", err).Error())
+	}
+
+	c.Context().SetUserValue(SessionAuthScopes, []string{})
+
+	c.Context().SetUserValue(BearerAuthScopes, []string{})
+
+	return siw.Handler.DeleteMonitorGroup(c, id)
+}
+
+// UpdateMonitorGroup operation middleware
+func (siw *ServerInterfaceWrapper) UpdateMonitorGroup(c *fiber.Ctx) error {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Params("id"), &id, runtime.BindStyledParameterOptions{Explode: false, Required: true, Type: "integer", Format: "int64"})
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter id: %w", err).Error())
+	}
+
+	c.Context().SetUserValue(SessionAuthScopes, []string{})
+
+	c.Context().SetUserValue(BearerAuthScopes, []string{})
+
+	return siw.Handler.UpdateMonitorGroup(c, id)
+}
+
 // ListMonitorTypes operation middleware
 func (siw *ServerInterfaceWrapper) ListMonitorTypes(c *fiber.Ctx) error {
 
@@ -1066,6 +1169,26 @@ func (siw *ServerInterfaceWrapper) UnbindChannel(c *fiber.Ctx) error {
 	return siw.Handler.UnbindChannel(c, id, channelId)
 }
 
+// AssignMonitorToGroup operation middleware
+func (siw *ServerInterfaceWrapper) AssignMonitorToGroup(c *fiber.Ctx) error {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Params("id"), &id, runtime.BindStyledParameterOptions{Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter id: %w", err).Error())
+	}
+
+	c.Context().SetUserValue(SessionAuthScopes, []string{})
+
+	c.Context().SetUserValue(BearerAuthScopes, []string{})
+
+	return siw.Handler.AssignMonitorToGroup(c, id)
+}
+
 // ToggleMonitorPause operation middleware
 func (siw *ServerInterfaceWrapper) ToggleMonitorPause(c *fiber.Ctx) error {
 
@@ -1177,6 +1300,14 @@ func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, option
 
 	router.Patch(options.BaseURL+"/api/me/branding", wrapper.UpdateMyBranding)
 
+	router.Get(options.BaseURL+"/api/monitor-groups", wrapper.ListMonitorGroups)
+
+	router.Post(options.BaseURL+"/api/monitor-groups", wrapper.CreateMonitorGroup)
+
+	router.Delete(options.BaseURL+"/api/monitor-groups/:id", wrapper.DeleteMonitorGroup)
+
+	router.Put(options.BaseURL+"/api/monitor-groups/:id", wrapper.UpdateMonitorGroup)
+
 	router.Get(options.BaseURL+"/api/monitor-types", wrapper.ListMonitorTypes)
 
 	router.Get(options.BaseURL+"/api/monitors", wrapper.ListMonitors)
@@ -1192,6 +1323,8 @@ func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, option
 	router.Post(options.BaseURL+"/api/monitors/:id/channels", wrapper.BindChannel)
 
 	router.Delete(options.BaseURL+"/api/monitors/:id/channels/:channelId", wrapper.UnbindChannel)
+
+	router.Put(options.BaseURL+"/api/monitors/:id/group", wrapper.AssignMonitorToGroup)
 
 	router.Post(options.BaseURL+"/api/monitors/:id/pause", wrapper.ToggleMonitorPause)
 

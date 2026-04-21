@@ -137,6 +137,14 @@ type FailedAlertRepo interface {
 	Create(ctx context.Context, event json.RawMessage, errMsg string, failedChannelIDs []uuid.UUID) error
 }
 
+type MonitorGroupRepo interface {
+	Create(ctx context.Context, userID uuid.UUID, name string, ordering int) (*domain.MonitorGroup, error)
+	ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.MonitorGroup, error)
+	Update(ctx context.Context, id int64, userID uuid.UUID, name string, ordering int) error
+	Delete(ctx context.Context, id int64, userID uuid.UUID) error
+	AssignMonitor(ctx context.Context, monitorID, userID uuid.UUID, groupID *int64) error
+}
+
 type MaintenanceWindowRepo interface {
 	Create(ctx context.Context, in CreateMaintenanceWindowInput) (*domain.MaintenanceWindow, error)
 	ListByMonitorID(ctx context.Context, monitorID uuid.UUID) ([]domain.MaintenanceWindow, error)
