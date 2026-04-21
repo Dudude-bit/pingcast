@@ -48,6 +48,10 @@ func SetupApp(
 	app.Post("/webhook/lemonsqueezy", webhookHandler.HandleLemonSqueezy)
 	app.Post("/webhook/telegram/:token", webhookHandler.HandleTelegramWebhook)
 
+	// SVG status badge (public, embeddable in READMEs / docs sites).
+	// Registered outside the apigen router so we own the Content-Type.
+	app.Get("/status/:slug/badge.svg", server.GetStatusBadge)
+
 	// JSON API — uses oapi-codegen generated RegisterHandlers.
 	// Auth middleware gates every /api/* path except register, login,
 	// and the public status page. Rate-limiters run AFTER auth so
