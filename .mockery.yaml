@@ -17,6 +17,7 @@ packages:
       CheckPublisher: {}
       CheckResultRepo: {}
       CheckerRegistry: {}
+      CustomDomainRepo: {}
       DistributedMutex: {}
       FailedAlertRepo: {}
       HostLimiter: {}
