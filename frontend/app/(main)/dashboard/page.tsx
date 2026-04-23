@@ -8,6 +8,7 @@ import { MonitorList } from "@/components/features/monitors/monitor-list";
 import { GettingStarted } from "@/components/features/common/getting-started";
 import { RegisterCompletedBeacon } from "@/components/analytics/register-completed-beacon";
 import { UpgradeButton } from "@/components/features/billing/upgrade-button";
+import { ProNav } from "@/components/features/common/pro-nav";
 
 export default function DashboardPage() {
   return (
@@ -34,6 +35,7 @@ export default function DashboardPage() {
       </div>
       <GettingStarted />
       <MonitorList />
+      <ProNav />
     </div>
   );
 }
