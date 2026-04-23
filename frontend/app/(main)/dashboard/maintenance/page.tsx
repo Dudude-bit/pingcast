@@ -29,18 +29,26 @@ export default function MaintenanceDashboardPage() {
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
 
-  async function load() {
-    const [wRes, mRes] = await Promise.all([
-      fetch("/api/maintenance-windows", { credentials: "include" }),
-      fetch("/api/monitors", { credentials: "include" }),
-    ]);
-    if (wRes.ok) setWindows((await wRes.json()) as MaintenanceWindow[]);
-    if (mRes.ok) setMonitors((await mRes.json()) as Monitor[]);
-  }
+  const [reloadTick, setReloadTick] = useState(0);
 
   useEffect(() => {
-    load();
-  }, []);
+    // Cancellation-guarded loader per React 19's set-state-in-effect rule.
+    let cancelled = false;
+    (async () => {
+      const [wRes, mRes] = await Promise.all([
+        fetch("/api/maintenance-windows", { credentials: "include" }),
+        fetch("/api/monitors", { credentials: "include" }),
+      ]);
+      if (cancelled) return;
+      if (wRes.ok) setWindows((await wRes.json()) as MaintenanceWindow[]);
+      if (mRes.ok) setMonitors((await mRes.json()) as Monitor[]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadTick]);
+
+  const load = () => setReloadTick((n) => n + 1);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -87,7 +95,14 @@ export default function MaintenanceDashboardPage() {
     }
   }
 
-  const now = Date.now();
+  // React 19 forbids Date.now() during render (non-deterministic).
+  // Keep `now` in state and tick it every 60s so the Active/Upcoming/
+  // Completed pills stay accurate on long-open tabs.
+  const [now, setNow] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-3xl">

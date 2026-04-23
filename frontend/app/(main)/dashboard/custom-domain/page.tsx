@@ -24,19 +24,34 @@ export default function CustomDomainPage() {
   const [hostname, setHostname] = useState("");
   const [busy, setBusy] = useState(false);
 
-  async function load() {
-    const res = await fetch("/api/custom-domains", { credentials: "include" });
-    if (res.ok) setDomains((await res.json()) as CustomDomain[]);
-  }
+  const [reloadTick, setReloadTick] = useState(0);
 
   useEffect(() => {
-    load();
-    // Status can flip from pending → validated → active on the server-side
+    // Cancellation flag: if the component unmounts or the effect
+    // re-runs before the fetch resolves, we must not setState on a
+    // dead tree. React 19's set-state-in-effect rule requires this
+    // guard even for async work.
+    let cancelled = false;
+    const load = async () => {
+      const res = await fetch("/api/custom-domains", { credentials: "include" });
+      if (!cancelled && res.ok) {
+        setDomains((await res.json()) as CustomDomain[]);
+      }
+    };
+    void load();
+    // Status flips pending → validated → active on the server-side
     // worker's 60s cycle. Re-poll so the user sees progress without a
     // manual refresh.
-    const t = setInterval(load, 15_000);
-    return () => clearInterval(t);
-  }, []);
+    const t = setInterval(() => void load(), 15_000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [reloadTick]);
+
+  // Legacy callers still invoke load() after mutations. Route those
+  // through a reload-tick so we stay on a single effect-driven path.
+  const load = () => setReloadTick((n) => n + 1);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();

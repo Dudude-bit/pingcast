@@ -1,4 +1,6 @@
 import type { NextConfig } from "next";
+import createMDX from "@next/mdx";
+import remarkGfm from "remark-gfm";
 
 // Baseline security headers applied to every route. CSP is intentionally
 // omitted here because Recharts, Framer Motion, and our JSON-LD payload
@@ -33,6 +35,10 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // MDX files under /content/blog/*.mdx are imported by the blog
+  // page handler, not served as routes directly — but pageExtensions
+  // must still list them so the webpack loader picks them up.
+  pageExtensions: ["ts", "tsx", "md", "mdx"],
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
@@ -56,4 +62,12 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// GFM (GitHub-flavored markdown) — tables, strikethrough, task lists,
+// autolinked URLs. Standard for technical blogging.
+const withMDX = createMDX({
+  options: {
+    remarkPlugins: [remarkGfm],
+  },
+});
+
+export default withMDX(nextConfig);

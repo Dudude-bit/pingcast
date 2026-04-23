@@ -27,14 +27,25 @@ export default function GroupsDashboardPage() {
   const [editName, setEditName] = useState("");
   const [editOrdering, setEditOrdering] = useState(0);
 
-  async function load() {
-    const res = await fetch("/api/monitor-groups", { credentials: "include" });
-    if (res.ok) setGroups((await res.json()) as MonitorGroup[]);
-  }
+  const [reloadTick, setReloadTick] = useState(0);
 
   useEffect(() => {
-    load();
-  }, []);
+    // Cancellation-guarded fetch per React 19's set-state-in-effect rule.
+    let cancelled = false;
+    (async () => {
+      const res = await fetch("/api/monitor-groups", { credentials: "include" });
+      if (!cancelled && res.ok) {
+        setGroups((await res.json()) as MonitorGroup[]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadTick]);
+
+  // Mutations still want to trigger a reload — bump the tick instead
+  // of calling the loader directly.
+  const load = () => setReloadTick((n) => n + 1);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();

@@ -4,11 +4,14 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { POSTS, getPostBySlug } from "@/content/blog";
 import { BreadcrumbListJsonLd } from "@/components/seo/jsonld";
-import { PIVOT_POST } from "./pivoting-from-uptime-monitoring-to-status-pages.post";
+import PivotPost from "@/content/blog/pivoting-from-uptime-monitoring-to-status-pages.mdx";
 
-// Map slug → rendered post body. One entry per published post.
-const POST_BODIES: Record<string, React.ReactNode> = {
-  "pivoting-from-uptime-monitoring-to-status-pages": PIVOT_POST,
+// Map slug → MDX component. Adding a new post = one .mdx file under
+// content/blog/, one entry in content/blog/index.ts (metadata), one
+// entry here. Static imports keep the bundler honest; dynamic template-
+// literal imports don't work well with @next/mdx.
+const POST_BODIES: Record<string, React.ComponentType> = {
+  "pivoting-from-uptime-monitoring-to-status-pages": PivotPost,
 };
 
 export function generateStaticParams() {
@@ -44,8 +47,8 @@ export default async function BlogPostPage({
 }) {
   const { slug } = await params;
   const post = getPostBySlug(slug);
-  const body = POST_BODIES[slug];
-  if (!post || !body) notFound();
+  const Body = POST_BODIES[slug];
+  if (!post || !Body) notFound();
 
   return (
     <article className="container mx-auto px-4 py-12 max-w-2xl">
@@ -73,8 +76,8 @@ export default async function BlogPostPage({
           {post.description}
         </p>
       </header>
-      <div className="prose-content space-y-5 text-foreground leading-relaxed [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:tracking-tight [&_h2]:mt-10 [&_h2]:mb-3 [&_h3]:text-xl [&_h3]:font-semibold [&_h3]:mt-6 [&_h3]:mb-2 [&_p]:text-muted-foreground [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:space-y-2 [&_ul]:text-muted-foreground [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_strong]:text-foreground">
-        {body}
+      <div className="prose-content space-y-5 text-foreground leading-relaxed [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:tracking-tight [&_h2]:mt-10 [&_h2]:mb-3 [&_h3]:text-xl [&_h3]:font-semibold [&_h3]:mt-6 [&_h3]:mb-2 [&_p]:text-muted-foreground [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:space-y-2 [&_ul]:text-muted-foreground [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_strong]:text-foreground [&_a]:underline [&_a]:underline-offset-4 [&_a]:text-foreground hover:[&_a]:text-primary">
+        <Body />
       </div>
     </article>
   );

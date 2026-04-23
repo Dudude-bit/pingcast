@@ -1,0 +1,34 @@
+A month ago, PingCast's landing page said _"uptime monitoring that doesn't suck."_ Today it says _"branded status pages for SaaS, at a third of Atlassian's price."_ Same product, different story. Here is why we flipped it.
+
+## The old story was fighting the wrong fight
+
+Uptime monitoring is a 15-year-old commodity. UptimeRobot runs it at $7/mo with 50 free monitors; Pingdom owns the enterprise buy; BetterStack spends marketing money we don't have. As a solo developer, trying to differentiate PingCast as "cheaper uptime monitoring" meant landing fifth in every SERP and burning months on a feature race we couldn't win.
+
+The more honest question: what is PingCast actually _better_ at than anything else on the market?
+
+## Status pages are where the real moat is
+
+Turns out: status pages. Specifically, branded SSR+ISR status pages with a real incident-update timeline. The open-source competitors mostly ship monitoring-first tools (Uptime Kuma, Checkmk) where the public page is a thin afterthought. The dedicated status-page vendors (Atlassian Statuspage, Instatus) charge $20–$29/mo entry and don't ship uptime monitoring at all.
+
+So there's a gap: **open-source status pages** **+** **uptime monitoring** **at an indie price**. Nobody sits in that box. We do.
+
+## What changed concretely
+
+- New hero: "Branded status pages for SaaS, at a third of Atlassian's price." Status-page features lead; monitoring is a supporting bullet.
+- New pricing: Free (5 monitors, basic page) → Pro $9/mo founder's price for the first 100 customers, $19/mo retail after. Self-host under MIT stays free forever.
+- New comparison table: Atlassian, Instatus, Openstatus, Uptime Kuma — not UptimeRobot and Pingdom. We're pitching against the status-page incumbents now, not the monitoring giants.
+- New Pro features shipped to justify the money: incident updates with state timeline, email subscribers with double opt-in, custom domain support, Atlassian Statuspage 1-click importer, SVG status badge, embeddable JS widget. All built in the last two weeks.
+
+## Russia is a free bonus
+
+Atlassian hasn't sold to Russian customers since 2022. That leaves every Russian SaaS either self-hosting Cachet (painful) or paying a VPN + foreign card to get Statuspage (more painful). PingCast accepts Russian payments and ships in English + RU, so we've inherited a market a $20B company walked away from.
+
+## What I didn't expect
+
+How much faster the marketing writes itself when the positioning is right. The old landing wanted me to prove we were better than UptimeRobot on 15 dimensions. The new one says: _"you want a branded status page, we ship one, it's 1/3 the price, here's the one-click Atlassian importer."_ That's it. The features, the pricing, and the comparison table all line up because they're aimed at the same customer.
+
+## Next steps
+
+Sprint 5 is distribution — Habr (the Russian tech news site) gets a new technical post on the Atlassian importer, vc.ru gets the founder-journey version, ProductHunt gets scheduled once we have five logos on the wall. If you're an indie SaaS and the status page pitch sounds good, [start PingCast Pro](/register?intent=pro) or [read the Atlassian comparison](/alternatives/atlassian-statuspage).
+
+Questions welcome on [GitHub issues](https://github.com/kirillinakin/pingcast/issues).

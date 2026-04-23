@@ -59,7 +59,7 @@ export function GettingStarted() {
       <h2 className="text-sm font-semibold">Getting started</h2>
       <p className="mt-1 text-xs text-muted-foreground">
         A few quick steps to wire up your first alert. This goes away
-        once you're fully set up.
+        once you&apos;re fully set up.
       </p>
       <ol className="mt-4 space-y-2">
         {steps.map((s) => (

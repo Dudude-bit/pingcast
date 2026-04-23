@@ -178,7 +178,7 @@ export default function LandingPage() {
           From zero to page in 60 seconds
         </h2>
         <p className="mt-3 text-center text-muted-foreground max-w-xl mx-auto">
-          No install scripts, no agents, no YAML. Three clicks and you're
+          No install scripts, no agents, no YAML. Three clicks and you&apos;re
           watching production.
         </p>
         <div className="mt-12 grid gap-6 md:grid-cols-3">
@@ -405,7 +405,7 @@ export default function LandingPage() {
             </div>
             <div>
               <h2 className="text-xl md:text-2xl font-bold tracking-tight">
-                Built in public. No logo wall, no "trusted by" fiction.
+                Built in public. No logo wall, no &ldquo;trusted by&rdquo; fiction.
               </h2>
               <p className="mt-3 text-sm md:text-base text-muted-foreground leading-relaxed">
                 Every feature on this page is backed by open-source code
