@@ -6,6 +6,7 @@ import type { components } from "@/lib/openapi-types";
 import { Activity, AlertCircle, CheckCircle2 } from "lucide-react";
 import { IncidentStateBadge } from "@/components/features/incidents/incident-state-badge";
 import { IncidentTimeline } from "@/components/features/incidents/incident-timeline";
+import { StatusSubscribeForm } from "@/components/features/incidents/status-subscribe-form";
 
 type IncidentUpdate = components["schemas"]["IncidentUpdate"];
 type Incident = components["schemas"]["Incident"];
@@ -223,6 +224,10 @@ export default async function StatusPageRoute({
             </ul>
           </section>
         ) : null}
+
+        <section className="mt-8 mb-10">
+          <StatusSubscribeForm slug={data.slug ?? slug} />
+        </section>
 
         {branding?.custom_footer_text ? (
           <footer className="mt-8 text-center text-xs text-muted-foreground whitespace-pre-line">

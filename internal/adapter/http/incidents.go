@@ -1,7 +1,9 @@
 package httpadapter
 
 import (
+	"context"
 	"errors"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -9,8 +11,25 @@ import (
 	"github.com/kirillinakin/pingcast/internal/adapter/httperr"
 	"github.com/kirillinakin/pingcast/internal/app"
 	"github.com/kirillinakin/pingcast/internal/domain"
+	"github.com/kirillinakin/pingcast/internal/xcontext"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
+
+// notifyWindow caps the detached fan-out goroutine. Long enough for a
+// batch of SMTP sends, short enough that a misbehaving relay doesn't
+// leak goroutines if the process is shutting down.
+const notifyWindow = 30 * time.Second
+
+// notifyIncidentAsync runs SubscriptionService.NotifyIncident in a
+// detached context so the HTTP response doesn't block on SMTP. Parent
+// trace is linked via xcontext.Detached for observability.
+func (s *Server) notifyIncidentAsync(parent context.Context, slug, headline, state, body string) {
+	go func() {
+		ctx, cancel := xcontext.Detached(parent, notifyWindow, "notify-incident")
+		defer cancel()
+		s.subscriptions.NotifyIncident(ctx, slug, headline, state, body)
+	}()
+}
 
 // CreateIncident opens a manual incident. Pro-only (gated upstream by
 // proGateSelector). Body: {monitor_id, title, body}. The initial
@@ -38,6 +57,9 @@ func (s *Server) CreateIncident(c *fiber.Ctx) error {
 		}
 		return httperr.Write(c, err)
 	}
+
+	s.notifyIncidentAsync(c.UserContext(), user.Slug, req.Title,
+		string(domain.IncidentStateInvestigating), req.Body)
 
 	return c.Status(fiber.StatusCreated).JSON(domainIncidentToAPI(inc))
 }
@@ -77,6 +99,12 @@ func (s *Server) UpdateIncidentState(c *fiber.Ctx, id int64) error {
 		}
 		return httperr.Write(c, err)
 	}
+
+	// Fire-and-forget fan-out to confirmed status-page subscribers.
+	// Request may end before SMTP sends complete; the user doesn't
+	// wait on email delivery to see the PATCH response.
+	s.notifyIncidentAsync(c.UserContext(), user.Slug,
+		"Incident update: "+string(upd.State), string(upd.State), upd.Body)
 
 	return c.JSON(domainIncidentUpdateToAPI(upd))
 }

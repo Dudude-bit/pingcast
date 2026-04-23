@@ -18,6 +18,7 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 
 	"github.com/kirillinakin/pingcast/internal/adapter/checker"
+	"github.com/kirillinakin/pingcast/internal/app"
 	natsadapter "github.com/kirillinakin/pingcast/internal/adapter/nats"
 	"github.com/kirillinakin/pingcast/internal/adapter/postgres"
 	redisadapter "github.com/kirillinakin/pingcast/internal/adapter/redis"
@@ -50,11 +51,12 @@ type SchedulerDeps struct {
 type Scheduler struct {
 	Leader *checker.LeaderScheduler
 
-	monitorSub    *natsadapter.MonitorSubscriber
-	cleanupFunc   func(context.Context)
-	sslScanFunc   func(context.Context)
-	cleanupCancel context.CancelFunc
-	cleanupWg     sync.WaitGroup
+	monitorSub       *natsadapter.MonitorSubscriber
+	cleanupFunc      func(context.Context)
+	sslScanFunc      func(context.Context)
+	customDomainFunc func(context.Context)
+	cleanupCancel    context.CancelFunc
+	cleanupWg        sync.WaitGroup
 }
 
 func NewScheduler(deps SchedulerDeps) (*Scheduler, error) {
@@ -192,6 +194,38 @@ func NewScheduler(deps SchedulerDeps) (*Scheduler, error) {
 		}
 	}
 
+	// Custom-domain validation loop — advances pending/validated/failed
+	// rows through their state machine every 60s. Leader-elected via a
+	// separate redsync mutex so only one scheduler instance drives the
+	// worker. ACME provisioning is stubbed (NoopCertProvisioner) today;
+	// flip to a real adapter when prod Traefik/ACME is wired.
+	customDomainRepo := postgres.NewCustomDomainRepo(queries)
+	customDomainSvc := app.NewCustomDomainService(customDomainRepo, app.NoopCertProvisioner{}, "")
+	cdMutex := rs.NewMutex("lock:custom-domain:validate", redsync.WithExpiry(2*time.Minute))
+	s.customDomainFunc = func(ctx context.Context) {
+		defer s.cleanupWg.Done()
+		ticker := time.NewTicker(60 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := cdMutex.Lock(); err != nil {
+					if errors.Is(err, redsync.ErrFailed) {
+						continue
+					}
+					slog.Warn("custom-domain lock failed", "error", err)
+					continue
+				}
+				customDomainSvc.RunValidationOnce(ctx)
+				if _, err := cdMutex.Unlock(); err != nil {
+					slog.Warn("custom-domain unlock failed", "error", err)
+				}
+			}
+		}
+	}
+
 	return s, nil
 }
 
@@ -278,6 +312,11 @@ func (s *Scheduler) Start(ctx context.Context) {
 	if s.sslScanFunc != nil {
 		s.cleanupWg.Add(1)
 		go s.sslScanFunc(cleanupCtx)
+	}
+
+	if s.customDomainFunc != nil {
+		s.cleanupWg.Add(1)
+		go s.customDomainFunc(cleanupCtx)
 	}
 
 	go s.Leader.Run(ctx)

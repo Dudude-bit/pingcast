@@ -29,6 +29,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "best-status-page-software-2026",
     "how-to-create-status-page",
     "atlassian-statuspage-pricing",
+    "open-source-status-page",
+    "saas-status-page",
+    "status-page-template",
   ].map((slug) => ({
     url: `${base}/${slug}`,
     lastModified: now,
