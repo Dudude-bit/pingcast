@@ -11,6 +11,7 @@ import { StatusBadge } from "@/components/features/monitors/status-badge";
 import { UptimeStats } from "@/components/features/monitors/uptime-stats";
 import { IncidentList } from "@/components/features/monitors/incident-list";
 import { DeleteMonitorDialog } from "@/components/features/monitors/delete-monitor-dialog";
+import { MonitorGroupPicker } from "@/components/features/monitors/monitor-group-picker";
 
 // Recharts is ~100 KB gzipped and only needed on this page — lazy-load it
 // so the rest of the app's first-load bundle stays slim. Skeleton matches
@@ -76,7 +77,11 @@ export default function MonitorDetailPage({
             {data.target}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <MonitorGroupPicker
+            monitorId={id}
+            initialGroupId={(data as { group_id?: number | null }).group_id ?? null}
+          />
           <Link
             href={`/monitors/${id}/edit`}
             className={buttonVariants({ variant: "outline", size: "sm" })}

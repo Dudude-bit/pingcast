@@ -551,6 +551,14 @@ type StatusPageResponse struct {
 	Slug         *string `json:"slug,omitempty"`
 }
 
+// StatusSubscriber defines model for StatusSubscriber.
+type StatusSubscriber struct {
+	ConfirmedAt time.Time `json:"confirmed_at"`
+	CreatedAt   time.Time `json:"created_at"`
+	Email       string    `json:"email"`
+	Id          int64     `json:"id"`
+}
+
 // UpdateChannelRequest defines model for UpdateChannelRequest.
 type UpdateChannelRequest struct {
 	Config    *map[string]interface{} `json:"config,omitempty"`
@@ -748,6 +756,9 @@ type ServerInterface interface {
 
 	// (PATCH /api/me/branding)
 	UpdateMyBranding(c *fiber.Ctx) error
+
+	// (GET /api/me/subscribers)
+	ListMySubscribers(c *fiber.Ctx) error
 
 	// (GET /api/monitor-groups)
 	ListMonitorGroups(c *fiber.Ctx) error
@@ -1113,6 +1124,16 @@ func (siw *ServerInterfaceWrapper) UpdateMyBranding(c *fiber.Ctx) error {
 	c.Context().SetUserValue(BearerAuthScopes, []string{})
 
 	return siw.Handler.UpdateMyBranding(c)
+}
+
+// ListMySubscribers operation middleware
+func (siw *ServerInterfaceWrapper) ListMySubscribers(c *fiber.Ctx) error {
+
+	c.Context().SetUserValue(SessionAuthScopes, []string{})
+
+	c.Context().SetUserValue(BearerAuthScopes, []string{})
+
+	return siw.Handler.ListMySubscribers(c)
 }
 
 // ListMonitorGroups operation middleware
@@ -1527,6 +1548,8 @@ func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, option
 	router.Get(options.BaseURL+"/api/me/branding", wrapper.GetMyBranding)
 
 	router.Patch(options.BaseURL+"/api/me/branding", wrapper.UpdateMyBranding)
+
+	router.Get(options.BaseURL+"/api/me/subscribers", wrapper.ListMySubscribers)
 
 	router.Get(options.BaseURL+"/api/monitor-groups", wrapper.ListMonitorGroups)
 

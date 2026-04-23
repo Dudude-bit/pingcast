@@ -7,6 +7,32 @@ import (
 	"github.com/kirillinakin/pingcast/internal/adapter/httperr"
 )
 
+// ListMySubscribers returns every confirmed subscriber to the caller's
+// own slug.
+func (s *Server) ListMySubscribers(c *fiber.Ctx) error {
+	user := requireUser(c)
+	if user == nil {
+		return nil
+	}
+	subs, err := s.subscriptions.ListConfirmed(c.UserContext(), user.Slug)
+	if err != nil {
+		return httperr.Write(c, err)
+	}
+	out := make([]apigen.StatusSubscriber, 0, len(subs))
+	for _, sub := range subs {
+		if sub.ConfirmedAt == nil {
+			continue
+		}
+		out = append(out, apigen.StatusSubscriber{
+			Id:          sub.ID,
+			Email:       sub.Email,
+			ConfirmedAt: *sub.ConfirmedAt,
+			CreatedAt:   sub.CreatedAt,
+		})
+	}
+	return c.JSON(out)
+}
+
 // SubscribeToStatusPage accepts {email} and fires the double-opt-in
 // confirmation email. Responses are intentionally vague (always 202 on
 // validation success) so an attacker can't use the endpoint to

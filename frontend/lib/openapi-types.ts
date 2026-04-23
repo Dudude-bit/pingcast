@@ -378,6 +378,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/subscribers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listMySubscribers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/branding": {
         parameters: {
             query?: never;
@@ -756,6 +772,15 @@ export interface components {
             /** Format: date-time */
             ends_at: string;
             reason: string;
+        };
+        StatusSubscriber: {
+            /** Format: int64 */
+            id: number;
+            email: string;
+            /** Format: date-time */
+            confirmed_at: string;
+            /** Format: date-time */
+            created_at: string;
         };
         Branding: {
             logo_url?: string | null;
@@ -1768,6 +1793,26 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    listMySubscribers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Confirmed status-page subscribers for the caller's slug */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusSubscriber"][];
+                };
             };
         };
     };

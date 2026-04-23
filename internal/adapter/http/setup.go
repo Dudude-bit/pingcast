@@ -52,6 +52,10 @@ func SetupApp(
 	// Registered outside the apigen router so we own the Content-Type.
 	app.Get("/status/:slug/badge.svg", server.GetStatusBadge)
 
+	// RSS 2.0 incident feed (public). Separate from the JSON status
+	// endpoint so RSS readers get a real application/rss+xml response.
+	app.Get("/status/:slug/feed.xml", server.GetStatusFeed)
+
 	// CSV incident export (Pro-only). Registered outside apigen so we
 	// own the text/csv content type + streaming body. Chain: auth →
 	// RequirePro → handler.

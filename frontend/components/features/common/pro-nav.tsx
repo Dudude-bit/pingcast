@@ -5,7 +5,8 @@ import {
   FolderTree,
   Wrench,
   Upload,
-  Mail,
+  Users,
+  BookOpen,
 } from "lucide-react";
 
 // ProNav is the dashboard entry-point to every Pro surface. Each card
@@ -39,6 +40,12 @@ const CARDS = [
     body: "Schedule planned downtime so alerts don't fire and the page shows 'scheduled maintenance'.",
   },
   {
+    href: "/dashboard/subscribers",
+    icon: Users,
+    title: "Subscribers",
+    body: "Confirmed email subscribers to your public status page.",
+  },
+  {
     href: "/import/atlassian",
     icon: Upload,
     title: "Import from Atlassian",
@@ -46,7 +53,7 @@ const CARDS = [
   },
   {
     href: "/docs/api",
-    icon: Mail,
+    icon: BookOpen,
     title: "API reference",
     body: "Every feature, scoped API keys, OpenAPI spec. curl the dashboard.",
   },

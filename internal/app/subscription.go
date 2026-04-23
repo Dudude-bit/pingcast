@@ -76,6 +76,13 @@ func (s *SubscriptionService) Confirm(ctx context.Context, confirmToken string) 
 	return s.subs.Confirm(ctx, confirmToken)
 }
 
+// ListConfirmed exposes the repo list for admin dashboards. Emits only
+// rows where confirmed_at is set — the repo query already filters this
+// but callers get a strongly-typed slice of confirmed subs.
+func (s *SubscriptionService) ListConfirmed(ctx context.Context, slug string) ([]domain.StatusSubscriber, error) {
+	return s.subs.ListConfirmedBySlug(ctx, slug)
+}
+
 // Unsubscribe deletes the row. Token-scoped so forged URLs can't touch
 // other subscribers.
 func (s *SubscriptionService) Unsubscribe(ctx context.Context, unsubscribeToken string) (*domain.StatusSubscriber, error) {
