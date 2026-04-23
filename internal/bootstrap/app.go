@@ -165,13 +165,16 @@ func NewApp(deps AppDeps) (*App, error) {
 	mailer := smtpadapter.NewMailer(deps.SMTPHost, deps.SMTPPort, deps.SMTPUser, deps.SMTPPass, deps.SMTPFrom)
 	subscriptionsSvc := app.NewSubscriptionService(statusSubRepo, mailer, deps.BaseURL)
 
+	customDomainRepo := postgres.NewCustomDomainRepo(queries)
+	customDomainsSvc := app.NewCustomDomainService(customDomainRepo, app.NoopCertProvisioner{}, deps.BaseURL)
+
 	// Per-scope rate limiters (spec §5). Each bucket has its own prefix
 	// so they don't share keys, and its own max/window per scope. Tests
 	// override windows via deps.RateLimits.WindowOverride.
 	rls := buildRateLimiters(deps.Redis, deps.RateLimits)
 
 	// HTTP handlers
-	server := httpadapter.NewServer(authSvc, monitoringSvc, alertSvc, billingSvc, atlassianImporter, subscriptionsSvc, rls, apiKeyRepo, statsRepo)
+	server := httpadapter.NewServer(authSvc, monitoringSvc, alertSvc, billingSvc, atlassianImporter, subscriptionsSvc, customDomainsSvc, rls, apiKeyRepo, statsRepo)
 	webhookHandler := httpadapter.NewWebhookHandler(
 		authSvc, alertSvc, billingSvc, deps.LemonSqueezySecret,
 		deps.LemonSqueezyFounderVariantID,

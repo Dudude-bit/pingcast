@@ -144,6 +144,16 @@ type StatusSubscriberRepo interface {
 	ListConfirmedBySlug(ctx context.Context, slug string) ([]domain.StatusSubscriber, error)
 }
 
+type CustomDomainRepo interface {
+	Create(ctx context.Context, userID uuid.UUID, hostname, validationToken string) (*domain.CustomDomain, error)
+	ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.CustomDomain, error)
+	GetByHostname(ctx context.Context, hostname string) (*domain.CustomDomain, error)
+	ListPending(ctx context.Context) ([]domain.CustomDomain, error)
+	UpdateStatus(ctx context.Context, id int64, status domain.CustomDomainStatus, lastError *string, dnsValidatedAt, certIssuedAt *time.Time) error
+	Delete(ctx context.Context, id int64, userID uuid.UUID) error
+	ListActiveHostnames(ctx context.Context) (map[string]uuid.UUID, error)
+}
+
 type MonitorGroupRepo interface {
 	Create(ctx context.Context, userID uuid.UUID, name string, ordering int) (*domain.MonitorGroup, error)
 	ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.MonitorGroup, error)

@@ -13,6 +13,50 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type CustomDomainStatus string
+
+const (
+	CustomDomainStatusPending   CustomDomainStatus = "pending"
+	CustomDomainStatusValidated CustomDomainStatus = "validated"
+	CustomDomainStatusActive    CustomDomainStatus = "active"
+	CustomDomainStatusFailed    CustomDomainStatus = "failed"
+)
+
+func (e *CustomDomainStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = CustomDomainStatus(s)
+	case string:
+		*e = CustomDomainStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for CustomDomainStatus: %T", src)
+	}
+	return nil
+}
+
+type NullCustomDomainStatus struct {
+	CustomDomainStatus CustomDomainStatus `json:"custom_domain_status"`
+	Valid              bool               `json:"valid"` // Valid is true if CustomDomainStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullCustomDomainStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.CustomDomainStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.CustomDomainStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullCustomDomainStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.CustomDomainStatus), nil
+}
+
 type IncidentState string
 
 const (
@@ -86,6 +130,18 @@ type CheckResultsDefault struct {
 	ResponseTimeMs int32       `json:"response_time_ms"`
 	ErrorMessage   *string     `json:"error_message"`
 	CheckedAt      time.Time   `json:"checked_at"`
+}
+
+type CustomDomain struct {
+	ID              int64              `json:"id"`
+	UserID          uuid.UUID          `json:"user_id"`
+	Hostname        string             `json:"hostname"`
+	ValidationToken string             `json:"validation_token"`
+	Status          CustomDomainStatus `json:"status"`
+	LastError       *string            `json:"last_error"`
+	DnsValidatedAt  pgtype.Timestamptz `json:"dns_validated_at"`
+	CertIssuedAt    pgtype.Timestamptz `json:"cert_issued_at"`
+	CreatedAt       time.Time          `json:"created_at"`
 }
 
 type FailedAlert struct {

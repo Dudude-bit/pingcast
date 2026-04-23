@@ -42,6 +42,30 @@ func (e CreateAPIKeyRequestScopes) Valid() bool {
 	}
 }
 
+// Defines values for CustomDomainStatus.
+const (
+	Active    CustomDomainStatus = "active"
+	Failed    CustomDomainStatus = "failed"
+	Pending   CustomDomainStatus = "pending"
+	Validated CustomDomainStatus = "validated"
+)
+
+// Valid indicates whether the value is a known member of the CustomDomainStatus enum.
+func (e CustomDomainStatus) Valid() bool {
+	switch e {
+	case Active:
+		return true
+	case Failed:
+		return true
+	case Pending:
+		return true
+	case Validated:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for IncidentState.
 const (
 	IncidentStateIdentified    IncidentState = "identified"
@@ -317,6 +341,23 @@ type CreateMonitorRequest struct {
 	Type               string                 `json:"type"`
 }
 
+// CustomDomain defines model for CustomDomain.
+type CustomDomain struct {
+	CertIssuedAt   *time.Time         `json:"cert_issued_at,omitempty"`
+	CreatedAt      time.Time          `json:"created_at"`
+	DnsValidatedAt *time.Time         `json:"dns_validated_at,omitempty"`
+	Hostname       string             `json:"hostname"`
+	Id             int64              `json:"id"`
+	LastError      *string            `json:"last_error,omitempty"`
+	Status         CustomDomainStatus `json:"status"`
+
+	// ValidationToken Serve this token at /.well-known/pingcast/<token>
+	ValidationToken string `json:"validation_token"`
+}
+
+// CustomDomainStatus defines model for CustomDomain.Status.
+type CustomDomainStatus string
+
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
 	Error *string `json:"error,omitempty"`
@@ -548,6 +589,11 @@ type User struct {
 // UserPlan defines model for User.Plan.
 type UserPlan string
 
+// RequestCustomDomainJSONBody defines parameters for RequestCustomDomain.
+type RequestCustomDomainJSONBody struct {
+	Hostname string `json:"hostname"`
+}
+
 // ImportAtlassianJSONBody defines parameters for ImportAtlassian.
 type ImportAtlassianJSONBody map[string]interface{}
 
@@ -585,6 +631,9 @@ type CreateChannelJSONRequestBody = CreateChannelRequest
 
 // UpdateChannelJSONRequestBody defines body for UpdateChannel for application/json ContentType.
 type UpdateChannelJSONRequestBody = UpdateChannelRequest
+
+// RequestCustomDomainJSONRequestBody defines body for RequestCustomDomain for application/json ContentType.
+type RequestCustomDomainJSONRequestBody RequestCustomDomainJSONBody
 
 // ImportAtlassianJSONRequestBody defines body for ImportAtlassian for application/json ContentType.
 type ImportAtlassianJSONRequestBody ImportAtlassianJSONBody
@@ -663,6 +712,15 @@ type ServerInterface interface {
 
 	// (PUT /api/channels/{id})
 	UpdateChannel(c *fiber.Ctx, id openapi_types.UUID) error
+
+	// (GET /api/custom-domains)
+	ListCustomDomains(c *fiber.Ctx) error
+
+	// (POST /api/custom-domains)
+	RequestCustomDomain(c *fiber.Ctx) error
+
+	// (DELETE /api/custom-domains/{id})
+	DeleteCustomDomain(c *fiber.Ctx, id int64) error
 
 	// (POST /api/import/atlassian)
 	ImportAtlassian(c *fiber.Ctx) error
@@ -899,6 +957,46 @@ func (siw *ServerInterfaceWrapper) UpdateChannel(c *fiber.Ctx) error {
 	c.Context().SetUserValue(SessionAuthScopes, []string{})
 
 	return siw.Handler.UpdateChannel(c, id)
+}
+
+// ListCustomDomains operation middleware
+func (siw *ServerInterfaceWrapper) ListCustomDomains(c *fiber.Ctx) error {
+
+	c.Context().SetUserValue(SessionAuthScopes, []string{})
+
+	c.Context().SetUserValue(BearerAuthScopes, []string{})
+
+	return siw.Handler.ListCustomDomains(c)
+}
+
+// RequestCustomDomain operation middleware
+func (siw *ServerInterfaceWrapper) RequestCustomDomain(c *fiber.Ctx) error {
+
+	c.Context().SetUserValue(SessionAuthScopes, []string{})
+
+	c.Context().SetUserValue(BearerAuthScopes, []string{})
+
+	return siw.Handler.RequestCustomDomain(c)
+}
+
+// DeleteCustomDomain operation middleware
+func (siw *ServerInterfaceWrapper) DeleteCustomDomain(c *fiber.Ctx) error {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Params("id"), &id, runtime.BindStyledParameterOptions{Explode: false, Required: true, Type: "integer", Format: "int64"})
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter id: %w", err).Error())
+	}
+
+	c.Context().SetUserValue(SessionAuthScopes, []string{})
+
+	c.Context().SetUserValue(BearerAuthScopes, []string{})
+
+	return siw.Handler.DeleteCustomDomain(c, id)
 }
 
 // ImportAtlassian operation middleware
@@ -1405,6 +1503,12 @@ func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, option
 	router.Get(options.BaseURL+"/api/channels/:id", wrapper.GetChannel)
 
 	router.Put(options.BaseURL+"/api/channels/:id", wrapper.UpdateChannel)
+
+	router.Get(options.BaseURL+"/api/custom-domains", wrapper.ListCustomDomains)
+
+	router.Post(options.BaseURL+"/api/custom-domains", wrapper.RequestCustomDomain)
+
+	router.Delete(options.BaseURL+"/api/custom-domains/:id", wrapper.DeleteCustomDomain)
 
 	router.Post(options.BaseURL+"/api/import/atlassian", wrapper.ImportAtlassian)
 

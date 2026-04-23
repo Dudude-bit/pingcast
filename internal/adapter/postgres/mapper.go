@@ -26,6 +26,14 @@ func timeToPgtypeTimestamptz(t time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: t, Valid: true}
 }
 
+// ptrToPgtypeTimestamptz is the nullable variant — nil in → invalid out.
+func ptrToPgtypeTimestamptz(t *time.Time) pgtype.Timestamptz {
+	if t == nil {
+		return pgtype.Timestamptz{}
+	}
+	return pgtype.Timestamptz{Time: *t, Valid: true}
+}
+
 func intToPgtypeInt4(v *int) pgtype.Int4 {
 	if v == nil {
 		return pgtype.Int4{}

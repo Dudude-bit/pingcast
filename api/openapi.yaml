@@ -486,6 +486,63 @@ paths:
         "402":
           description: Pro subscription required
 
+  /api/custom-domains:
+    get:
+      operationId: listCustomDomains
+      tags: [domains]
+      security:
+        - sessionAuth: []
+        - bearerAuth: []
+      responses:
+        "200":
+          description: User's custom domains (all statuses)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CustomDomain"
+    post:
+      operationId: requestCustomDomain
+      tags: [domains]
+      security:
+        - sessionAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hostname]
+              properties:
+                hostname: { type: string }
+      responses:
+        "201":
+          description: Pending — set the CNAME + serve the .well-known probe
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomDomain"
+        "402": { description: Pro required }
+        "422": { description: Invalid hostname }
+
+  /api/custom-domains/{id}:
+    delete:
+      operationId: deleteCustomDomain
+      tags: [domains]
+      security:
+        - sessionAuth: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        "204": { description: Deleted }
+        "402": { description: Pro required }
+
   /api/monitor-groups:
     get:
       operationId: listMonitorGroups
@@ -1156,6 +1213,19 @@ components:
         incidents_created: { type: integer }
         updates_created: { type: integer }
         components_skipped: { type: integer }
+
+    CustomDomain:
+      type: object
+      required: [id, hostname, validation_token, status, created_at]
+      properties:
+        id:               { type: integer, format: int64 }
+        hostname:         { type: string }
+        validation_token: { type: string, description: "Serve this token at /.well-known/pingcast/<token>" }
+        status:           { type: string, enum: [pending, validated, active, failed] }
+        last_error:       { type: string, nullable: true }
+        dns_validated_at: { type: string, format: date-time, nullable: true }
+        cert_issued_at:   { type: string, format: date-time, nullable: true }
+        created_at:       { type: string, format: date-time }
 
     MonitorGroup:
       type: object

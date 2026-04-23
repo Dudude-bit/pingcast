@@ -28,7 +28,8 @@ type Server struct {
 	alerts            *app.AlertService
 	billing           *app.BillingService
 	atlassianImporter *app.AtlassianImporter
-	subscriptions    *app.SubscriptionService
+	subscriptions     *app.SubscriptionService
+	customDomains     *app.CustomDomainService
 	rl                *port.RateLimiters
 	apiKeys           port.APIKeyRepo
 	stats             port.StatsRepo
@@ -54,6 +55,7 @@ func NewServer(
 	billing *app.BillingService,
 	atlassianImporter *app.AtlassianImporter,
 	subscriptions *app.SubscriptionService,
+	customDomains *app.CustomDomainService,
 	rl *port.RateLimiters,
 	apiKeys port.APIKeyRepo,
 	stats port.StatsRepo,
@@ -65,6 +67,7 @@ func NewServer(
 		billing:           billing,
 		atlassianImporter: atlassianImporter,
 		subscriptions:     subscriptions,
+		customDomains:     customDomains,
 		rl:                rl,
 		apiKeys:           apiKeys,
 		stats:             stats,

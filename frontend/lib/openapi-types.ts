@@ -266,6 +266,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/custom-domains": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listCustomDomains"];
+        put?: never;
+        post: operations["requestCustomDomain"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/custom-domains/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteCustomDomain"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/monitor-groups": {
         parameters: {
             query?: never;
@@ -669,6 +701,22 @@ export interface components {
             incidents_created: number;
             updates_created: number;
             components_skipped: number;
+        };
+        CustomDomain: {
+            /** Format: int64 */
+            id: number;
+            hostname: string;
+            /** @description Serve this token at /.well-known/pingcast/<token> */
+            validation_token: string;
+            /** @enum {string} */
+            status: "pending" | "validated" | "active" | "failed";
+            last_error?: string | null;
+            /** Format: date-time */
+            dns_validated_at?: string | null;
+            /** Format: date-time */
+            cert_issued_at?: string | null;
+            /** Format: date-time */
+            created_at: string;
         };
         MonitorGroup: {
             /** Format: int64 */
@@ -1410,6 +1458,93 @@ export interface operations {
                 content?: never;
             };
             /** @description Pro subscription required */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listCustomDomains: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description User's custom domains (all statuses) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomDomain"][];
+                };
+            };
+        };
+    };
+    requestCustomDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    hostname: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Pending — set the CNAME + serve the .well-known probe */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomDomain"];
+                };
+            };
+            /** @description Pro required */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid hostname */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    deleteCustomDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Pro required */
             402: {
                 headers: {
                     [name: string]: unknown;
