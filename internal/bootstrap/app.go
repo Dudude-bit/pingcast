@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -167,6 +168,12 @@ func NewApp(deps AppDeps) (*App, error) {
 
 	customDomainRepo := postgres.NewCustomDomainRepo(queries)
 	customDomainsSvc := app.NewCustomDomainService(customDomainRepo, app.NoopCertProvisioner{}, deps.BaseURL)
+	// Warm the hostname→user lookup cache so the first custom-domain
+	// request doesn't pay a Postgres roundtrip. Bounded context so a
+	// slow DB at boot can't stall app startup.
+	preloadCtx, preloadCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	customDomainsSvc.PreloadHostnameCache(preloadCtx)
+	preloadCancel()
 
 	// Per-scope rate limiters (spec §5). Each bucket has its own prefix
 	// so they don't share keys, and its own max/window per scope. Tests

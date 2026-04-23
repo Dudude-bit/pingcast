@@ -70,6 +70,39 @@ func (q *Queries) DeleteMonitorGroup(ctx context.Context, arg DeleteMonitorGroup
 	return err
 }
 
+const listMonitorGroupMembershipsByUserID = `-- name: ListMonitorGroupMembershipsByUserID :many
+SELECT m.id, m.group_id
+FROM monitors m
+WHERE m.user_id = $1 AND m.deleted_at IS NULL AND m.group_id IS NOT NULL
+`
+
+type ListMonitorGroupMembershipsByUserIDRow struct {
+	ID      uuid.UUID   `json:"id"`
+	GroupID pgtype.Int8 `json:"group_id"`
+}
+
+// Used by the public status page to decide which group each monitor
+// renders under. Returns only monitors with non-null group_id.
+func (q *Queries) ListMonitorGroupMembershipsByUserID(ctx context.Context, userID uuid.UUID) ([]ListMonitorGroupMembershipsByUserIDRow, error) {
+	rows, err := q.db.Query(ctx, listMonitorGroupMembershipsByUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListMonitorGroupMembershipsByUserIDRow{}
+	for rows.Next() {
+		var i ListMonitorGroupMembershipsByUserIDRow
+		if err := rows.Scan(&i.ID, &i.GroupID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMonitorGroupsByUserID = `-- name: ListMonitorGroupsByUserID :many
 SELECT id, user_id, name, ordering, created_at
 FROM monitor_groups

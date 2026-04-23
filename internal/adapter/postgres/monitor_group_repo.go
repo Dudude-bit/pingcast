@@ -86,3 +86,17 @@ func (r *MonitorGroupRepo) AssignMonitor(ctx context.Context, monitorID, userID 
 		GroupID: gid,
 	})
 }
+
+func (r *MonitorGroupRepo) ListMemberships(ctx context.Context, userID uuid.UUID) (map[uuid.UUID]int64, error) {
+	rows, err := r.q.ListMonitorGroupMembershipsByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[uuid.UUID]int64, len(rows))
+	for _, row := range rows {
+		if row.GroupID.Valid {
+			out[row.ID] = row.GroupID.Int64
+		}
+	}
+	return out, nil
+}

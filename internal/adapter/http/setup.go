@@ -105,6 +105,7 @@ func authMiddlewareSelector(authService *app.AuthService, apiKeyRepo port.APIKey
 		if path == "/api/auth/register" || path == "/api/auth/login" ||
 			path == "/api/stats/public" ||
 			path == "/api/billing/founder-status" ||
+			path == "/api/public/lookup-domain" ||
 			(len(path) > 12 && path[:12] == "/api/status/") {
 			return c.Next()
 		}

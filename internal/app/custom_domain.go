@@ -105,7 +105,15 @@ func (s *CustomDomainService) LookupHostname(hostname string) (uuid.UUID, bool) 
 	return uid, ok
 }
 
-// RefreshHostnameCache reloads the in-process map from Postgres.
+// PreloadHostnameCache is called on app startup so the first request
+// hitting a custom domain doesn't pay a DB roundtrip. Exported because
+// bootstrap wires this explicitly; internal callers go through
+// refreshHostnameCache.
+func (s *CustomDomainService) PreloadHostnameCache(ctx context.Context) {
+	s.refreshHostnameCache(ctx)
+}
+
+// refreshHostnameCache reloads the in-process map from Postgres.
 // Called on startup + whenever a domain is activated or deleted.
 func (s *CustomDomainService) refreshHostnameCache(ctx context.Context) {
 	hosts, err := s.repo.ListActiveHostnames(ctx)

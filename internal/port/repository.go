@@ -160,6 +160,9 @@ type MonitorGroupRepo interface {
 	Update(ctx context.Context, id int64, userID uuid.UUID, name string, ordering int) error
 	Delete(ctx context.Context, id int64, userID uuid.UUID) error
 	AssignMonitor(ctx context.Context, monitorID, userID uuid.UUID, groupID *int64) error
+	// ListMemberships returns monitor_id → group_id for the user's
+	// monitors that have a group assigned. nil group_id is omitted.
+	ListMemberships(ctx context.Context, userID uuid.UUID) (map[uuid.UUID]int64, error)
 }
 
 type MaintenanceWindowRepo interface {

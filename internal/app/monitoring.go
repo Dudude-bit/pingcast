@@ -742,12 +742,17 @@ func (s *MonitoringService) GetMonitorDetail(ctx context.Context, monitorID uuid
 }
 
 type StatusMonitor struct {
+	ID            uuid.UUID
 	Name          string
 	CurrentStatus domain.MonitorStatus
 	Uptime90d     float64
 	// GroupID, if set, pairs with StatusPageData.Groups for UI grouping.
 	// nil → renders in the ungrouped default section.
 	GroupID *int64
+	// InMaintenance is true when an active maintenance_windows row
+	// exists for this monitor. UI renders "scheduled maintenance"
+	// instead of the raw status.
+	InMaintenance bool
 }
 
 type StatusPageData struct {
@@ -778,18 +783,52 @@ func (s *MonitoringService) GetStatusPage(ctx context.Context, slug string) (*St
 	statusMons := make([]StatusMonitor, 0, len(monitors))
 	var incidents []domain.Incident
 
+	// Pre-fetch group memberships once. Nil on error so the loop falls
+	// back to "everything ungrouped" rather than failing the page.
+	groupMemberships, gmErr := s.groups.ListMemberships(ctx, user.ID)
+	if gmErr != nil {
+		slog.Error("failed to load group memberships for status page", "user_id", user.ID, "error", gmErr)
+		groupMemberships = nil
+	}
+
 	for _, m := range monitors {
 		uptime, err := s.uptime.GetUptime(ctx, m.ID, s.clock.Now().Add(-90*24*time.Hour))
 		if err != nil {
 			slog.Error("failed to get 90d uptime", "monitor_id", m.ID, "error", err)
 		}
-		if m.CurrentStatus != domain.StatusUp {
+
+		// Maintenance-window check. N+1 is acceptable — a status page
+		// has ≤50 monitors in practice, and the result isn't cacheable
+		// across requests (windows tick with wall-clock).
+		inMaintenance := false
+		if s.maintenance != nil {
+			if active, mErr := s.maintenance.HasActive(ctx, m.ID); mErr != nil {
+				slog.Error("maintenance probe failed", "monitor_id", m.ID, "error", mErr)
+			} else {
+				inMaintenance = active
+			}
+		}
+
+		// Maintenance suppresses the all_up roll-up — otherwise a
+		// scheduled window would flip the page banner red.
+		if m.CurrentStatus != domain.StatusUp && !inMaintenance {
 			allUp = false
 		}
+
+		var gid *int64
+		if groupMemberships != nil {
+			if id, ok := groupMemberships[m.ID]; ok {
+				gid = &id
+			}
+		}
+
 		statusMons = append(statusMons, StatusMonitor{
+			ID:            m.ID,
 			Name:          m.Name,
 			CurrentStatus: m.CurrentStatus,
 			Uptime90d:     uptime,
+			GroupID:       gid,
+			InMaintenance: inMaintenance,
 		})
 
 		monIncidents, err := s.incidents.ListByMonitorID(ctx, m.ID, 5)

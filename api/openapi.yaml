@@ -765,6 +765,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/FounderStatus"
 
+  /api/public/lookup-domain:
+    get:
+      operationId: lookupCustomDomain
+      tags: [domains]
+      description: |
+        Given a hostname, returns the status-page slug it resolves to.
+        Consumed by the Next.js middleware to route custom-domain
+        requests. Public, cached 5 min. 404 if the hostname isn't an
+        active custom domain.
+      parameters:
+        - name: hostname
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Mapped slug
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [slug]
+                properties:
+                  slug: { type: string }
+        "404":
+          description: Hostname not registered or not active
+
   /api/stats/public:
     get:
       operationId: getPublicStats
@@ -1353,6 +1380,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/StatusMonitor"
+        groups:
+          type: array
+          description: "User-defined monitor groups. StatusMonitor.group_id keys into MonitorGroup.id."
+          items:
+            $ref: "#/components/schemas/MonitorGroup"
         incidents:
           type: array
           items:
@@ -1361,12 +1393,23 @@ components:
     StatusMonitor:
       type: object
       properties:
+        id:
+          type: string
+          format: uuid
         name:
           type: string
         current_status:
           type: string
         uptime_90d:
           type: number
+        group_id:
+          type: integer
+          format: int64
+          nullable: true
+          description: "When set, maps to a MonitorGroup.id in StatusPageResponse.groups. null → ungrouped section."
+        in_maintenance:
+          type: boolean
+          description: "True when an active maintenance window covers this monitor. Frontend should render 'Scheduled maintenance' instead of the raw current_status."
 
     HealthResponse:
       type: object

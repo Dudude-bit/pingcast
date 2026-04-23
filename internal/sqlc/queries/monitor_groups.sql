@@ -17,6 +17,13 @@ WHERE id = $1 AND user_id = $2;
 -- name: DeleteMonitorGroup :exec
 DELETE FROM monitor_groups WHERE id = $1 AND user_id = $2;
 
+-- name: ListMonitorGroupMembershipsByUserID :many
+-- Used by the public status page to decide which group each monitor
+-- renders under. Returns only monitors with non-null group_id.
+SELECT m.id, m.group_id
+FROM monitors m
+WHERE m.user_id = $1 AND m.deleted_at IS NULL AND m.group_id IS NOT NULL;
+
 -- name: AssignMonitorToGroup :exec
 -- Sets monitor.group_id. Pass NULL to unassign. WHERE user_id check
 -- prevents cross-tenant assignment.

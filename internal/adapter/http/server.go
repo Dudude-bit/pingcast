@@ -377,16 +377,36 @@ func (s *Server) GetStatusPage(c *fiber.Ctx, slug string) error {
 	for _, m := range data.Monitors {
 		uptimeF := float32(m.Uptime90d)
 		status := string(m.CurrentStatus)
-		statusMonitors = append(statusMonitors, apigen.StatusMonitor{
+		id := openapi_types.UUID(m.ID)
+		inMaint := m.InMaintenance
+		sm := apigen.StatusMonitor{
+			Id:            &id,
 			Name:          &m.Name,
 			CurrentStatus: &status,
 			Uptime90d:     &uptimeF,
-		})
+			InMaintenance: &inMaint,
+		}
+		if m.GroupID != nil {
+			gid := *m.GroupID
+			sm.GroupId = &gid
+		}
+		statusMonitors = append(statusMonitors, sm)
 	}
 
 	apiIncidents := make([]apigen.Incident, 0, len(data.Incidents))
 	for _, inc := range data.Incidents {
 		apiIncidents = append(apiIncidents, domainIncidentToAPI(&inc))
+	}
+
+	apiGroups := make([]apigen.MonitorGroup, 0, len(data.Groups))
+	for _, g := range data.Groups {
+		ordering := int(g.Ordering)
+		apiGroups = append(apiGroups, apigen.MonitorGroup{
+			Id:        g.ID,
+			Name:      g.Name,
+			Ordering:  ordering,
+			CreatedAt: g.CreatedAt,
+		})
 	}
 
 	return c.JSON(apigen.StatusPageResponse{
@@ -399,6 +419,7 @@ func (s *Server) GetStatusPage(c *fiber.Ctx, slug string) error {
 			CustomFooterText: data.Branding.CustomFooterText,
 		},
 		Monitors:  &statusMonitors,
+		Groups:    &apiGroups,
 		Incidents: &apiIncidents,
 	})
 }

@@ -78,6 +78,38 @@ export default async function StatusPageRoute({
   const allUp = data.all_up ?? true;
   const monitors = data.monitors ?? [];
   const incidents: Incident[] = data.incidents ?? [];
+  const groups = data.groups ?? [];
+
+  // Bucket monitors by group_id. Ungrouped rows go into a special
+  // sentinel key so the renderer can show them under an unnamed
+  // "Other services" heading (or as the only section if no groups).
+  const UNGROUPED = "__ungrouped__";
+  const byGroup = new Map<string, typeof monitors>();
+  for (const m of monitors) {
+    const key =
+      typeof m.group_id === "number" ? String(m.group_id) : UNGROUPED;
+    const bucket = byGroup.get(key) ?? [];
+    bucket.push(m);
+    byGroup.set(key, bucket);
+  }
+
+  // Ordered list of sections: user-defined groups first (ordered by
+  // their `ordering` field), then ungrouped if any.
+  const sections: { key: string; title: string | null; items: typeof monitors }[] = [];
+  for (const g of [...groups].sort((a, b) => a.ordering - b.ordering)) {
+    const items = byGroup.get(String(g.id));
+    if (items && items.length > 0) {
+      sections.push({ key: String(g.id), title: g.name, items });
+    }
+  }
+  const ungrouped = byGroup.get(UNGROUPED);
+  if (ungrouped && ungrouped.length > 0) {
+    sections.push({
+      key: UNGROUPED,
+      title: sections.length > 0 ? "Other services" : null,
+      items: ungrouped,
+    });
+  }
 
   // Fetch timelines for every incident in parallel. Auto-detected
   // incidents will have zero updates → IncidentTimeline renders
@@ -139,43 +171,68 @@ export default async function StatusPageRoute({
             <p className="text-sm text-muted-foreground">
               No public services configured.
             </p>
-          ) : (
-            <ul className="divide-y divide-border/60 rounded-lg border border-border/60 bg-card">
-              {monitors.map((m, i) => {
-                const status = m.current_status ?? "unknown";
-                const uptime = m.uptime_90d ?? 0;
-                return (
-                  <li key={i} className="flex items-center justify-between p-4">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span
-                        className={`inline-block h-2.5 w-2.5 rounded-full shrink-0 ${
-                          status === "up"
-                            ? "bg-emerald-500"
-                            : status === "down"
-                              ? "bg-red-500"
-                              : "bg-zinc-400"
-                        }`}
-                      />
-                      <span className="font-medium truncate">{m.name}</span>
-                    </div>
-                    <div className="flex items-center gap-4 shrink-0">
-                      <span
-                        className={`text-sm font-semibold tabular-nums ${uptimeColor(uptime)}`}
-                      >
-                        {uptime.toFixed(2)}%
-                      </span>
-                      <span className="text-xs uppercase tracking-wider text-muted-foreground capitalize w-20 text-right">
-                        {status === "up"
-                          ? "Operational"
-                          : status === "down"
-                            ? "Down"
-                            : status}
-                      </span>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+          ) : sections.length === 0 ? null : (
+            <div className="space-y-6">
+              {sections.map((section) => (
+                <div key={section.key}>
+                  {section.title ? (
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 px-1">
+                      {section.title}
+                    </h3>
+                  ) : null}
+                  <ul className="divide-y divide-border/60 rounded-lg border border-border/60 bg-card">
+                    {section.items.map((m, i) => {
+                      const status = m.current_status ?? "unknown";
+                      const uptime = m.uptime_90d ?? 0;
+                      const inMaintenance = Boolean(m.in_maintenance);
+                      return (
+                        <li
+                          key={`${section.key}-${i}`}
+                          className="flex items-center justify-between p-4"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span
+                              className={`inline-block h-2.5 w-2.5 rounded-full shrink-0 ${
+                                inMaintenance
+                                  ? "bg-blue-500"
+                                  : status === "up"
+                                    ? "bg-emerald-500"
+                                    : status === "down"
+                                      ? "bg-red-500"
+                                      : "bg-zinc-400"
+                              }`}
+                            />
+                            <span className="font-medium truncate">{m.name}</span>
+                          </div>
+                          <div className="flex items-center gap-4 shrink-0">
+                            {inMaintenance ? (
+                              <span className="text-xs uppercase tracking-wider text-blue-700 dark:text-blue-300 text-right">
+                                Scheduled maintenance
+                              </span>
+                            ) : (
+                              <>
+                                <span
+                                  className={`text-sm font-semibold tabular-nums ${uptimeColor(uptime)}`}
+                                >
+                                  {uptime.toFixed(2)}%
+                                </span>
+                                <span className="text-xs uppercase tracking-wider text-muted-foreground capitalize w-20 text-right">
+                                  {status === "up"
+                                    ? "Operational"
+                                    : status === "down"
+                                      ? "Down"
+                                      : status}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ))}
+            </div>
           )}
         </section>
 
@@ -226,7 +283,14 @@ export default async function StatusPageRoute({
         ) : null}
 
         <section className="mt-8 mb-10">
-          <StatusSubscribeForm slug={data.slug ?? slug} />
+          <StatusSubscribeForm
+            slug={data.slug ?? slug}
+            accentStyle={
+              accent
+                ? { backgroundColor: accent, borderColor: accent }
+                : undefined
+            }
+          />
         </section>
 
         {branding?.custom_footer_text ? (

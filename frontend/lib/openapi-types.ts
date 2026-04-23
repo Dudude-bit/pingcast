@@ -432,6 +432,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/public/lookup-domain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Given a hostname, returns the status-page slug it resolves to.
+         *     Consumed by the Next.js middleware to route custom-domain
+         *     requests. Public, cached 5 min. 404 if the hostname isn't an
+         *     active custom domain.
+         */
+        get: operations["lookupCustomDomain"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/stats/public": {
         parameters: {
             query?: never;
@@ -809,12 +831,23 @@ export interface components {
             show_branding?: boolean;
             branding?: components["schemas"]["Branding"];
             monitors?: components["schemas"]["StatusMonitor"][];
+            /** @description User-defined monitor groups. StatusMonitor.group_id keys into MonitorGroup.id. */
+            groups?: components["schemas"]["MonitorGroup"][];
             incidents?: components["schemas"]["Incident"][];
         };
         StatusMonitor: {
+            /** Format: uuid */
+            id?: string;
             name?: string;
             current_status?: string;
             uptime_90d?: number;
+            /**
+             * Format: int64
+             * @description When set, maps to a MonitorGroup.id in StatusPageResponse.groups. null → ungrouped section.
+             */
+            group_id?: number | null;
+            /** @description True when an active maintenance window covers this monitor. Frontend should render 'Scheduled maintenance' instead of the raw current_status. */
+            in_maintenance?: boolean;
         };
         HealthResponse: {
             status?: string;
@@ -1884,6 +1917,37 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["FounderStatus"];
                 };
+            };
+        };
+    };
+    lookupCustomDomain: {
+        parameters: {
+            query: {
+                hostname: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Mapped slug */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        slug: string;
+                    };
+                };
+            };
+            /** @description Hostname not registered or not active */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

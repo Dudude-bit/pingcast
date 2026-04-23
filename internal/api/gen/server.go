@@ -534,15 +534,25 @@ type ScheduleMaintenanceWindowRequest struct {
 
 // StatusMonitor defines model for StatusMonitor.
 type StatusMonitor struct {
-	CurrentStatus *string  `json:"current_status,omitempty"`
+	CurrentStatus *string `json:"current_status,omitempty"`
+
+	// GroupId When set, maps to a MonitorGroup.id in StatusPageResponse.groups. null → ungrouped section.
+	GroupId *int64              `json:"group_id,omitempty"`
+	Id      *openapi_types.UUID `json:"id,omitempty"`
+
+	// InMaintenance True when an active maintenance window covers this monitor. Frontend should render 'Scheduled maintenance' instead of the raw current_status.
+	InMaintenance *bool    `json:"in_maintenance,omitempty"`
 	Name          *string  `json:"name,omitempty"`
 	Uptime90d     *float32 `json:"uptime_90d,omitempty"`
 }
 
 // StatusPageResponse defines model for StatusPageResponse.
 type StatusPageResponse struct {
-	AllUp     *bool            `json:"all_up,omitempty"`
-	Branding  *Branding        `json:"branding,omitempty"`
+	AllUp    *bool     `json:"all_up,omitempty"`
+	Branding *Branding `json:"branding,omitempty"`
+
+	// Groups User-defined monitor groups. StatusMonitor.group_id keys into MonitorGroup.id.
+	Groups    *[]MonitorGroup  `json:"groups,omitempty"`
 	Incidents *[]Incident      `json:"incidents,omitempty"`
 	Monitors  *[]StatusMonitor `json:"monitors,omitempty"`
 
@@ -608,6 +618,11 @@ type ImportAtlassianJSONBody map[string]interface{}
 // BindChannelJSONBody defines parameters for BindChannel.
 type BindChannelJSONBody struct {
 	ChannelId openapi_types.UUID `json:"channel_id"`
+}
+
+// LookupCustomDomainParams defines parameters for LookupCustomDomain.
+type LookupCustomDomainParams struct {
+	Hostname string `form:"hostname" json:"hostname"`
 }
 
 // ConfirmStatusSubscriptionParams defines parameters for ConfirmStatusSubscription.
@@ -801,6 +816,9 @@ type ServerInterface interface {
 
 	// (POST /api/monitors/{id}/pause)
 	ToggleMonitorPause(c *fiber.Ctx, id openapi_types.UUID) error
+
+	// (GET /api/public/lookup-domain)
+	LookupCustomDomain(c *fiber.Ctx, params LookupCustomDomainParams) error
 
 	// (GET /api/stats/public)
 	GetPublicStats(c *fiber.Ctx) error
@@ -1354,6 +1372,38 @@ func (siw *ServerInterfaceWrapper) ToggleMonitorPause(c *fiber.Ctx) error {
 	return siw.Handler.ToggleMonitorPause(c, id)
 }
 
+// LookupCustomDomain operation middleware
+func (siw *ServerInterfaceWrapper) LookupCustomDomain(c *fiber.Ctx) error {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params LookupCustomDomainParams
+
+	var query url.Values
+	query, err = url.ParseQuery(string(c.Request().URI().QueryString()))
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for query string: %w", err).Error())
+	}
+
+	// ------------- Required query parameter "hostname" -------------
+
+	if paramValue := c.Query("hostname"); paramValue != "" {
+
+	} else {
+		err = fmt.Errorf("Query argument hostname is required, but not found")
+		c.Status(fiber.StatusBadRequest).JSON(err)
+		return err
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "hostname", query, &params.Hostname, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter hostname: %w", err).Error())
+	}
+
+	return siw.Handler.LookupCustomDomain(c, params)
+}
+
 // GetPublicStats operation middleware
 func (siw *ServerInterfaceWrapper) GetPublicStats(c *fiber.Ctx) error {
 
@@ -1578,6 +1628,8 @@ func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, option
 	router.Put(options.BaseURL+"/api/monitors/:id/group", wrapper.AssignMonitorToGroup)
 
 	router.Post(options.BaseURL+"/api/monitors/:id/pause", wrapper.ToggleMonitorPause)
+
+	router.Get(options.BaseURL+"/api/public/lookup-domain", wrapper.LookupCustomDomain)
 
 	router.Get(options.BaseURL+"/api/stats/public", wrapper.GetPublicStats)
 
