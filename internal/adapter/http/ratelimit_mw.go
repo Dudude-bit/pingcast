@@ -45,3 +45,9 @@ func userKey(c *fiber.Ctx) string {
 func ipSlugKey(c *fiber.Ctx) string {
 	return c.IP() + "|" + c.Params("slug")
 }
+
+// ipKey buckets purely on IP. For endpoints without a per-path
+// sub-identity (newsletter subscribe, global public lookups).
+func ipKey(c *fiber.Ctx) string {
+	return c.IP()
+}

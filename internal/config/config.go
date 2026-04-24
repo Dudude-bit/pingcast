@@ -38,6 +38,14 @@ type APIConfig struct {
 	// subscriptions as 'founder'.
 	FounderCap                int    `env:"FOUNDER_CAP"                 envDefault:"100"`
 	BaseURL                   string `env:"BASE_URL"                    envDefault:"http://localhost:8080"`
+	// CertProvider selects the CertProvisioner adapter for custom
+	// domains. "lego" enables real ACME issuance via Let's Encrypt;
+	// anything else (default) keeps NoopCertProvisioner. Opt-in because
+	// a misconfigured ACME account shouldn't take down the API on boot.
+	CertProvider     string `env:"CERT_PROVIDER"            envDefault:"noop"`
+	CertACMEEmail    string `env:"CERT_ACME_EMAIL"`
+	CertACMEDirURL   string `env:"CERT_ACME_DIR_URL"`
+	CertACMEHTTPPort string `env:"CERT_ACME_HTTP_PORT"      envDefault:"5002"`
 	EncryptionConfig
 }
 

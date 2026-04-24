@@ -23,6 +23,7 @@ var truncateTables = []string{
 	"monitor_uptime_hourly",
 	"maintenance_windows",
 	"status_subscribers",
+	"blog_subscribers",
 	"custom_domains",
 	"monitors",
 	"monitor_groups",

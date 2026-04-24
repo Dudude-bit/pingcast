@@ -79,11 +79,13 @@ func setupTestApp(t *testing.T) *testEnv {
 	billingService := app.NewBillingService(userRepo, 100)
 	atlassianImporter := app.NewAtlassianImporter(monitorRepo, incidentRepo, incidentUpdateRepo, txManager, sysclock.New())
 	statusSubRepo := mocks.NewMockStatusSubscriberRepo(t)
+	blogSubRepo := mocks.NewMockBlogSubscriberRepo(t)
 	mailerStub := smtpadapter.NewMailer("", 0, "", "", "")
 	subscriptionsService := app.NewSubscriptionService(statusSubRepo, mailerStub, "http://test")
+	blogSubscriptionsService := app.NewBlogSubscriptionService(blogSubRepo, mailerStub, "http://test")
 	customDomainRepo := mocks.NewMockCustomDomainRepo(t)
 	customDomainsService := app.NewCustomDomainService(customDomainRepo, app.NoopCertProvisioner{}, "http://test")
-	server := NewServer(authService, monitoringService, alertService, billingService, atlassianImporter, subscriptionsService, customDomainsService, rls, apiKeyRepo, statsRepo)
+	server := NewServer(authService, monitoringService, alertService, billingService, atlassianImporter, subscriptionsService, blogSubscriptionsService, customDomainsService, rls, apiKeyRepo, statsRepo)
 	webhookHandler := NewWebhookHandler(authService, alertService, billingService, "test-secret", "")
 
 	healthChecker := &HealthChecker{}

@@ -106,6 +106,7 @@ func authMiddlewareSelector(authService *app.AuthService, apiKeyRepo port.APIKey
 			path == "/api/stats/public" ||
 			path == "/api/billing/founder-status" ||
 			path == "/api/public/lookup-domain" ||
+			strings.HasPrefix(path, "/api/newsletter/") ||
 			(len(path) > 12 && path[:12] == "/api/status/") {
 			return c.Next()
 		}
@@ -197,6 +198,12 @@ func apiRateLimitSelector(rls *port.RateLimiters) apigen.MiddlewareFunc {
 			// botnet from hammering it while the in-process 5-min
 			// memo absorbs normal load.
 			return rateLimitMW(rls.Status, ipSlugKey, 1)(c)
+		}
+		if strings.HasPrefix(path, "/api/newsletter/") {
+			// Newsletter subscribe is public + writes to DB + sends
+			// email — same abuse profile as /api/status/{slug}/subscribe.
+			// IP-keyed so someone can't burn our SMTP budget.
+			return rateLimitMW(rls.Status, ipKey, 1)(c)
 		}
 
 		method := c.Method()

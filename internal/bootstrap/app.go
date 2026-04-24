@@ -2,6 +2,8 @@ package bootstrap
 
 import (
 	"context"
+	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -10,6 +12,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	goredis "github.com/redis/go-redis/v9"
 
+	acmeadapter "github.com/kirillinakin/pingcast/internal/adapter/acme"
 	"github.com/kirillinakin/pingcast/internal/adapter/channel"
 	"github.com/kirillinakin/pingcast/internal/adapter/checker"
 	httpadapter "github.com/kirillinakin/pingcast/internal/adapter/http"
@@ -27,6 +30,24 @@ import (
 	"github.com/kirillinakin/pingcast/internal/port"
 	sqlcgen "github.com/kirillinakin/pingcast/internal/sqlc/gen"
 )
+
+// buildCertProvisioner picks the CertProvisioner implementation based
+// on AppDeps.CertProvider. "lego" wires the real ACME adapter; anything
+// else (including the empty default) returns the noop. Errors are
+// returned to the caller so it can decide whether to fall back or
+// abort startup.
+func buildCertProvisioner(deps AppDeps, store port.CustomDomainCertRepo, repo port.CustomDomainRepo) (app.CertProvisioner, error) {
+	switch strings.ToLower(strings.TrimSpace(deps.CertProvider)) {
+	case "lego":
+		return acmeadapter.New(acmeadapter.Config{
+			Email:      deps.CertACMEEmail,
+			CADirURL:   deps.CertACMEDirURL,
+			HTTP01Port: deps.CertACMEHTTPPort,
+		}, store, repo)
+	default:
+		return app.NoopCertProvisioner{}, nil
+	}
+}
 
 // AppDeps bundles every infrastructure handle the API app needs. The
 // caller (main or integration harness) owns the lifecycle of these
@@ -61,6 +82,15 @@ type AppDeps struct {
 	// all scopes (used by integration tests to run burst scenarios in
 	// seconds). Nil → production defaults from port.RateLimitDefaults.
 	RateLimits *port.RateLimitConfig
+
+	// CertProvider selects the CertProvisioner adapter for custom
+	// domains. Empty / "noop" / "" → NoopCertProvisioner (logs only).
+	// "lego" → real ACME via go-acme/lego (requires the infra plumbing
+	// described in adapter/acme/lego_provisioner.go).
+	CertProvider     string
+	CertACMEEmail    string // required when CertProvider="lego"
+	CertACMEDirURL   string // optional override (defaults to LE prod)
+	CertACMEHTTPPort string // optional override (defaults to "5002")
 
 	// Optional overrides. If nil, defaults are used.
 	Metrics *observability.Metrics
@@ -166,11 +196,24 @@ func NewApp(deps AppDeps) (*App, error) {
 	billingSvc := app.NewBillingService(userRepo, founderCap)
 	atlassianImporter := app.NewAtlassianImporter(monitorRepo, incidentRepo, incidentUpdateRepo, txm, clock)
 	statusSubRepo := postgres.NewStatusSubscriberRepo(queries)
+	blogSubRepo := postgres.NewBlogSubscriberRepo(queries)
 	mailer := smtpadapter.NewMailer(deps.SMTPHost, deps.SMTPPort, deps.SMTPUser, deps.SMTPPass, deps.SMTPFrom)
 	subscriptionsSvc := app.NewSubscriptionService(statusSubRepo, mailer, deps.BaseURL)
+	blogSubscriptionsSvc := app.NewBlogSubscriptionService(blogSubRepo, mailer, deps.BaseURL)
 
 	customDomainRepo := postgres.NewCustomDomainRepo(queries)
-	customDomainsSvc := app.NewCustomDomainService(customDomainRepo, app.NoopCertProvisioner{}, deps.BaseURL)
+	customDomainCertRepo := postgres.NewCustomDomainCertRepo(queries)
+
+	certProvisioner, certErr := buildCertProvisioner(deps, customDomainCertRepo, customDomainRepo)
+	if certErr != nil {
+		// Fall back to noop on registration errors so a misconfigured
+		// ACME account doesn't take down the whole API. The error is
+		// loud — operators see it on every boot until fixed.
+		slog.Error("acme provisioner setup failed — falling back to noop",
+			"provider", deps.CertProvider, "error", certErr)
+		certProvisioner = app.NoopCertProvisioner{}
+	}
+	customDomainsSvc := app.NewCustomDomainService(customDomainRepo, certProvisioner, deps.BaseURL)
 	// Warm the hostname→user lookup cache so the first custom-domain
 	// request doesn't pay a Postgres roundtrip. Bounded context so a
 	// slow DB at boot can't stall app startup.
@@ -184,7 +227,7 @@ func NewApp(deps AppDeps) (*App, error) {
 	rls := buildRateLimiters(deps.Redis, deps.RateLimits)
 
 	// HTTP handlers
-	server := httpadapter.NewServer(authSvc, monitoringSvc, alertSvc, billingSvc, atlassianImporter, subscriptionsSvc, customDomainsSvc, rls, apiKeyRepo, statsRepo)
+	server := httpadapter.NewServer(authSvc, monitoringSvc, alertSvc, billingSvc, atlassianImporter, subscriptionsSvc, blogSubscriptionsSvc, customDomainsSvc, rls, apiKeyRepo, statsRepo)
 	webhookHandler := httpadapter.NewWebhookHandler(
 		authSvc, alertSvc, billingSvc, deps.LemonSqueezySecret,
 		deps.LemonSqueezyFounderVariantID,

@@ -109,6 +109,10 @@ func main() {
 		SMTPPass:                     cfg.SMTPPass,
 		SMTPFrom:                     cfg.SMTPFrom,
 		BaseURL:                      cfg.BaseURL,
+		CertProvider:                 cfg.CertProvider,
+		CertACMEEmail:                cfg.CertACMEEmail,
+		CertACMEDirURL:               cfg.CertACMEDirURL,
+		CertACMEHTTPPort:             cfg.CertACMEHTTPPort,
 	})
 	if err != nil {
 		slog.Error("failed to compose app", "error", err)

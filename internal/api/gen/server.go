@@ -620,6 +620,24 @@ type BindChannelJSONBody struct {
 	ChannelId openapi_types.UUID `json:"channel_id"`
 }
 
+// ConfirmNewsletterSubscriptionParams defines parameters for ConfirmNewsletterSubscription.
+type ConfirmNewsletterSubscriptionParams struct {
+	Token string `form:"token" json:"token"`
+}
+
+// SubscribeToNewsletterJSONBody defines parameters for SubscribeToNewsletter.
+type SubscribeToNewsletterJSONBody struct {
+	Email openapi_types.Email `json:"email"`
+
+	// Source Optional tag for where the signup happened: footer, blog_sidebar, post_cta:<slug>
+	Source *string `json:"source,omitempty"`
+}
+
+// UnsubscribeFromNewsletterParams defines parameters for UnsubscribeFromNewsletter.
+type UnsubscribeFromNewsletterParams struct {
+	Token string `form:"token" json:"token"`
+}
+
 // LookupCustomDomainParams defines parameters for LookupCustomDomain.
 type LookupCustomDomainParams struct {
 	Hostname string `form:"hostname" json:"hostname"`
@@ -690,6 +708,9 @@ type BindChannelJSONRequestBody BindChannelJSONBody
 
 // AssignMonitorToGroupJSONRequestBody defines body for AssignMonitorToGroup for application/json ContentType.
 type AssignMonitorToGroupJSONRequestBody = AssignMonitorGroupRequest
+
+// SubscribeToNewsletterJSONRequestBody defines body for SubscribeToNewsletter for application/json ContentType.
+type SubscribeToNewsletterJSONRequestBody SubscribeToNewsletterJSONBody
 
 // SubscribeToStatusPageJSONRequestBody defines body for SubscribeToStatusPage for application/json ContentType.
 type SubscribeToStatusPageJSONRequestBody SubscribeToStatusPageJSONBody
@@ -816,6 +837,15 @@ type ServerInterface interface {
 
 	// (POST /api/monitors/{id}/pause)
 	ToggleMonitorPause(c *fiber.Ctx, id openapi_types.UUID) error
+
+	// (GET /api/newsletter/confirm)
+	ConfirmNewsletterSubscription(c *fiber.Ctx, params ConfirmNewsletterSubscriptionParams) error
+
+	// (POST /api/newsletter/subscribe)
+	SubscribeToNewsletter(c *fiber.Ctx) error
+
+	// (GET /api/newsletter/unsubscribe)
+	UnsubscribeFromNewsletter(c *fiber.Ctx, params UnsubscribeFromNewsletterParams) error
 
 	// (GET /api/public/lookup-domain)
 	LookupCustomDomain(c *fiber.Ctx, params LookupCustomDomainParams) error
@@ -1372,6 +1402,76 @@ func (siw *ServerInterfaceWrapper) ToggleMonitorPause(c *fiber.Ctx) error {
 	return siw.Handler.ToggleMonitorPause(c, id)
 }
 
+// ConfirmNewsletterSubscription operation middleware
+func (siw *ServerInterfaceWrapper) ConfirmNewsletterSubscription(c *fiber.Ctx) error {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ConfirmNewsletterSubscriptionParams
+
+	var query url.Values
+	query, err = url.ParseQuery(string(c.Request().URI().QueryString()))
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for query string: %w", err).Error())
+	}
+
+	// ------------- Required query parameter "token" -------------
+
+	if paramValue := c.Query("token"); paramValue != "" {
+
+	} else {
+		err = fmt.Errorf("Query argument token is required, but not found")
+		c.Status(fiber.StatusBadRequest).JSON(err)
+		return err
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "token", query, &params.Token, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter token: %w", err).Error())
+	}
+
+	return siw.Handler.ConfirmNewsletterSubscription(c, params)
+}
+
+// SubscribeToNewsletter operation middleware
+func (siw *ServerInterfaceWrapper) SubscribeToNewsletter(c *fiber.Ctx) error {
+
+	return siw.Handler.SubscribeToNewsletter(c)
+}
+
+// UnsubscribeFromNewsletter operation middleware
+func (siw *ServerInterfaceWrapper) UnsubscribeFromNewsletter(c *fiber.Ctx) error {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UnsubscribeFromNewsletterParams
+
+	var query url.Values
+	query, err = url.ParseQuery(string(c.Request().URI().QueryString()))
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for query string: %w", err).Error())
+	}
+
+	// ------------- Required query parameter "token" -------------
+
+	if paramValue := c.Query("token"); paramValue != "" {
+
+	} else {
+		err = fmt.Errorf("Query argument token is required, but not found")
+		c.Status(fiber.StatusBadRequest).JSON(err)
+		return err
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "token", query, &params.Token, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter token: %w", err).Error())
+	}
+
+	return siw.Handler.UnsubscribeFromNewsletter(c, params)
+}
+
 // LookupCustomDomain operation middleware
 func (siw *ServerInterfaceWrapper) LookupCustomDomain(c *fiber.Ctx) error {
 
@@ -1628,6 +1728,12 @@ func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, option
 	router.Put(options.BaseURL+"/api/monitors/:id/group", wrapper.AssignMonitorToGroup)
 
 	router.Post(options.BaseURL+"/api/monitors/:id/pause", wrapper.ToggleMonitorPause)
+
+	router.Get(options.BaseURL+"/api/newsletter/confirm", wrapper.ConfirmNewsletterSubscription)
+
+	router.Post(options.BaseURL+"/api/newsletter/subscribe", wrapper.SubscribeToNewsletter)
+
+	router.Get(options.BaseURL+"/api/newsletter/unsubscribe", wrapper.UnsubscribeFromNewsletter)
 
 	router.Get(options.BaseURL+"/api/public/lookup-domain", wrapper.LookupCustomDomain)
 

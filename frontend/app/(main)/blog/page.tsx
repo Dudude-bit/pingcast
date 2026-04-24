@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { POSTS } from "@/content/blog";
 import { BreadcrumbListJsonLd } from "@/components/seo/jsonld";
+import { NewsletterForm } from "@/components/features/common/newsletter-form";
 
 export const metadata: Metadata = {
   title: "Blog",
@@ -24,6 +25,17 @@ export default function BlogIndexPage() {
         Notes on building PingCast. Shipped in public, so the pivots, the
         pricing experiments, and the occasional 3-AM incident are all here.
       </p>
+
+      <div className="mt-8 rounded-lg border border-border/60 bg-card p-5">
+        <h2 className="text-sm font-semibold mb-1">Subscribe — 1-2 a month</h2>
+        <p className="text-sm text-muted-foreground mb-3">
+          New posts + honest build-in-public updates from a solo dev. No
+          marketing, no pitch decks, just what worked and what didn&apos;t.
+        </p>
+        <div className="max-w-md">
+          <NewsletterForm source="blog_index" />
+        </div>
+      </div>
 
       <ul className="mt-12 space-y-8">
         {POSTS.map((p) => (

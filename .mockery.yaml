@@ -33,6 +33,7 @@ packages:
       SessionRepo: {}
       StatsRepo: {}
       StatusSubscriberRepo: {}
+      BlogSubscriberRepo: {}
       TxManager: {}
       UptimeRepo: {}
       UserRepo: {}

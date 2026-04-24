@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { NewsletterForm } from "@/components/features/common/newsletter-form";
 
 // Five-column footer replaces the one-line stub. Every SEO landing and
 // alternatives page links from here — the footer is where half the
@@ -59,6 +60,18 @@ export function Footer() {
   return (
     <footer className="border-t border-border/40 bg-muted/20 mt-20">
       <div className="container mx-auto px-4 py-12">
+        <div className="mb-10 rounded-lg border border-border/60 bg-card p-5 md:p-6">
+          <h3 className="text-sm font-semibold mb-1">
+            Get 1-2 emails a month from a solo dev
+          </h3>
+          <p className="text-sm text-muted-foreground mb-3">
+            New blog posts on status pages + indie SaaS, product updates,
+            occasional honest lessons from shipping. No marketing fluff.
+          </p>
+          <div className="max-w-md">
+            <NewsletterForm source="footer" />
+          </div>
+        </div>
         <div className="grid grid-cols-2 gap-8 md:grid-cols-5">
           {COLUMNS.map((col) => (
             <div key={col.heading}>

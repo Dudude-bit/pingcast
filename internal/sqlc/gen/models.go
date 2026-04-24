@@ -112,6 +112,16 @@ type ApiKey struct {
 	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
 }
 
+type BlogSubscriber struct {
+	ID               int64              `json:"id"`
+	Email            string             `json:"email"`
+	ConfirmToken     string             `json:"confirm_token"`
+	UnsubscribeToken string             `json:"unsubscribe_token"`
+	ConfirmedAt      pgtype.Timestamptz `json:"confirmed_at"`
+	CreatedAt        time.Time          `json:"created_at"`
+	Source           *string            `json:"source"`
+}
+
 type CheckResult struct {
 	ID             int64       `json:"id"`
 	MonitorID      uuid.UUID   `json:"monitor_id"`
@@ -142,6 +152,16 @@ type CustomDomain struct {
 	DnsValidatedAt  pgtype.Timestamptz `json:"dns_validated_at"`
 	CertIssuedAt    pgtype.Timestamptz `json:"cert_issued_at"`
 	CreatedAt       time.Time          `json:"created_at"`
+}
+
+type CustomDomainCert struct {
+	ID             int64     `json:"id"`
+	CustomDomainID int64     `json:"custom_domain_id"`
+	CertPem        string    `json:"cert_pem"`
+	KeyPem         string    `json:"key_pem"`
+	ChainPem       string    `json:"chain_pem"`
+	ExpiresAt      time.Time `json:"expires_at"`
+	IssuedAt       time.Time `json:"issued_at"`
 }
 
 type FailedAlert struct {

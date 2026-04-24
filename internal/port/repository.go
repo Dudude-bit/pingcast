@@ -144,6 +144,32 @@ type StatusSubscriberRepo interface {
 	ListConfirmedBySlug(ctx context.Context, slug string) ([]domain.StatusSubscriber, error)
 }
 
+type BlogSubscriberRepo interface {
+	Create(ctx context.Context, email, confirmToken, unsubscribeToken string, source *string) (*domain.BlogSubscriber, error)
+	Confirm(ctx context.Context, confirmToken string) (*domain.BlogSubscriber, error)
+	Unsubscribe(ctx context.Context, unsubscribeToken string) (*domain.BlogSubscriber, error)
+	ListConfirmed(ctx context.Context) ([]domain.BlogSubscriber, error)
+	CountConfirmed(ctx context.Context) (int64, error)
+}
+
+// CustomDomainCert is the at-rest TLS material for one custom domain.
+// Stored centrally so an external ingress (Traefik file-provider, Caddy
+// dynamic config) can pick it up without re-issuing via ACME on every
+// restart.
+type CustomDomainCert struct {
+	CustomDomainID int64
+	CertPEM        string
+	KeyPEM         string
+	ChainPEM       string
+	ExpiresAt      time.Time
+}
+
+type CustomDomainCertRepo interface {
+	Upsert(ctx context.Context, cert CustomDomainCert) error
+	GetByDomainID(ctx context.Context, domainID int64) (*CustomDomainCert, error)
+	ListExpiringBefore(ctx context.Context, before time.Time) ([]CustomDomainCert, error)
+}
+
 type CustomDomainRepo interface {
 	Create(ctx context.Context, userID uuid.UUID, hostname, validationToken string) (*domain.CustomDomain, error)
 	ListByUserID(ctx context.Context, userID uuid.UUID) ([]domain.CustomDomain, error)

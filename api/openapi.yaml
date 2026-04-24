@@ -864,6 +864,53 @@ paths:
         "200": { description: Unsubscribed (text/html) }
         "404": { description: Invalid token }
 
+  /api/newsletter/subscribe:
+    post:
+      operationId: subscribeToNewsletter
+      tags: [newsletter]
+      description: Public. Signs a visitor up to the global PingCast newsletter (blog + product updates). Double-opt-in.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+                source: { type: string, description: "Optional tag for where the signup happened: footer, blog_sidebar, post_cta:<slug>" }
+      responses:
+        "202": { description: Acknowledged — check your inbox to confirm. }
+        "400": { description: Invalid email }
+
+  /api/newsletter/confirm:
+    get:
+      operationId: confirmNewsletterSubscription
+      tags: [newsletter]
+      description: Public. Clicked from the confirmation email. Flips confirmed_at.
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Confirmation page (text/html) }
+        "404": { description: Invalid or expired token }
+
+  /api/newsletter/unsubscribe:
+    get:
+      operationId: unsubscribeFromNewsletter
+      tags: [newsletter]
+      description: Public. Clicked from any outbound email. Deletes the subscriber.
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Unsubscribed (text/html) }
+        "404": { description: Invalid token }
+
   /api/status/{slug}:
     get:
       operationId: getStatusPage
