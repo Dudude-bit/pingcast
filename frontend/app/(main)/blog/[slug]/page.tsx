@@ -5,6 +5,8 @@ import { ArrowLeft } from "lucide-react";
 import { POSTS, getPostBySlug } from "@/content/blog";
 import { BreadcrumbListJsonLd } from "@/components/seo/jsonld";
 import PivotPost from "@/content/blog/pivoting-from-uptime-monitoring-to-status-pages.mdx";
+import MigratingPost from "@/content/blog/migrating-from-atlassian-statuspage.mdx";
+import SupportTicketsPost from "@/content/blog/status-pages-reduce-support-tickets.mdx";
 
 // Map slug → MDX component. Adding a new post = one .mdx file under
 // content/blog/, one entry in content/blog/index.ts (metadata), one
@@ -12,6 +14,8 @@ import PivotPost from "@/content/blog/pivoting-from-uptime-monitoring-to-status-
 // literal imports don't work well with @next/mdx.
 const POST_BODIES: Record<string, React.ComponentType> = {
   "pivoting-from-uptime-monitoring-to-status-pages": PivotPost,
+  "migrating-from-atlassian-statuspage": MigratingPost,
+  "status-pages-reduce-support-tickets": SupportTicketsPost,
 };
 
 export function generateStaticParams() {

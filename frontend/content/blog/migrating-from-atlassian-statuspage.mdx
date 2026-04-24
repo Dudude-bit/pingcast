@@ -1,0 +1,58 @@
+If you're paying Atlassian $29/mo (or $99, or $1499) for Statuspage and wondering whether you could migrate somewhere cheaper in an afternoon: yes, you can. The actual mechanical migration is one upload. The part that trips people up is what _doesn't_ transfer and why. Here's the whole thing.
+
+## What Atlassian ships as a JSON export
+
+In the Statuspage admin go to Settings → Advanced → Page Data → Export. You get a JSON file with four top-level sections:
+
+- `page` — name, timezone, allowed subdomains
+- `components` — every service on your status page, with a `status` per component
+- `incidents` — every incident you've ever posted, with `started_at`, `resolved_at`, `name`, and a `components[]` list of affected services
+- `incidents[].incident_updates` — the narrative timeline per incident, each with `status` (investigating / identified / monitoring / resolved / postmortem) and `body`
+
+No subscribers. No analytics. No audience rules. Statuspage keeps those in their own tables and doesn't export them — by design, because CAN-SPAM requires fresh double opt-in when the sender changes.
+
+## What our importer does
+
+Drop the JSON at [/import/atlassian](/import/atlassian). One transaction:
+
+**Components → monitors.** Every component with a URL becomes an HTTP monitor with a 60-second interval and `alert_after_failures=2`. Components without a URL (purely organisational groups like "Public API Services") are counted as skipped in the import result — we can't monitor an abstract grouping.
+
+**Incidents → incidents.** Each one becomes a `is_manual=true` incident with `title` set from Atlassian's `name`, `cause` copied through, and `state` mapped directly (our state machine is a superset — `postmortem` collapses to `resolved` since we don't model post-mortem reports separately).
+
+**Incident updates → timeline entries.** Every `incident_updates[]` row becomes an `IncidentUpdate` with the `state`, `body`, and `posted_at` preserved. Your full narrative history carries over verbatim.
+
+The entire import is one database transaction. If any single row fails, nothing is written — so you either get a clean migration or a clear error message, never a half-migrated mess to clean up manually.
+
+## What doesn't transfer (and why)
+
+**Email subscribers.** Legal. CAN-SPAM / GDPR / 152-ФЗ all require a fresh double opt-in when the sender changes. We ship the subscribe form on your status page out of the box; the first time you post an incident on PingCast, your subscribers re-confirm. Painful for a week, then normal forever.
+
+**Audience carve-outs.** If you're on Atlassian Growth+ and send different updates to different customer tiers, we don't have a 1:1 replacement yet. On the roadmap; not in v1.
+
+**Your custom domain.** Easy to keep, takes one DNS change. After import, hit [/dashboard/custom-domain](/dashboard/custom-domain), enter `status.yourcompany.com`, follow the two-step instructions (set a CNAME, serve one token at `.well-known/pingcast/<token>`), and we handle the TLS cert. Takes ~10 minutes end-to-end once DNS propagates.
+
+**SLA reports.** Atlassian's built-in SLA-by-component thing with uptime buckets is more polished than ours right now. We ship monthly uptime summaries + CSV export. For most indie SaaS that's enough; if you're on a contract that needs specific SLA math, stay on Atlassian.
+
+## What you save
+
+Atlassian Starter is **$348/year.** Growth is **$1,188/year.** PingCast Pro is **$108/year at the founder's price** (the first 100 customers lock that forever; $228/year retail after).
+
+That's $240–$1,080/year you keep. For a solo-founder SaaS that's a non-trivial chunk of infrastructure budget.
+
+## When it's not worth migrating
+
+- You're on Enterprise ($1,499+/mo) with region-locked audiences and compliance attestations. PingCast can't match that yet.
+- Your Atlassian plan is part of a bundle you're already paying for other reasons (Jira Cloud, Confluence, etc.) and the marginal cost of Statuspage is effectively zero.
+- Everything's been stable for two years and nobody's asking for a migration. If it ain't broke, the ROI is marginal.
+
+For everyone else — indie SaaS, early-stage startups, bootstrapped founders — it's 15 minutes of work for a recurring save. Start at [/import/atlassian](/import/atlassian); if the import fails, the error message tells you exactly what's wrong with the JSON, and you can open a [GitHub issue](https://github.com/kirillinakin/pingcast/issues) with the file.
+
+## What to do after the import
+
+1. Point `status.yourcompany.com` at us ([/dashboard/custom-domain](/dashboard/custom-domain)).
+2. Set your brand colour + logo ([/dashboard/branding](/dashboard/branding)).
+3. Put the subscribe form on your public status page (already automatic — it's live the moment your page is).
+4. Drop the [SVG status badge](/status-page-template) in your README.
+5. Embed [/widget.js](/widget.js) if you want in-product incident banners.
+
+Or just [sign up](/register?intent=pro) and try it on a blank slate first — the Atlassian import lives on the dashboard and runs whenever you're ready.

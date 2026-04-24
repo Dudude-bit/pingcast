@@ -1,0 +1,66 @@
+Every SaaS founder has had _that_ morning. Email inbox at 7:14 AM: **"Is your service down?"** You check — yes, the API has been returning 502s for twelve minutes. Some piece of infra is on fire. You fix it. You reply to the email. Then you open Intercom and see eleven more of the same message, a five-star review downgraded to one star, and a tweet from a customer asking why you haven't said anything.
+
+The fix takes twenty minutes. The fallout takes two days.
+
+A public status page is the smallest piece of infrastructure that flips that ratio. Here's the math.
+
+## What a ticket costs
+
+Average support ticket on a small SaaS: **12–18 minutes of human time** for a single-round-trip response. That's before context-switching cost, which [researchers peg](https://www.apa.org/topics/research/multitasking) at 15–40% productivity lost per interruption.
+
+If an outage generates 15 duplicate "is it down" tickets, your team just burned 3–4 hours on a problem the infrastructure already fixed. Multiply across a year of incidents and it's measurable payroll.
+
+A status page replaces those 15 tickets with zero tickets. Not fewer. Zero. People who can see the outage acknowledged publicly **don't file tickets about it.**
+
+## What specifically cuts tickets
+
+Not every status page design actually works. We've watched customers ship three different patterns:
+
+**Pattern 1: A flat dashboard of green/red dots.** This is what UptimeRobot's public page does. It answers "are you up?" but not "do you know?" Customers still file tickets because "green on your dashboard" doesn't feel like "a human saw it." Ticket reduction: maybe 40%.
+
+**Pattern 2: A status page with incident timeline but no subscribers.** The page says "we know, we're working on it, here's what we've tried." Customers find this via Google or a link from your site. Ticket reduction: 70%.
+
+**Pattern 3: Status page + timeline + email subscribers + in-product widget.** Customers are notified _before_ they have time to file a ticket. The widget banner pops on your app when there's an active incident; they know it's an outage, not their wifi. Ticket reduction: 90%+.
+
+The delta between pattern 2 and pattern 3 is the delta between "people who remember to check the status page" and "people who get pushed." For customers who don't have a habit of checking (i.e. most of them), push wins.
+
+## The timeline is the magic
+
+The single most compounding piece of a status page isn't the status — it's the _updates_. Four messages posted during a 45-minute outage:
+
+> **7:14 UTC · Investigating** — We're seeing elevated error rates on the API. Looking into it now.
+> **7:22 UTC · Identified** — Upstream Postgres saturation from a runaway query. Killing it now.
+> **7:31 UTC · Monitoring** — Query killed, latency recovering. Watching for 15 min to confirm.
+> **7:46 UTC · Resolved** — All clear. Total duration 32 minutes. Post-mortem by Friday.
+
+That timeline does three things at once:
+1. **Signals competence** — you knew, you diagnosed, you fixed. Not an opaque outage.
+2. **Heads off tickets** — anyone who clicks your status link sees the narrative and doesn't need to ask.
+3. **Builds trust for the next outage** — customers who've read one of your incident timelines subconsciously bank "this team handles outages well" for the next time.
+
+Point 3 is underrated. Post-mortem-friendly companies (Cloudflare, AWS, GitHub) get written up positively after _bad_ outages because the public communication is honest and quick. The status page is where that reputation gets built.
+
+## When it's not worth it
+
+**Pre-product.** If you have five customers and they're all in a Slack channel with you, a status page is premature — your customers want a Slack ping, not a web page. Wait until you're too big to individually notify.
+
+**Internal-only tools.** A public status page for internal tooling is just noise. Use an internal status dashboard (Uptime Kuma is great) and let it stay ugly.
+
+**When the status page itself becomes the incident.** If your status page runs on the same infrastructure as your product, it goes down with the product and stops communicating when it matters most. Host it elsewhere (PingCast checker runs as a separate service from the dashboard for exactly this reason), or trust the vendor to.
+
+## Ship it before you need it
+
+The worst time to configure a status page is during an incident. The second-worst time is at 3 AM the day after, when you've just realised you should have had one. The best time is a Tuesday afternoon when nothing is on fire.
+
+Setup is 10 minutes on our end:
+
+1. [Sign up](/register?intent=pro) (free tier works for under-5-monitor setups)
+2. Add your services
+3. Write [incident update templates](/status-page-template) so you're not drafting copy at 3 AM
+4. Put the subscribe form in front of your customers — it's automatic on your public page
+
+Or read [the full guide to status-page setup](/how-to-create-status-page) if you want the structural pieces laid out.
+
+—
+
+Status pages aren't magic. They don't prevent outages and they don't make customers feel great when things are broken. They just replace "we're not sure what's happening, please investigate" tickets with "we see the status page, waiting on the update" non-tickets. That difference compounds. Over a year of a product's life it's the cheapest retention tool you own.
