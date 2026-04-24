@@ -71,9 +71,11 @@ type AppDeps struct {
 type App struct {
 	Fiber *fiber.App
 
-	AuthSvc    *app.AuthService
-	MonitorSvc *app.MonitoringService
-	AlertSvc   *app.AlertService
+	AuthSvc          *app.AuthService
+	MonitorSvc       *app.MonitoringService
+	AlertSvc         *app.AlertService
+	CustomDomainSvc  *app.CustomDomainService
+	SubscriptionSvc  *app.SubscriptionService
 
 	Health *httpadapter.HealthChecker
 
@@ -92,6 +94,7 @@ type App struct {
 	IncidentRepo       port.IncidentRepo
 	IncidentUpdateRepo port.IncidentUpdateRepo
 	CheckResultRepo    port.CheckResultRepo
+	CustomDomainRepo   port.CustomDomainRepo
 }
 
 // NewApp wires the full API composition and returns the Fiber app plus
@@ -121,8 +124,8 @@ func NewApp(deps AppDeps) (*App, error) {
 	monitorRepo := postgres.NewMonitorRepo(deps.Pool, queries, deps.Cipher)
 	channelRepo := postgres.NewChannelRepo(deps.Pool, queries, deps.Cipher)
 	checkResultRepo := postgres.NewCheckResultRepo(queries)
-	incidentRepo := postgres.NewIncidentRepo(queries)
-	incidentUpdateRepo := postgres.NewIncidentUpdateRepo(queries)
+	incidentRepo := postgres.NewIncidentRepo(deps.Pool, queries)
+	incidentUpdateRepo := postgres.NewIncidentUpdateRepo(deps.Pool, queries)
 	maintenanceRepo := postgres.NewMaintenanceWindowRepo(queries)
 	monitorGroupRepo := postgres.NewMonitorGroupRepo(queries)
 	uptimeRepo := postgres.NewUptimeRepo(queries)
@@ -197,6 +200,8 @@ func NewApp(deps AppDeps) (*App, error) {
 		AuthSvc:         authSvc,
 		MonitorSvc:      monitoringSvc,
 		AlertSvc:        alertSvc,
+		CustomDomainSvc: customDomainsSvc,
+		SubscriptionSvc: subscriptionsSvc,
 		Health:          healthChecker,
 		Cipher:          deps.Cipher,
 		UserRepo:        userRepo,
@@ -207,5 +212,6 @@ func NewApp(deps AppDeps) (*App, error) {
 		IncidentRepo:       incidentRepo,
 		IncidentUpdateRepo: incidentUpdateRepo,
 		CheckResultRepo:    checkResultRepo,
+		CustomDomainRepo:   customDomainRepo,
 	}, nil
 }

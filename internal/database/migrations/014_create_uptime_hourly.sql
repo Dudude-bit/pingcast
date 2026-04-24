@@ -1,3 +1,4 @@
+-- +goose Up
 CREATE TABLE monitor_uptime_hourly (
     monitor_id UUID NOT NULL REFERENCES monitors(id),
     hour TIMESTAMPTZ NOT NULL,

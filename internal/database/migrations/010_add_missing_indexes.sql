@@ -1,3 +1,4 @@
+-- +goose Up
 -- New indexes (replace existing without DESC)
 DROP INDEX IF EXISTS idx_check_results_monitor_checked;
 CREATE INDEX idx_check_results_monitor_checked ON check_results (monitor_id, checked_at DESC);

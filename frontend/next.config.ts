@@ -1,6 +1,5 @@
 import type { NextConfig } from "next";
 import createMDX from "@next/mdx";
-import remarkGfm from "remark-gfm";
 
 // Baseline security headers applied to every route. CSP is intentionally
 // omitted here because Recharts, Framer Motion, and our JSON-LD payload
@@ -63,10 +62,12 @@ const nextConfig: NextConfig = {
 };
 
 // GFM (GitHub-flavored markdown) — tables, strikethrough, task lists,
-// autolinked URLs. Standard for technical blogging.
+// autolinked URLs. Standard for technical blogging. Plugin names are
+// passed as strings so Turbopack can serialize them (function imports
+// can't cross the Rust boundary yet per the Next 16 MDX guide).
 const withMDX = createMDX({
   options: {
-    remarkPlugins: [remarkGfm],
+    remarkPlugins: ["remark-gfm"],
   },
 });
 

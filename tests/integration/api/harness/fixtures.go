@@ -3,11 +3,23 @@
 package harness
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"github.com/google/uuid"
 )
+
+// User is a minimal projection of the registered user returned by
+// RegisterAndLoginUser. Tests reach for ID when they need to seed
+// data directly via SQL bypassing the HTTP surface.
+type User struct {
+	ID    uuid.UUID
+	Email string
+	Slug  string
+}
 
 var uniqueCounter uint64
 
@@ -50,6 +62,64 @@ func (h *Harness) RegisterAndLogin(t *testing.T, email, password string) *Sessio
 func (h *Harness) TwoSessions(t *testing.T) (*Session, *Session) {
 	t.Helper()
 	return h.RegisterAndLogin(t, "", ""), h.RegisterAndLogin(t, "", "")
+}
+
+// RegisterAndLoginUser is like RegisterAndLogin but also returns the
+// created user's ID/email/slug. Useful when a test needs to seed rows
+// directly via SQL (e.g. a Pro-only table) for the same user.
+func (h *Harness) RegisterAndLoginUser(t *testing.T) (*Session, User) {
+	t.Helper()
+
+	n := nextUnique()
+	email := fmt.Sprintf("u-%d@test.local", n)
+	slug := fmt.Sprintf("u-%d", n)
+
+	s := h.App.NewSession()
+	resp := s.POST(t, "/api/auth/register", registerRequest{
+		Email:    email,
+		Slug:     slug,
+		Password: "password123",
+	})
+	if resp.Status != 200 && resp.Status != 201 {
+		t.Fatalf("register %q: status=%d body=%s", email, resp.Status, resp.Body)
+	}
+
+	var body struct {
+		User struct {
+			ID string `json:"id"`
+		} `json:"user"`
+	}
+	resp.JSON(t, &body)
+	id, err := uuid.Parse(body.User.ID)
+	if err != nil {
+		t.Fatalf("parse user.id %q: %v", body.User.ID, err)
+	}
+	return s, User{ID: id, Email: email, Slug: slug}
+}
+
+// PromoteToPro flips the user's plan to 'pro' via direct SQL so the
+// test doesn't have to pump a LemonSqueezy webhook. Use this when the
+// test is about the Pro feature itself, not the payment flow.
+func (h *Harness) PromoteToPro(t *testing.T, userID uuid.UUID) {
+	t.Helper()
+	_, err := h.App.Pool.Exec(context.Background(),
+		`UPDATE users SET plan = 'pro' WHERE id = $1`, userID)
+	if err != nil {
+		t.Fatalf("promote %s to pro: %v", userID, err)
+	}
+}
+
+// SetSubscriptionVariant writes the LemonSqueezy price-variant label
+// (e.g. 'founder' / 'retail') on a user. Used by founder-cap tests to
+// seed synthetic founders without touching the webhook.
+func (h *Harness) SetSubscriptionVariant(t *testing.T, userID uuid.UUID, variant string) {
+	t.Helper()
+	_, err := h.App.Pool.Exec(context.Background(),
+		`UPDATE users SET plan = 'pro', subscription_variant = $1 WHERE id = $2`,
+		variant, userID)
+	if err != nil {
+		t.Fatalf("set variant %s on %s: %v", variant, userID, err)
+	}
 }
 
 // slugFromEmail derives a slug from the email local-part, falling back

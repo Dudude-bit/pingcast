@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/port"
@@ -14,11 +15,19 @@ import (
 var _ port.IncidentRepo = (*IncidentRepo)(nil)
 
 type IncidentRepo struct {
-	q *gen.Queries
+	pool *pgxpool.Pool
+	q    *gen.Queries
 }
 
-func NewIncidentRepo(q *gen.Queries) *IncidentRepo {
-	return &IncidentRepo{q: q}
+func NewIncidentRepo(pool *pgxpool.Pool, q *gen.Queries) *IncidentRepo {
+	return &IncidentRepo{pool: pool, q: q}
+}
+
+// queries returns sqlc Queries scoped to the active transaction (if any).
+// Without this, Create inside txm.Do couldn't see the just-inserted
+// monitor row and would fail FK validation.
+func (r *IncidentRepo) queries(ctx context.Context) *gen.Queries {
+	return QueriesFromCtx(ctx, r.q, r.pool)
 }
 
 func (r *IncidentRepo) Create(ctx context.Context, in port.CreateIncidentInput) (*domain.Incident, error) {
@@ -26,7 +35,7 @@ func (r *IncidentRepo) Create(ctx context.Context, in port.CreateIncidentInput) 
 	if state == "" {
 		state = domain.IncidentStateInvestigating
 	}
-	row, err := r.q.CreateIncident(ctx, gen.CreateIncidentParams{
+	row, err := r.queries(ctx).CreateIncident(ctx, gen.CreateIncidentParams{
 		MonitorID: in.MonitorID,
 		Cause:     in.Cause,
 		State:     gen.IncidentState(state),
@@ -47,21 +56,21 @@ func (r *IncidentRepo) Create(ctx context.Context, in port.CreateIncidentInput) 
 }
 
 func (r *IncidentRepo) Resolve(ctx context.Context, id int64, resolvedAt time.Time) error {
-	return r.q.ResolveIncident(ctx, gen.ResolveIncidentParams{
+	return r.queries(ctx).ResolveIncident(ctx, gen.ResolveIncidentParams{
 		ID:         id,
 		ResolvedAt: timeToPgtypeTimestamptz(resolvedAt),
 	})
 }
 
 func (r *IncidentRepo) UpdateState(ctx context.Context, id int64, state domain.IncidentState) error {
-	return r.q.UpdateIncidentState(ctx, gen.UpdateIncidentStateParams{
+	return r.queries(ctx).UpdateIncidentState(ctx, gen.UpdateIncidentStateParams{
 		ID:    id,
 		State: gen.IncidentState(state),
 	})
 }
 
 func (r *IncidentRepo) GetByID(ctx context.Context, id int64) (*domain.Incident, error) {
-	row, err := r.q.GetIncidentByID(ctx, id)
+	row, err := r.queries(ctx).GetIncidentByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +79,7 @@ func (r *IncidentRepo) GetByID(ctx context.Context, id int64) (*domain.Incident,
 }
 
 func (r *IncidentRepo) GetOpen(ctx context.Context, monitorID uuid.UUID) (*domain.Incident, error) {
-	row, err := r.q.GetOpenIncidentByMonitorID(ctx, monitorID)
+	row, err := r.queries(ctx).GetOpenIncidentByMonitorID(ctx, monitorID)
 	if err != nil {
 		return nil, err
 	}
@@ -79,11 +88,11 @@ func (r *IncidentRepo) GetOpen(ctx context.Context, monitorID uuid.UUID) (*domai
 }
 
 func (r *IncidentRepo) IsInCooldown(ctx context.Context, monitorID uuid.UUID) (bool, error) {
-	return r.q.IsInCooldown(ctx, monitorID)
+	return r.queries(ctx).IsInCooldown(ctx, monitorID)
 }
 
 func (r *IncidentRepo) ListForExport(ctx context.Context, userID uuid.UUID) ([]port.IncidentExportRow, error) {
-	rows, err := r.q.ListIncidentsByUserIDForExport(ctx, userID)
+	rows, err := r.queries(ctx).ListIncidentsByUserIDForExport(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +114,7 @@ func (r *IncidentRepo) ListForExport(ctx context.Context, userID uuid.UUID) ([]p
 }
 
 func (r *IncidentRepo) ListByMonitorID(ctx context.Context, monitorID uuid.UUID, limit int) ([]domain.Incident, error) {
-	rows, err := r.q.ListIncidentsByMonitorID(ctx, gen.ListIncidentsByMonitorIDParams{
+	rows, err := r.queries(ctx).ListIncidentsByMonitorID(ctx, gen.ListIncidentsByMonitorIDParams{
 		MonitorID: monitorID,
 		//nolint:gosec // G115: list limit comes from constant call sites (5, 10), always small positive
 		Limit: int32(limit),

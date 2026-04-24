@@ -1,17 +1,15 @@
 package database
 
 import (
-	"cmp"
 	"context"
 	"embed"
 	"fmt"
-	"io/fs"
 	"log/slog"
-	"slices"
-	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/pressly/goose/v3"
 )
 
 // ConnectOption applies optional configuration to the pgxpool.
@@ -52,73 +50,33 @@ func Connect(ctx context.Context, databaseURL string, maxConns int32, opts ...Co
 	return pool, nil
 }
 
+// Migrate applies pending migrations via goose. Files under
+// migrations/ use the `-- +goose Up` / `-- +goose Down` convention.
 func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
-	_, err := pool.Exec(ctx, `
-		CREATE TABLE IF NOT EXISTS schema_migrations (
-			version INT PRIMARY KEY,
-			applied_at TIMESTAMPTZ DEFAULT NOW()
-		)
-	`)
-	if err != nil {
-		return fmt.Errorf("create migrations table: %w", err)
+	db := stdlib.OpenDBFromPool(pool)
+	defer func() { _ = db.Close() }()
+
+	if err := goose.SetDialect("pgx"); err != nil {
+		return fmt.Errorf("goose dialect: %w", err)
 	}
+	goose.SetBaseFS(migrationsFS)
+	goose.SetLogger(gooseSlogLogger{})
 
-	entries, err := fs.ReadDir(migrationsFS, "migrations")
-	if err != nil {
-		return fmt.Errorf("read migrations dir: %w", err)
+	if err := goose.UpContext(ctx, db, "migrations"); err != nil {
+		return fmt.Errorf("goose up: %w", err)
 	}
-
-	slices.SortFunc(entries, func(a, b fs.DirEntry) int {
-		return cmp.Compare(a.Name(), b.Name())
-	})
-
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
-			continue
-		}
-
-		version := 0
-		// Sscanf error is ignored: unparseable names yield version=0, filtered below.
-		_, _ = fmt.Sscanf(entry.Name(), "%d_", &version)
-		if version == 0 {
-			continue
-		}
-
-		var count int
-		err := pool.QueryRow(ctx, "SELECT COUNT(*) FROM schema_migrations WHERE version = $1", version).Scan(&count)
-		if err != nil {
-			return fmt.Errorf("check migration %d: %w", version, err)
-		}
-		if count > 0 {
-			continue
-		}
-
-		content, err := fs.ReadFile(migrationsFS, "migrations/"+entry.Name())
-		if err != nil {
-			return fmt.Errorf("read migration %s: %w", entry.Name(), err)
-		}
-
-		tx, err := pool.Begin(ctx)
-		if err != nil {
-			return fmt.Errorf("begin tx for migration %d: %w", version, err)
-		}
-
-		if _, err := tx.Exec(ctx, string(content)); err != nil {
-			_ = tx.Rollback(ctx)
-			return fmt.Errorf("execute migration %d: %w", version, err)
-		}
-
-		if _, err := tx.Exec(ctx, "INSERT INTO schema_migrations (version) VALUES ($1)", version); err != nil {
-			_ = tx.Rollback(ctx)
-			return fmt.Errorf("record migration %d: %w", version, err)
-		}
-
-		if err := tx.Commit(ctx); err != nil {
-			return fmt.Errorf("commit migration %d: %w", version, err)
-		}
-
-		slog.Info("applied migration", "version", version, "file", entry.Name())
-	}
-
 	return nil
 }
+
+// gooseSlogLogger adapts goose.Logger onto slog so migration logs
+// flow through the same pipeline as everything else.
+type gooseSlogLogger struct{}
+
+func (gooseSlogLogger) Printf(format string, v ...any) {
+	slog.Info(fmt.Sprintf(format, v...))
+}
+func (gooseSlogLogger) Println(v ...any) { slog.Info(fmt.Sprint(v...)) }
+func (gooseSlogLogger) Fatalf(format string, v ...any) {
+	slog.Error(fmt.Sprintf(format, v...))
+}
+func (gooseSlogLogger) Fatal(v ...any) { slog.Error(fmt.Sprint(v...)) }

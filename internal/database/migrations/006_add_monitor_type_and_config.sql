@@ -1,3 +1,4 @@
+-- +goose Up
 ALTER TABLE monitors
     ADD COLUMN type VARCHAR(10) NOT NULL DEFAULT 'http',
     ADD COLUMN check_config JSONB NOT NULL DEFAULT '{}';

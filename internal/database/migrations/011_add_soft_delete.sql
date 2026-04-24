@@ -1,3 +1,4 @@
+-- +goose Up
 -- Add soft delete columns
 ALTER TABLE users ADD COLUMN deleted_at TIMESTAMPTZ;
 ALTER TABLE monitors ADD COLUMN deleted_at TIMESTAMPTZ;

@@ -1,3 +1,4 @@
+-- +goose Up
 -- Convert check_results to time-based partitioned table.
 -- PK changes from (id) to (id, checked_at) — required by Postgres partitioning.
 -- No FK references to check_results.id exist (verified).

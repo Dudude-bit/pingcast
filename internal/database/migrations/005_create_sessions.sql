@@ -1,3 +1,4 @@
+-- +goose Up
 CREATE TABLE sessions (
     id VARCHAR(64) PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

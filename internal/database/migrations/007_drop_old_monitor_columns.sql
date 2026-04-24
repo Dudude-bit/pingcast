@@ -1,3 +1,4 @@
+-- +goose Up
 ALTER TABLE monitors
     DROP COLUMN url,
     DROP COLUMN method,

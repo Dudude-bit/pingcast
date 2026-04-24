@@ -44,7 +44,7 @@ func NewWorker(deps WorkerDeps) (*Worker, error) {
 	monitorRepo := postgres.NewMonitorRepo(deps.Pool, queries, deps.Cipher)
 	channelRepo := postgres.NewChannelRepo(deps.Pool, queries, deps.Cipher)
 	checkResultRepo := postgres.NewCheckResultRepo(queries)
-	incidentRepo := postgres.NewIncidentRepo(queries)
+	incidentRepo := postgres.NewIncidentRepo(deps.Pool, queries)
 	uptimeRepo := postgres.NewUptimeRepo(queries)
 	txm := postgres.NewTxManager(deps.Pool)
 
@@ -63,7 +63,7 @@ func NewWorker(deps WorkerDeps) (*Worker, error) {
 		clock = sysclock.New()
 	}
 
-	incidentUpdateRepo := postgres.NewIncidentUpdateRepo(queries)
+	incidentUpdateRepo := postgres.NewIncidentUpdateRepo(deps.Pool, queries)
 	maintenanceRepo := postgres.NewMaintenanceWindowRepo(queries)
 	monitorGroupRepo := postgres.NewMonitorGroupRepo(queries)
 	svc := app.NewMonitoringService(

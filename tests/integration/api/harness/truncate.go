@@ -13,6 +13,7 @@ import (
 // (e.g. check_results_default).
 var truncateTables = []string{
 	"check_results",
+	"incident_updates",
 	"incidents",
 	"monitor_channels",
 	"api_keys",
@@ -20,7 +21,11 @@ var truncateTables = []string{
 	"notification_channels",
 	"failed_alerts",
 	"monitor_uptime_hourly",
+	"maintenance_windows",
+	"status_subscribers",
+	"custom_domains",
 	"monitors",
+	"monitor_groups",
 	"users",
 }
 

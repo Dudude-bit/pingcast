@@ -3,6 +3,8 @@ package postgres
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/port"
 	"github.com/kirillinakin/pingcast/internal/sqlc/gen"
@@ -11,15 +13,20 @@ import (
 var _ port.IncidentUpdateRepo = (*IncidentUpdateRepo)(nil)
 
 type IncidentUpdateRepo struct {
-	q *gen.Queries
+	pool *pgxpool.Pool
+	q    *gen.Queries
 }
 
-func NewIncidentUpdateRepo(q *gen.Queries) *IncidentUpdateRepo {
-	return &IncidentUpdateRepo{q: q}
+func NewIncidentUpdateRepo(pool *pgxpool.Pool, q *gen.Queries) *IncidentUpdateRepo {
+	return &IncidentUpdateRepo{pool: pool, q: q}
+}
+
+func (r *IncidentUpdateRepo) queries(ctx context.Context) *gen.Queries {
+	return QueriesFromCtx(ctx, r.q, r.pool)
 }
 
 func (r *IncidentUpdateRepo) Create(ctx context.Context, in port.CreateIncidentUpdateInput) (*domain.IncidentUpdate, error) {
-	row, err := r.q.CreateIncidentUpdate(ctx, gen.CreateIncidentUpdateParams{
+	row, err := r.queries(ctx).CreateIncidentUpdate(ctx, gen.CreateIncidentUpdateParams{
 		IncidentID:     in.IncidentID,
 		State:          gen.IncidentState(in.State),
 		Body:           in.Body,
@@ -33,7 +40,7 @@ func (r *IncidentUpdateRepo) Create(ctx context.Context, in port.CreateIncidentU
 }
 
 func (r *IncidentUpdateRepo) ListByIncidentID(ctx context.Context, incidentID int64) ([]domain.IncidentUpdate, error) {
-	rows, err := r.q.ListIncidentUpdates(ctx, incidentID)
+	rows, err := r.queries(ctx).ListIncidentUpdates(ctx, incidentID)
 	if err != nil {
 		return nil, err
 	}

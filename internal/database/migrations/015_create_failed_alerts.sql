@@ -1,3 +1,4 @@
+-- +goose Up
 CREATE TABLE failed_alerts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     event JSONB NOT NULL,

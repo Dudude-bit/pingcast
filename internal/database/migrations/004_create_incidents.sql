@@ -1,3 +1,4 @@
+-- +goose Up
 CREATE TABLE incidents (
     id BIGSERIAL PRIMARY KEY,
     monitor_id UUID NOT NULL REFERENCES monitors(id) ON DELETE CASCADE,

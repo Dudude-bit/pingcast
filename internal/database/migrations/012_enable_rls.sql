@@ -1,3 +1,4 @@
+-- +goose Up
 -- Row-Level Security for multi-tenancy defense-in-depth.
 -- App sets: SET LOCAL app.current_user_id = '<uuid>' at the start of each transaction.
 -- System queries (scheduler, cleanup) use a role that bypasses RLS.

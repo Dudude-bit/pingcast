@@ -159,6 +159,15 @@ func proGateSelector() apigen.MiddlewareFunc {
 		if method == fiber.MethodPost && path == "/api/import/atlassian" {
 			return gate(c)
 		}
+		// Custom domains — request + delete are Pro-only. GET list
+		// passes through so downgraded users can still see and remove
+		// their rows.
+		if path == "/api/custom-domains" && method == fiber.MethodPost {
+			return gate(c)
+		}
+		if strings.HasPrefix(path, "/api/custom-domains/") && method == fiber.MethodDelete {
+			return gate(c)
+		}
 		return c.Next()
 	}
 }
