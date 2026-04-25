@@ -17,6 +17,7 @@ import type { MonitorWithUptime } from "@/lib/queries";
 import { StatusDot } from "./status-badge";
 import { DeleteMonitorDialog } from "./delete-monitor-dialog";
 import { cn } from "@/lib/utils";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 function uptimeColor(u: number) {
   if (u >= 99.5) return "text-emerald-600 dark:text-emerald-400";
@@ -25,6 +26,8 @@ function uptimeColor(u: number) {
 }
 
 export function MonitorRow({ m }: { m: MonitorWithUptime }) {
+  const { dict, locale } = useLocale();
+  const t = dict.monitors;
   const router = useRouter();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const toggle = useTogglePause();
@@ -36,14 +39,14 @@ export function MonitorRow({ m }: { m: MonitorWithUptime }) {
       <StatusDot status={m.current_status} pulse={!paused} />
 
       <Link
-        href={`/monitors/${m.id}`}
+        href={`/${locale}/monitors/${m.id}`}
         className="flex-1 min-w-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md -mx-1 px-1"
       >
         <div className="flex items-center gap-2">
           <span className="font-medium truncate">{m.name}</span>
           {paused ? (
             <span className="text-xs px-1.5 py-0.5 rounded bg-zinc-500/15 text-zinc-600 dark:text-zinc-400 shrink-0">
-              paused
+              {t.row_paused_chip}
             </span>
           ) : null}
         </div>
@@ -68,13 +71,15 @@ export function MonitorRow({ m }: { m: MonitorWithUptime }) {
       <DropdownMenu>
         <DropdownMenuTrigger
           className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
-          aria-label="Row actions"
+          aria-label={t.row_actions_label}
         >
           <MoreHorizontal className="h-4 w-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => router.push(`/monitors/${m.id}/edit`)}>
-            <Pencil className="mr-2 h-4 w-4" /> Edit
+          <DropdownMenuItem
+            onClick={() => router.push(`/${locale}/monitors/${m.id}/edit`)}
+          >
+            <Pencil className="mr-2 h-4 w-4" /> {dict.common.edit}
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => m.id && toggle.mutate(m.id)}
@@ -82,11 +87,11 @@ export function MonitorRow({ m }: { m: MonitorWithUptime }) {
           >
             {paused ? (
               <>
-                <Play className="mr-2 h-4 w-4" /> Resume
+                <Play className="mr-2 h-4 w-4" /> {t.row_resume}
               </>
             ) : (
               <>
-                <Pause className="mr-2 h-4 w-4" /> Pause
+                <Pause className="mr-2 h-4 w-4" /> {t.row_pause}
               </>
             )}
           </DropdownMenuItem>
@@ -95,14 +100,14 @@ export function MonitorRow({ m }: { m: MonitorWithUptime }) {
             onClick={() => setDeleteOpen(true)}
             className="text-red-600 focus:text-red-600 focus:bg-red-500/10"
           >
-            <Trash2 className="mr-2 h-4 w-4" /> Delete
+            <Trash2 className="mr-2 h-4 w-4" /> {dict.common.delete}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
       <DeleteMonitorDialog
         monitorId={m.id ?? ""}
-        monitorName={m.name ?? "this monitor"}
+        monitorName={m.name ?? ""}
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
       />

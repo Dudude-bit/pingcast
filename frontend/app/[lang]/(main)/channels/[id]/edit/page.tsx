@@ -4,6 +4,7 @@ import { use } from "react";
 import { useChannels } from "@/lib/queries";
 import { ChannelForm } from "@/components/features/channels/channel-form";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 export default function EditChannelPage({
   params,
@@ -11,6 +12,7 @@ export default function EditChannelPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const { dict } = useLocale();
   const { data, isLoading, error } = useChannels();
 
   if (isLoading) {
@@ -28,7 +30,7 @@ export default function EditChannelPage({
     return (
       <div className="container mx-auto px-4 py-8 max-w-xl">
         <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-6 text-sm text-red-700 dark:text-red-400">
-          {error?.message ?? "Channel not found"}
+          {error?.message ?? dict.channels.not_found}
         </div>
       </div>
     );

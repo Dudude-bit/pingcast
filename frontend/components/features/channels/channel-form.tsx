@@ -25,6 +25,7 @@ import { useCreateChannel, useUpdateChannel } from "@/lib/mutations";
 import { useChannelTypes, type Channel } from "@/lib/queries";
 import { DynamicConfigFields } from "@/components/features/common/dynamic-config-fields";
 import { ArrowLeft } from "lucide-react";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 type FormValues = {
   name: string;
@@ -39,6 +40,8 @@ interface Props {
 }
 
 export function ChannelForm({ mode, initial }: Props) {
+  const { dict, locale } = useLocale();
+  const t = dict.channels;
   const router = useRouter();
   const { data: types } = useChannelTypes();
   const create = useCreateChannel();
@@ -54,7 +57,7 @@ export function ChannelForm({ mode, initial }: Props) {
   });
 
   const selectedType = methods.watch("type");
-  const typeInfo = types?.find((t) => t.type === selectedType);
+  const typeInfo = types?.find((ct) => ct.type === selectedType);
 
   const onSubmit = methods.handleSubmit(async (values) => {
     if (mode === "create") {
@@ -63,14 +66,14 @@ export function ChannelForm({ mode, initial }: Props) {
         type: values.type,
         config: values.config,
       });
-      router.push("/channels");
+      router.push(`/${locale}/channels`);
     } else {
       await update.mutateAsync({
         name: values.name,
         config: values.config,
         is_enabled: values.is_enabled,
       });
-      router.push("/channels");
+      router.push(`/${locale}/channels`);
     }
   });
 
@@ -79,48 +82,48 @@ export function ChannelForm({ mode, initial }: Props) {
   return (
     <div className="container mx-auto px-4 py-8 max-w-xl">
       <Link
-        href="/channels"
+        href={`/${locale}/channels`}
         className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-4"
       >
-        <ArrowLeft className="mr-1 h-4 w-4" /> Back to channels
+        <ArrowLeft className="mr-1 h-4 w-4" /> {t.form_back}
       </Link>
 
       <Card>
         <CardHeader>
           <CardTitle>
-            {mode === "create" ? "New channel" : `Edit ${initial?.name ?? "channel"}`}
+            {mode === "create"
+              ? t.form_create_title
+              : t.form_edit_title.replace("{name}", initial?.name ?? "")}
           </CardTitle>
-          <CardDescription>
-            Destinations receive alerts when a monitor changes state.
-          </CardDescription>
+          <CardDescription>{t.form_card_desc}</CardDescription>
         </CardHeader>
         <CardContent>
           <FormProvider {...methods}>
             <form onSubmit={onSubmit} className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="name">Name</Label>
+                <Label htmlFor="name">{t.field_name}</Label>
                 <Input
                   id="name"
-                  placeholder="Ops Telegram"
+                  placeholder={t.name_placeholder}
                   required
                   {...methods.register("name", { required: true })}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="type">Channel type</Label>
+                <Label htmlFor="type">{t.field_type}</Label>
                 {mode === "create" ? (
                   <Select
                     value={selectedType}
                     onValueChange={(v) => methods.setValue("type", v ?? "")}
                   >
                     <SelectTrigger id="type">
-                      <SelectValue placeholder="Select type…" />
+                      <SelectValue placeholder={t.type_select_placeholder} />
                     </SelectTrigger>
                     <SelectContent>
-                      {types?.map((t) => (
-                        <SelectItem key={t.type} value={t.type ?? ""}>
-                          {t.label}
+                      {types?.map((ct) => (
+                        <SelectItem key={ct.type} value={ct.type ?? ""}>
+                          {ct.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -132,15 +135,14 @@ export function ChannelForm({ mode, initial }: Props) {
 
               {selectedType === "email" ? (
                 <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-900 dark:text-amber-200">
-                  <p className="font-medium">Email is on the Pro plan.</p>
+                  <p className="font-medium">{t.email_pro_heading}</p>
                   <p className="mt-1 text-xs text-amber-800/80 dark:text-amber-200/80">
-                    Save will return a validation error on Free. Telegram and
-                    Webhook work on every plan.{" "}
+                    {t.email_pro_body_pre}
                     <Link
-                      href="/pricing"
+                      href={`/${locale}/pricing`}
                       className="underline underline-offset-2 hover:text-amber-950 dark:hover:text-amber-100"
                     >
-                      See pricing →
+                      {t.email_pro_link}
                     </Link>
                   </p>
                 </div>
@@ -156,10 +158,8 @@ export function ChannelForm({ mode, initial }: Props) {
               {mode === "edit" ? (
                 <div className="flex items-center justify-between rounded-md border border-border/60 p-4">
                   <div>
-                    <div className="font-medium text-sm">Enabled</div>
-                    <div className="text-xs text-muted-foreground">
-                      When off, alerts are not delivered to this channel.
-                    </div>
+                    <div className="font-medium text-sm">{t.enabled_label}</div>
+                    <div className="text-xs text-muted-foreground">{t.enabled_helper}</div>
                   </div>
                   <Switch
                     checked={methods.watch("is_enabled")}
@@ -171,16 +171,16 @@ export function ChannelForm({ mode, initial }: Props) {
               <div className="flex items-center gap-2 pt-2">
                 <Button type="submit" disabled={pending}>
                   {pending
-                    ? "Saving…"
+                    ? dict.common.saving
                     : mode === "create"
-                      ? "Create channel"
-                      : "Save changes"}
+                      ? t.submit_create
+                      : t.submit_save_changes}
                 </Button>
                 <Link
-                  href="/channels"
+                  href={`/${locale}/channels`}
                   className={buttonVariants({ variant: "ghost" })}
                 >
-                  Cancel
+                  {dict.common.cancel}
                 </Link>
               </div>
             </form>

@@ -6,15 +6,35 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 // Inline subscribe form on the public /status/[slug] page. Posts to
-// /api/status/:slug/subscribe; the backend sends a double-opt-in email
-// and returns 202. On success we show a "check your inbox" message —
-// vague by design so the endpoint can't enumerate which emails are
-// already subscribed to which slug.
+// /api/status/:slug/subscribe with the visitor's locale (sourced from
+// Accept-Language by the server). The backend stores the locale and
+// uses it for both the confirmation email and every future incident
+// notification, so each subscriber gets their language without any
+// per-tenant config.
+//
+// Strings come from the server-side dict via `labels` props because
+// /status/[slug] lives outside app/[lang]/ — the LocaleProvider isn't
+// in scope on canonical status URLs (status.customer.com etc).
+type Labels = {
+  heading: string;
+  placeholder: string;
+  button: string;
+  busy: string;
+  helper: string;
+  sentHeading: string;
+  sentBody: string;
+  failed: string;
+};
+
 export function StatusSubscribeForm({
   slug,
+  locale,
+  labels,
   accentStyle,
 }: {
   slug: string;
+  locale: string;
+  labels: Labels;
   accentStyle?: React.CSSProperties;
 }) {
   const [email, setEmail] = useState("");
@@ -32,7 +52,7 @@ export function StatusSubscribeForm({
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email }),
+          body: JSON.stringify({ email, locale }),
         },
       );
       if (!res.ok) {
@@ -42,7 +62,7 @@ export function StatusSubscribeForm({
       setSent(true);
       setEmail("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Subscription failed.");
+      setError(e instanceof Error ? e.message : labels.failed);
     } finally {
       setBusy(false);
     }
@@ -53,12 +73,8 @@ export function StatusSubscribeForm({
       <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-4 flex items-start gap-3 text-sm">
         <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-emerald-500" />
         <div>
-          <p className="font-medium">Check your inbox.</p>
-          <p className="mt-1 text-muted-foreground">
-            If that email isn&apos;t already subscribed, you&apos;ll get a
-            confirmation link within a minute. Click it once and
-            you&apos;re on the list.
-          </p>
+          <p className="font-medium">{labels.sentHeading}</p>
+          <p className="mt-1 text-muted-foreground">{labels.sentBody}</p>
         </div>
       </div>
     );
@@ -71,12 +87,12 @@ export function StatusSubscribeForm({
     >
       <div className="flex items-center gap-2 mb-3 text-sm font-medium">
         <Mail className="h-4 w-4 text-muted-foreground" />
-        Get email updates on incidents
+        {labels.heading}
       </div>
       <div className="flex flex-col sm:flex-row gap-2">
         <Input
           type="email"
-          placeholder="you@example.com"
+          placeholder={labels.placeholder}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
@@ -84,15 +100,11 @@ export function StatusSubscribeForm({
           className="flex-1"
         />
         <Button type="submit" disabled={busy || !email} style={accentStyle}>
-          {busy ? "Subscribing…" : "Subscribe"}
+          {busy ? labels.busy : labels.button}
         </Button>
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">
-        Double opt-in. Unsubscribe in one click from any email.
-      </p>
-      {error ? (
-        <p className="mt-2 text-xs text-destructive">{error}</p>
-      ) : null}
+      <p className="mt-2 text-xs text-muted-foreground">{labels.helper}</p>
+      {error ? <p className="mt-2 text-xs text-destructive">{error}</p> : null}
     </form>
   );
 }

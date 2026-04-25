@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useDeleteMonitor } from "@/lib/mutations";
 import { ConfirmDestructiveDialog } from "@/components/features/common/confirm-destructive-dialog";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 interface Props {
   monitorId: string;
@@ -19,6 +20,8 @@ export function DeleteMonitorDialog({
   onOpenChange,
   redirectOnSuccess,
 }: Props) {
+  const { dict } = useLocale();
+  const t = dict.monitors;
   const del = useDeleteMonitor();
   const router = useRouter();
 
@@ -32,17 +35,10 @@ export function DeleteMonitorDialog({
     <ConfirmDestructiveDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Delete monitor?"
-      description={
-        <>
-          {monitorName}
-          <br />
-          This permanently removes the monitor and all its check history. This
-          cannot be undone.
-        </>
-      }
-      confirmLabel="Delete"
-      pendingLabel="Deleting…"
+      title={t.delete_dialog_title}
+      description={t.delete_dialog_body.replace("{name}", monitorName)}
+      confirmLabel={dict.common.delete}
+      pendingLabel={dict.common.deleting}
       pending={del.isPending}
       onConfirm={onConfirm}
     />

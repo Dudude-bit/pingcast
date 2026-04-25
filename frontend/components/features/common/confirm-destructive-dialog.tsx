@@ -10,6 +10,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 interface Props {
   open: boolean;
@@ -27,11 +28,14 @@ export function ConfirmDestructiveDialog({
   onOpenChange,
   title,
   description,
-  confirmLabel = "Delete",
+  confirmLabel,
   pendingLabel,
   pending,
   onConfirm,
 }: Props) {
+  const { dict } = useLocale();
+  const confirm = confirmLabel ?? dict.common.delete;
+  const pendingText = pendingLabel ?? dict.common.deleting;
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
@@ -40,13 +44,13 @@ export function ConfirmDestructiveDialog({
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{dict.common.cancel}</AlertDialogCancel>
           <AlertDialogAction
             onClick={onConfirm}
             disabled={pending}
             className="bg-red-600 text-white hover:bg-red-700"
           >
-            {pending ? (pendingLabel ?? `${confirmLabel}…`) : confirmLabel}
+            {pending ? pendingText : confirm}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -15,8 +15,11 @@ import type { Channel } from "@/lib/queries";
 import { StatusDot } from "@/components/features/monitors/status-badge";
 import { ConfirmDestructiveDialog } from "@/components/features/common/confirm-destructive-dialog";
 import { useDeleteChannel } from "@/lib/mutations";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 export function ChannelRow({ ch }: { ch: Channel }) {
+  const { dict, locale } = useLocale();
+  const t = dict.channels;
   const router = useRouter();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const del = useDeleteChannel();
@@ -30,7 +33,7 @@ export function ChannelRow({ ch }: { ch: Channel }) {
           <span className="font-medium truncate">{ch.name}</span>
           {!ch.is_enabled ? (
             <span className="text-xs px-1.5 py-0.5 rounded bg-zinc-500/15 text-zinc-600 dark:text-zinc-400">
-              disabled
+              {t.row_disabled_chip}
             </span>
           ) : null}
         </div>
@@ -42,22 +45,22 @@ export function ChannelRow({ ch }: { ch: Channel }) {
       <DropdownMenu>
         <DropdownMenuTrigger
           className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
-          aria-label="Row actions"
+          aria-label={dict.monitors.row_actions_label}
         >
           <MoreHorizontal className="h-4 w-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem
-            onClick={() => router.push(`/channels/${ch.id}/edit`)}
+            onClick={() => router.push(`/${locale}/channels/${ch.id}/edit`)}
           >
-            <Pencil className="mr-2 h-4 w-4" /> Edit
+            <Pencil className="mr-2 h-4 w-4" /> {dict.common.edit}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() => setDeleteOpen(true)}
             className="text-red-600 focus:text-red-600 focus:bg-red-500/10"
           >
-            <Trash2 className="mr-2 h-4 w-4" /> Delete
+            <Trash2 className="mr-2 h-4 w-4" /> {dict.common.delete}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -65,14 +68,8 @@ export function ChannelRow({ ch }: { ch: Channel }) {
       <ConfirmDestructiveDialog
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
-        title="Delete channel?"
-        description={
-          <>
-            {ch.name}
-            <br />
-            Monitors bound to this channel will lose this alert destination.
-          </>
-        }
+        title={t.delete_dialog_title}
+        description={t.delete_dialog_body.replace("{name}", ch.name ?? "")}
         pending={del.isPending}
         onConfirm={async () => {
           if (ch.id) await del.mutateAsync(ch.id);

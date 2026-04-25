@@ -6,19 +6,22 @@ import { Trash2, KeyRound } from "lucide-react";
 import type { APIKey } from "@/lib/queries";
 import { ConfirmDestructiveDialog } from "@/components/features/common/confirm-destructive-dialog";
 import { useRevokeAPIKey } from "@/lib/mutations";
-
-function formatDate(iso?: string | null) {
-  if (!iso) return "never";
-  return new Date(iso).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
+import { useLocale } from "@/components/i18n/locale-provider";
 
 export function APIKeyRow({ k }: { k: APIKey }) {
+  const { dict, locale } = useLocale();
+  const t = dict.api_keys;
   const [revokeOpen, setRevokeOpen] = useState(false);
   const revoke = useRevokeAPIKey();
+
+  function formatDate(iso?: string | null) {
+    if (!iso) return t.never_used;
+    return new Date(iso).toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  }
 
   return (
     <div className="flex items-start gap-4 rounded-lg border border-border/60 bg-card px-4 py-3">
@@ -38,15 +41,21 @@ export function APIKeyRow({ k }: { k: APIKey }) {
           ))}
         </div>
         <div className="mt-2 text-xs text-muted-foreground">
-          Created {formatDate(k.created_at)} · Last used {formatDate(k.last_used_at)}
-          {k.expires_at ? <> · Expires {formatDate(k.expires_at)}</> : null}
+          {t.created_at} {formatDate(k.created_at)} · {t.last_used}{" "}
+          {formatDate(k.last_used_at)}
+          {k.expires_at ? (
+            <>
+              {" · "}
+              {t.expires} {formatDate(k.expires_at)}
+            </>
+          ) : null}
         </div>
       </div>
       <Button
         variant="ghost"
         size="icon-sm"
         onClick={() => setRevokeOpen(true)}
-        aria-label="Revoke key"
+        aria-label={t.row_revoke_label}
         className="text-red-600 hover:bg-red-500/10"
       >
         <Trash2 className="h-4 w-4" />
@@ -55,16 +64,10 @@ export function APIKeyRow({ k }: { k: APIKey }) {
       <ConfirmDestructiveDialog
         open={revokeOpen}
         onOpenChange={setRevokeOpen}
-        title="Revoke API key?"
-        description={
-          <>
-            {k.name}
-            <br />
-            Requests using this key will fail immediately. This cannot be undone.
-          </>
-        }
-        confirmLabel="Revoke"
-        pendingLabel="Revoking…"
+        title={t.revoke_dialog_title}
+        description={t.revoke_dialog_body.replace("{name}", k.name ?? "")}
+        confirmLabel={t.revoke}
+        pendingLabel={t.revoking}
         pending={revoke.isPending}
         onConfirm={async () => {
           if (k.id) await revoke.mutateAsync(k.id);

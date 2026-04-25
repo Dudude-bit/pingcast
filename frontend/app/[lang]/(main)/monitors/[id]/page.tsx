@@ -12,6 +12,7 @@ import { UptimeStats } from "@/components/features/monitors/uptime-stats";
 import { IncidentList } from "@/components/features/monitors/incident-list";
 import { DeleteMonitorDialog } from "@/components/features/monitors/delete-monitor-dialog";
 import { MonitorGroupPicker } from "@/components/features/monitors/monitor-group-picker";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 // Recharts is ~100 KB gzipped and only needed on this page — lazy-load it
 // so the rest of the app's first-load bundle stays slim. Skeleton matches
@@ -30,9 +31,11 @@ const ResponseTimeChart = dynamic(
 export default function MonitorDetailPage({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  params: Promise<{ id: string; lang: string }>;
 }) {
-  const { id } = use(params);
+  const { id, lang } = use(params);
+  const { dict } = useLocale();
+  const t = dict.monitors;
   const { data, isLoading, error } = useMonitor(id);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
@@ -50,7 +53,7 @@ export default function MonitorDetailPage({
     return (
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-6 text-sm text-red-700 dark:text-red-400">
-          {error?.message ?? "Monitor not found"}
+          {error?.message ?? t.not_found}
         </div>
       </div>
     );
@@ -61,10 +64,10 @@ export default function MonitorDetailPage({
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl space-y-6">
       <Link
-        href="/dashboard"
+        href={`/${lang}/dashboard`}
         className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="mr-1 h-4 w-4" /> Back to dashboard
+        <ArrowLeft className="mr-1 h-4 w-4" /> {dict.common.back_to_dashboard}
       </Link>
 
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -83,17 +86,17 @@ export default function MonitorDetailPage({
             initialGroupId={(data as { group_id?: number | null }).group_id ?? null}
           />
           <Link
-            href={`/monitors/${id}/edit`}
+            href={`/${lang}/monitors/${id}/edit`}
             className={buttonVariants({ variant: "outline", size: "sm" })}
           >
-            <Pencil className="mr-1.5 h-4 w-4" /> Edit
+            <Pencil className="mr-1.5 h-4 w-4" /> {dict.common.edit}
           </Link>
           <Button
             variant="destructive"
             size="sm"
             onClick={() => setDeleteOpen(true)}
           >
-            <Trash2 className="mr-1.5 h-4 w-4" /> Delete
+            <Trash2 className="mr-1.5 h-4 w-4" /> {dict.common.delete}
           </Button>
         </div>
       </div>
@@ -106,23 +109,25 @@ export default function MonitorDetailPage({
 
       <div className="rounded-lg border border-border/60 bg-card p-6">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold">Response time</h3>
-          <span className="text-xs text-muted-foreground">Last 24 hours · hourly average</span>
+          <h3 className="text-sm font-semibold">{t.response_time}</h3>
+          <span className="text-xs text-muted-foreground">
+            {t.response_time_caption}
+          </span>
         </div>
         <ResponseTimeChart data={data.chart_data ?? []} />
       </div>
 
       <div>
-        <h3 className="text-sm font-semibold mb-3">Incidents</h3>
+        <h3 className="text-sm font-semibold mb-3">{t.incidents_heading}</h3>
         <IncidentList incidents={incidents} />
       </div>
 
       <DeleteMonitorDialog
         monitorId={id}
-        monitorName={data.name ?? "this monitor"}
+        monitorName={data.name ?? ""}
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
-        redirectOnSuccess="/dashboard"
+        redirectOnSuccess={`/${lang}/dashboard`}
       />
     </div>
   );

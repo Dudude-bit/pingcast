@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useLocale } from "@/components/i18n/locale-provider";
+import { track } from "@/lib/analytics";
 
 // NewsletterForm posts to /api/newsletter/subscribe with the optional
 // `source` tag so we can tell which placement converts. Returns 202 on
@@ -35,6 +36,7 @@ export function NewsletterForm({ source }: Props) {
         setStatus("ok");
         setMessage(f.newsletter_ok);
         setEmail("");
+        track("newsletter_subscribed", { source, lang: locale });
       } else {
         const body = await res.json().catch(() => ({}));
         setStatus("error");

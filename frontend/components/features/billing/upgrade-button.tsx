@@ -5,6 +5,7 @@ import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { track } from "@/lib/analytics";
 import type { components } from "@/lib/openapi-types";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 type FounderStatus = components["schemas"]["FounderStatus"];
 
@@ -17,6 +18,9 @@ const RETAIL_URL = process.env.NEXT_PUBLIC_LEMONSQUEEZY_RETAIL_URL;
 //   2. Founder available → $9/mo link with "founder's price"
 //   3. Founder sold out → $19/mo link
 // Pro users see nothing — the caller checks plan upstream.
+//
+// All checkout-click events carry the current locale so we can split
+// conversion by language in Plausible.
 export function UpgradeButton({
   className,
   size = "lg",
@@ -24,6 +28,7 @@ export function UpgradeButton({
   className?: string;
   size?: "sm" | "default" | "lg";
 }) {
+  const { dict, locale } = useLocale();
   const [status, setStatus] = useState<FounderStatus | null>(null);
 
   useEffect(() => {
@@ -45,18 +50,19 @@ export function UpgradeButton({
 
   const founder = status.available;
   const url = founder ? FOUNDER_URL : RETAIL_URL;
-  const label = founder ? "Upgrade — founder's price" : "Upgrade to Pro";
-  const price = founder ? "$9" : "$19";
+  const label = dict.pricing.pro_cta;
+  const price = founder ? dict.pricing.pro_price_founder : dict.pricing.pro_price_retail;
+  const per = dict.pricing.pro_per;
+  const placeholder =
+    locale === "ru" ? "Pro скоро" : "Pro coming soon";
 
   if (!url) {
-    // Envs not configured yet — surface a disabled placeholder rather
-    // than a broken link to LemonSqueezy.
     return (
       <span
         className={`${buttonVariants({ size, variant: "outline" })} ${className ?? ""} opacity-60 cursor-not-allowed`}
         aria-disabled="true"
       >
-        Pro coming soon
+        {placeholder}
       </span>
     );
   }
@@ -69,11 +75,12 @@ export function UpgradeButton({
       onClick={() =>
         track("pro_checkout_clicked", {
           variant: founder ? "founder" : "retail",
+          lang: locale,
         })
       }
       className={`${buttonVariants({ size })} ${className ?? ""}`}
     >
-      {label} · {price}/mo
+      {label} · {price}{per}
     </Link>
   );
 }

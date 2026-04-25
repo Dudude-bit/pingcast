@@ -5,10 +5,13 @@ import Link from "next/link";
 import { ArrowLeft, UploadCloud, CheckCircle2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { components } from "@/lib/openapi-types";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 type ImportResult = components["schemas"]["AtlassianImportResult"];
 
 export default function AtlassianImportPage() {
+  const { dict, locale } = useLocale();
+  const t = dict.import_atlassian;
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
@@ -29,19 +32,17 @@ export default function AtlassianImportPage() {
         credentials: "include",
       });
       if (res.status === 402) {
-        throw new Error(
-          "Atlassian import is a Pro feature. Upgrade from the dashboard and try again.",
-        );
+        throw new Error(t.pro_required);
       }
       if (!res.ok) {
         const body = await res.json().catch(() => null);
         throw new Error(
-          body?.error?.message ?? `Import failed (HTTP ${res.status}).`,
+          body?.error?.message ?? `${t.import_failed} (HTTP ${res.status}).`,
         );
       }
       setResult((await res.json()) as ImportResult);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Import failed.");
+      setError(e instanceof Error ? e.message : t.import_failed);
     } finally {
       setBusy(false);
     }
@@ -50,21 +51,14 @@ export default function AtlassianImportPage() {
   return (
     <div className="container mx-auto px-4 py-12 max-w-2xl">
       <Link
-        href="/dashboard"
+        href={`/${locale}/dashboard`}
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-6"
       >
-        <ArrowLeft className="h-3.5 w-3.5" /> Back to dashboard
+        <ArrowLeft className="h-3.5 w-3.5" /> {dict.common.back_to_dashboard}
       </Link>
 
-      <h1 className="text-3xl font-bold tracking-tight">
-        Import from Atlassian Statuspage
-      </h1>
-      <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
-        Upload the JSON export from your Statuspage admin. We&apos;ll create
-        equivalent monitors, incidents (with full state history), and
-        preserved update timelines inside one atomic transaction. Components
-        without a probe URL are skipped.
-      </p>
+      <h1 className="text-3xl font-bold tracking-tight">{t.title}</h1>
+      <p className="mt-3 text-sm text-muted-foreground leading-relaxed">{t.subtitle}</p>
 
       <form
         onSubmit={submit}
@@ -80,15 +74,15 @@ export default function AtlassianImportPage() {
               <>
                 <span className="font-medium">{file.name}</span>
                 <span className="text-muted-foreground">
-                  {" "}
-                  · {(file.size / 1024).toFixed(1)} KB
+                  {" · "}
+                  {(file.size / 1024).toFixed(1)} KB
                 </span>
               </>
             ) : (
               <>
-                <span className="font-medium">Choose a JSON export</span>
+                <span className="font-medium">{t.drop_label}</span>
                 <span className="text-muted-foreground block text-xs mt-1">
-                  (schema_version &quot;1.0&quot;)
+                  {t.drop_label_helper}
                 </span>
               </>
             )}
@@ -103,7 +97,7 @@ export default function AtlassianImportPage() {
         </label>
 
         <Button type="submit" disabled={!file || busy} className="w-full">
-          {busy ? "Importing…" : "Import"}
+          {busy ? t.importing : t.import}
         </Button>
       </form>
 
@@ -118,22 +112,32 @@ export default function AtlassianImportPage() {
         <div className="mt-6 flex items-start gap-3 rounded-md border border-emerald-500/40 bg-emerald-500/5 px-4 py-3 text-sm">
           <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-emerald-500" />
           <div>
-            <p className="font-medium">Import complete.</p>
+            <p className="font-medium">{t.imported}</p>
             <p className="mt-1 text-muted-foreground">
-              {result.monitors_created} monitor
-              {result.monitors_created === 1 ? "" : "s"},{" "}
-              {result.incidents_created} incident
-              {result.incidents_created === 1 ? "" : "s"},{" "}
-              {result.updates_created} timeline entries.
+              {t.result_summary
+                .replace("{monitors}", String(result.monitors_created))
+                .replace(
+                  "{monitors_word}",
+                  result.monitors_created === 1 ? t.monitors_one : t.monitors_many,
+                )
+                .replace("{incidents}", String(result.incidents_created))
+                .replace(
+                  "{incidents_word}",
+                  result.incidents_created === 1 ? t.incidents_one : t.incidents_many,
+                )
+                .replace("{updates}", String(result.updates_created))}
               {result.components_skipped > 0
-                ? ` ${result.components_skipped} component${result.components_skipped === 1 ? "" : "s"} skipped (no probe URL).`
+                ? (result.components_skipped === 1
+                    ? t.result_skipped_one
+                    : t.result_skipped_many
+                  ).replace("{n}", String(result.components_skipped))
                 : ""}
             </p>
             <Link
-              href="/dashboard"
+              href={`/${locale}/dashboard`}
               className="mt-2 inline-block text-sm underline underline-offset-4 hover:text-foreground"
             >
-              Back to dashboard →
+              {t.back_link}
             </Link>
           </div>
         </div>

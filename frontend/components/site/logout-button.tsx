@@ -5,18 +5,15 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 /**
- * Client-side logout. The previous form-POST pattern returned 204 No
- * Content which left the browser on a blank page and never refreshed
- * the SSR-rendered navbar — the user stayed logged in from the UI
- * perspective until they clicked to another page.
- *
- * Fetch-based flow: call /api/auth/logout, then router.refresh() to
- * re-run the server-side sessionCookie() check in the navbar, then
- * push the user home.
+ * Client-side logout. Calls /api/auth/logout, refreshes server-side
+ * navbar (which checks the session cookie), then sends the user home
+ * in their current locale.
  */
 export function LogoutButton() {
+  const { dict, locale } = useLocale();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -27,9 +24,9 @@ export function LogoutButton() {
       // Server may have already expired the session — still log out locally.
     }
     startTransition(() => {
-      router.push("/");
+      router.push(`/${locale}`);
       router.refresh();
-      toast.success("Signed out");
+      toast.success(dict.nav.logout);
     });
   };
 
@@ -41,7 +38,7 @@ export function LogoutButton() {
       onClick={onClick}
       disabled={pending}
     >
-      {pending ? "Signing out…" : "Logout"}
+      {pending ? dict.common.loading : dict.nav.logout}
     </Button>
   );
 }

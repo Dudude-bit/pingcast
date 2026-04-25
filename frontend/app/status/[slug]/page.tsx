@@ -7,6 +7,8 @@ import { Activity, AlertCircle, CheckCircle2 } from "lucide-react";
 import { IncidentStateBadge } from "@/components/features/incidents/incident-state-badge";
 import { IncidentTimeline } from "@/components/features/incidents/incident-timeline";
 import { StatusSubscribeForm } from "@/components/features/incidents/status-subscribe-form";
+import { getDictionary } from "@/lib/i18n";
+import { pickLocaleFromHeaders } from "@/lib/locale-from-headers";
 
 type IncidentUpdate = components["schemas"]["IncidentUpdate"];
 type Incident = components["schemas"]["Incident"];
@@ -38,14 +40,19 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
+  const locale = await pickLocaleFromHeaders();
+  const dict = await getDictionary(locale);
   const data = await fetchStatus(slug).catch(() => null);
-  if (!data) return { title: "Status" };
+  if (!data) return { title: dict.status_page.meta_title_unknown };
   const title = data.all_up
-    ? "All Systems Operational"
-    : "System Status — Degraded";
+    ? dict.status_page.meta_title_all_up
+    : dict.status_page.meta_title_degraded;
   return {
     title: `${title} · ${data.slug}`,
-    description: `Public uptime status for ${data.slug}. Updated every 30 seconds.`,
+    description: dict.status_page.meta_description.replace(
+      "{slug}",
+      data.slug ?? slug,
+    ),
     robots: { index: true, follow: true },
   };
 }
@@ -56,9 +63,9 @@ function uptimeColor(u: number) {
   return "text-red-600 dark:text-red-400";
 }
 
-function formatDate(iso?: string | null) {
+function formatDate(iso: string | null | undefined, locale: string) {
   if (!iso) return "";
-  return new Date(iso).toLocaleString(undefined, {
+  return new Date(iso).toLocaleString(locale === "ru" ? "ru-RU" : "en-US", {
     month: "short",
     day: "numeric",
     hour: "2-digit",
@@ -72,6 +79,9 @@ export default async function StatusPageRoute({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
+  const locale = await pickLocaleFromHeaders();
+  const dict = await getDictionary(locale);
+  const t = dict.status_page;
   const data = await fetchStatus(slug);
   if (!data) notFound();
 
@@ -80,9 +90,6 @@ export default async function StatusPageRoute({
   const incidents: Incident[] = data.incidents ?? [];
   const groups = data.groups ?? [];
 
-  // Bucket monitors by group_id. Ungrouped rows go into a special
-  // sentinel key so the renderer can show them under an unnamed
-  // "Other services" heading (or as the only section if no groups).
   const UNGROUPED = "__ungrouped__";
   const byGroup = new Map<string, typeof monitors>();
   for (const m of monitors) {
@@ -93,8 +100,6 @@ export default async function StatusPageRoute({
     byGroup.set(key, bucket);
   }
 
-  // Ordered list of sections: user-defined groups first (ordered by
-  // their `ordering` field), then ungrouped if any.
   const sections: { key: string; title: string | null; items: typeof monitors }[] = [];
   for (const g of [...groups].sort((a, b) => a.ordering - b.ordering)) {
     const items = byGroup.get(String(g.id));
@@ -106,14 +111,11 @@ export default async function StatusPageRoute({
   if (ungrouped && ungrouped.length > 0) {
     sections.push({
       key: UNGROUPED,
-      title: sections.length > 0 ? "Other services" : null,
+      title: sections.length > 0 ? t.other_services : null,
       items: ungrouped,
     });
   }
 
-  // Fetch timelines for every incident in parallel. Auto-detected
-  // incidents will have zero updates → IncidentTimeline renders
-  // nothing. Manual incidents get their full state-machine history.
   const timelines = await Promise.all(
     incidents.map((inc) => fetchIncidentUpdates(inc.id)),
   );
@@ -155,22 +157,18 @@ export default async function StatusPageRoute({
               )}
             </div>
             <h1 className="mt-4 text-3xl font-bold tracking-tight">
-              {allUp ? "All systems operational" : "Some services degraded"}
+              {allUp ? t.all_up : t.some_down}
             </h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Auto-refreshes every 30 seconds.
-            </p>
+            <p className="mt-2 text-sm text-muted-foreground">{t.auto_refresh}</p>
           </div>
         </header>
 
         <section className="mb-10">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-            Services
+            {t.services_heading}
           </h2>
           {monitors.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No public services configured.
-            </p>
+            <p className="text-sm text-muted-foreground">{t.no_services}</p>
           ) : sections.length === 0 ? null : (
             <div className="space-y-6">
               {sections.map((section) => (
@@ -207,7 +205,7 @@ export default async function StatusPageRoute({
                           <div className="flex items-center gap-4 shrink-0">
                             {inMaintenance ? (
                               <span className="text-xs uppercase tracking-wider text-blue-700 dark:text-blue-300 text-right">
-                                Scheduled maintenance
+                                {t.scheduled_maintenance}
                               </span>
                             ) : (
                               <>
@@ -218,10 +216,10 @@ export default async function StatusPageRoute({
                                 </span>
                                 <span className="text-xs uppercase tracking-wider text-muted-foreground capitalize w-20 text-right">
                                   {status === "up"
-                                    ? "Operational"
+                                    ? t.status_up
                                     : status === "down"
-                                      ? "Down"
-                                      : status}
+                                      ? t.status_down
+                                      : t.status_unknown}
                                 </span>
                               </>
                             )}
@@ -239,7 +237,7 @@ export default async function StatusPageRoute({
         {incidents.length > 0 ? (
           <section className="mb-10">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-              Recent incidents
+              {t.incidents_heading}
             </h2>
             <ul className="divide-y divide-border/60 rounded-lg border border-border/60 bg-card">
               {incidents.map((inc, idx) => {
@@ -257,18 +255,16 @@ export default async function StatusPageRoute({
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-medium">
-                            {headline}
-                          </span>
+                          <span className="text-sm font-medium">{headline}</span>
                           <IncidentStateBadge state={inc.state} />
                         </div>
                         <div className="mt-1 text-xs text-muted-foreground">
-                          Started {formatDate(inc.started_at)}
+                          {t.incident_started} {formatDate(inc.started_at, locale)}
                           {inc.resolved_at ? (
-                            <> · Resolved {formatDate(inc.resolved_at)}</>
+                            <> · {t.incident_resolved} {formatDate(inc.resolved_at, locale)}</>
                           ) : (
                             <span className="text-red-600 dark:text-red-400">
-                              {" · Ongoing"}
+                              {" · "}{t.incident_ongoing}
                             </span>
                           )}
                         </div>
@@ -285,6 +281,17 @@ export default async function StatusPageRoute({
         <section className="mt-8 mb-10">
           <StatusSubscribeForm
             slug={data.slug ?? slug}
+            locale={locale}
+            labels={{
+              heading: t.subscribe_heading,
+              placeholder: t.subscribe_email_placeholder,
+              button: t.subscribe_button,
+              busy: t.subscribe_busy,
+              helper: t.subscribe_helper,
+              sentHeading: t.subscribe_sent_heading,
+              sentBody: t.subscribe_sent_body,
+              failed: t.subscribe_failed,
+            }}
             accentStyle={
               accent
                 ? { backgroundColor: accent, borderColor: accent }
@@ -301,8 +308,8 @@ export default async function StatusPageRoute({
 
         {data.show_branding ? (
           <footer className="mt-8 text-center text-xs text-muted-foreground">
-            Powered by{" "}
-            <Link href="/" className="underline hover:text-foreground">
+            {t.powered_by}{" "}
+            <Link href={`/${locale}`} className="underline hover:text-foreground">
               PingCast
             </Link>
           </footer>
