@@ -138,14 +138,14 @@ type FailedAlertRepo interface {
 }
 
 type StatusSubscriberRepo interface {
-	Create(ctx context.Context, slug, email, confirmToken, unsubscribeToken string) (*domain.StatusSubscriber, error)
+	Create(ctx context.Context, slug, email, confirmToken, unsubscribeToken string, locale *string) (*domain.StatusSubscriber, error)
 	Confirm(ctx context.Context, confirmToken string) (*domain.StatusSubscriber, error)
 	Unsubscribe(ctx context.Context, unsubscribeToken string) (*domain.StatusSubscriber, error)
 	ListConfirmedBySlug(ctx context.Context, slug string) ([]domain.StatusSubscriber, error)
 }
 
 type BlogSubscriberRepo interface {
-	Create(ctx context.Context, email, confirmToken, unsubscribeToken string, source *string) (*domain.BlogSubscriber, error)
+	Create(ctx context.Context, email, confirmToken, unsubscribeToken string, source *string, locale *string) (*domain.BlogSubscriber, error)
 	Confirm(ctx context.Context, confirmToken string) (*domain.BlogSubscriber, error)
 	Unsubscribe(ctx context.Context, unsubscribeToken string) (*domain.BlogSubscriber, error)
 	ListConfirmed(ctx context.Context) ([]domain.BlogSubscriber, error)

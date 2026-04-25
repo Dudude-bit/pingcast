@@ -48,7 +48,11 @@ func (s *BlogSubscriptionService) Subscribe(ctx context.Context, email string, s
 		return err
 	}
 
-	sub, err := s.repo.Create(ctx, email, confirmToken, unsubToken, source)
+	var localePtr *string
+	if locale != "" {
+		localePtr = &locale
+	}
+	sub, err := s.repo.Create(ctx, email, confirmToken, unsubToken, source, localePtr)
 	if err != nil {
 		// Duplicate email — treat as success silently.
 		slog.Info("blog subscribe: possibly duplicate, treating as success",

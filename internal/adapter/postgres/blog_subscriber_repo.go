@@ -18,12 +18,13 @@ func NewBlogSubscriberRepo(q *gen.Queries) *BlogSubscriberRepo {
 	return &BlogSubscriberRepo{q: q}
 }
 
-func (r *BlogSubscriberRepo) Create(ctx context.Context, email, confirmToken, unsubscribeToken string, source *string) (*domain.BlogSubscriber, error) {
+func (r *BlogSubscriberRepo) Create(ctx context.Context, email, confirmToken, unsubscribeToken string, source *string, locale *string) (*domain.BlogSubscriber, error) {
 	row, err := r.q.CreateBlogSubscriber(ctx, gen.CreateBlogSubscriberParams{
 		Email:            email,
 		ConfirmToken:     confirmToken,
 		UnsubscribeToken: unsubscribeToken,
 		Source:           source,
+		Locale:           locale,
 	})
 	if err != nil {
 		return nil, err
@@ -72,5 +73,6 @@ func rowToBlogSub(row gen.BlogSubscriber) *domain.BlogSubscriber {
 		ConfirmedAt:      pgtypeTimestamptzToPtr(row.ConfirmedAt),
 		CreatedAt:        row.CreatedAt,
 		Source:           row.Source,
+		Locale:           row.Locale,
 	}
 }

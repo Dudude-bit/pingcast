@@ -2,6 +2,8 @@
 // stays the same; only the content differs. One entry per
 // public-facing comparison page.
 
+import type { Locale } from "@/lib/i18n-shared";
+
 export type Alternative = {
   slug: string;
   name: string;
@@ -22,7 +24,7 @@ export type Alternative = {
   faq: { q: string; a: string }[];
 };
 
-export const ALTERNATIVES: Record<string, Alternative> = {
+const EN: Record<string, Alternative> = {
   "atlassian-statuspage": {
     slug: "atlassian-statuspage",
     name: "Atlassian Statuspage",
@@ -71,7 +73,7 @@ export const ALTERNATIVES: Record<string, Alternative> = {
       },
     ],
   },
-  "instatus": {
+  instatus: {
     slug: "instatus",
     name: "Instatus",
     url: "https://instatus.com",
@@ -110,7 +112,7 @@ export const ALTERNATIVES: Record<string, Alternative> = {
       },
     ],
   },
-  "openstatus": {
+  openstatus: {
     slug: "openstatus",
     name: "Openstatus",
     url: "https://www.openstatus.dev",
@@ -144,7 +146,7 @@ export const ALTERNATIVES: Record<string, Alternative> = {
       },
     ],
   },
-  "uptimerobot": {
+  uptimerobot: {
     slug: "uptimerobot",
     name: "UptimeRobot",
     url: "https://uptimerobot.com",
@@ -219,6 +221,212 @@ export const ALTERNATIVES: Record<string, Alternative> = {
   },
 };
 
-export function listAlternativeSlugs(): string[] {
-  return Object.keys(ALTERNATIVES);
+const RU: Record<string, Alternative> = {
+  "atlassian-statuspage": {
+    slug: "atlassian-statuspage",
+    name: "Atlassian Statuspage",
+    url: "https://www.atlassian.com/software/statuspage",
+    tagline: "Старичок рынка — мощный, но дорогой, и в РФ больше не продаётся.",
+    startingPrice: "$29/мес",
+    openSource: false,
+    selfHostable: false,
+    includesUptime: false,
+    atlassianImport: true,
+    russiaAvailable: false,
+    metaTitle: "Альтернатива Atlassian Statuspage — PingCast (в три раза дешевле)",
+    metaDescription:
+      "PingCast — drop-in замена Atlassian Statuspage. Брендированная статус-страница + мониторинг аптайма от $9/мес. Импорт JSON в один клик. Open-source MIT.",
+    hero: {
+      headline: "Ищете альтернативу Atlassian Statuspage?",
+      sub: "PingCast даёт ту же брендированную статус-страницу — кастомный домен, таймлайн инцидентов, email-подписчики — плюс мониторинг аптайма, за $9/мес вместо $29. Импорт JSON Atlassian в один клик.",
+    },
+    whenThem: [
+      "Вы уже на Atlassian Enterprise-бандле и cost-center одобрил.",
+      "Нужны SLA-отчёты, привязанные к Jira.",
+      "Клиенты привыкли к Statuspage-брендингу и UX.",
+    ],
+    whenUs: [
+      "Хотите тот же look-and-feel в три раза дешевле.",
+      "Нужен мониторинг и статус-страница в одном инструменте.",
+      "Вы вне US/EU и Atlassian вам не продаёт.",
+      "Цените MIT self-host как escape-hatch.",
+    ],
+    migration: {
+      title: "Миграция с Atlassian Statuspage за 60 секунд",
+      body: "Экспортируйте конфиг Statuspage как JSON (Settings → Advanced → Export), залейте на /import/atlassian. Мы воссоздадим ваши компоненты как мониторы, инциденты с полной историей состояний и весь таймлайн обновлений — в одной транзакции, ничего не потеряем.",
+    },
+    faq: [
+      {
+        q: "Перенесутся ли мои подписчики Statuspage?",
+        a: "Email-подписчики автоматически не переносятся — CAN-SPAM/GDPR требуют новое double-opt-in. URL статус-страницы можно оставить через кастомный домен; подписчики переподтвердят, когда вы запостите первый инцидент на PingCast.",
+      },
+      {
+        q: "Обязательно ли self-host?",
+        a: "Нет. Hosted Pro за $9/мес делает всё. Self-host — это MIT-escape-hatch на случай если вырастете из hosted-плана или нужен полный sovereignty над данными.",
+      },
+      {
+        q: "А SLA-отчёты?",
+        a: "У нас ежемесячные сводки по uptime и полный CSV-экспорт истории инцидентов. SLA-отчёт Atlassian с per-audience carve-outs — продвинутее; работаем над этим.",
+      },
+    ],
+  },
+  instatus: {
+    slug: "instatus",
+    name: "Instatus",
+    url: "https://instatus.com",
+    tagline: "Только статус-страница, понты UI, мониторинга нет.",
+    startingPrice: "$20/мес",
+    openSource: false,
+    selfHostable: false,
+    includesUptime: false,
+    atlassianImport: false,
+    russiaAvailable: true,
+    metaTitle: "Альтернатива Instatus — PingCast с мониторингом аптайма из коробки",
+    metaDescription:
+      "PingCast соответствует Instatus по статус-странице и добавляет мониторинг аптайма в том же тарифе. $9/мес фаундер-цена. Self-host MIT в комплекте.",
+    hero: {
+      headline: "Альтернатива Instatus с мониторингом аптайма из коробки",
+      sub: "Instatus отлично делает UI статус-страницы, но на этом останавливается. PingCast даёт ту же брендированную страницу плюс HTTP/TCP/DNS чеки, SSL-предупреждения и автодетект инцидентов — один инструмент, $9/мес.",
+    },
+    whenThem: [
+      "У вас уже есть отдельный uptime-инструмент, который устраивает.",
+      "Нужна максимально быстрая анимация и social-media-native дизайн.",
+    ],
+    whenUs: [
+      "Хотите статус-страницу и мониторинг в одной подписке.",
+      "Вам важен open-source + self-host.",
+      "Нужен импортёр Atlassian Statuspage (у Instatus его нет).",
+      "Хотите экономить $11/мес vs стартового тарифа Instatus.",
+    ],
+    faq: [
+      {
+        q: "Можно импортировать из Instatus?",
+        a: "Instatus пока не публикует JSON-экспорт. Откройте issue на GitHub с примером истории инцидентов — соорудим импортёр.",
+      },
+      {
+        q: "У PingCast тот же уровень дизайна?",
+        a: "Наша статус-страница на SSR+ISR (Next 16) с тёмной/светлой темой и accent-цветом. Instatus сильнее в кастомных анимациях; мы выбрали SEO-friendly SSR вместо client-side флэша.",
+      },
+    ],
+  },
+  openstatus: {
+    slug: "openstatus",
+    name: "Openstatus",
+    url: "https://www.openstatus.dev",
+    tagline: "Open-source конкурент — AGPL, тяжёлый self-host, узкий hosted-тариф.",
+    startingPrice: "$30/мес",
+    openSource: true,
+    selfHostable: true,
+    includesUptime: true,
+    atlassianImport: false,
+    russiaAvailable: true,
+    metaTitle: "Альтернатива Openstatus — MIT-лицензионный PingCast за $9/мес",
+    metaDescription:
+      "PingCast и Openstatus — оба open-source статус-страницы. PingCast под MIT (дружелюбнее для коммерческого self-host), hosted Pro от $9/мес, миграция с Atlassian встроена.",
+    hero: {
+      headline: "Альтернатива Openstatus с дружелюбной лицензией",
+      sub: "Openstatus — отличная open-source работа, но AGPL делает коммерческий self-host неудобным. PingCast — MIT, форкайте свободно, встраивайте в closed-source продукты. Тот же scope мониторинг + статус-страница, $9 vs $30/мес на hosted.",
+    },
+    whenThem: [
+      "Вам нравится UI и комьюнити Openstatus.",
+      "AGPL ОК для вашего self-host use case.",
+    ],
+    whenUs: [
+      "Хотите MIT, чтобы self-host форка внутри коммерческого продукта был чистый.",
+      "Hosted Pro $9/мес vs $30/мес.",
+      "Нужна 1-клик миграция с Atlassian Statuspage.",
+    ],
+    faq: [
+      {
+        q: "Почему MIT а не AGPL?",
+        a: "AGPL требует публиковать любые модификации, которые вы запускаете как сервис. Это юридически усложняет коммерческий self-host (например внутри closed-source B2B-продукта). MIT позволяет делать что угодно.",
+      },
+    ],
+  },
+  uptimerobot: {
+    slug: "uptimerobot",
+    name: "UptimeRobot",
+    url: "https://uptimerobot.com",
+    tagline: "Только uptime, легаси — нормальной брендированной страницы нет.",
+    startingPrice: "$7/мес",
+    openSource: false,
+    selfHostable: false,
+    includesUptime: true,
+    atlassianImport: false,
+    russiaAvailable: true,
+    metaTitle: "Альтернатива UptimeRobot — PingCast с настоящей статус-страницей",
+    metaDescription:
+      "UptimeRobot предлагает базовые публичные дашборды, не брендированную customer-facing страницу. PingCast добавляет кастомные домены, обновления инцидентов, email-подписчиков — от $9/мес.",
+    hero: {
+      headline: "Альтернатива UptimeRobot с customer-facing статус-страницей",
+      sub: "UptimeRobot — дефолт бесплатного uptime-мониторинга последнюю декаду, но статус-страницы там слабые. PingCast сохраняет щедрый бесплатный тариф и добавляет настоящую страницу — ваш домен, ваш бренд, таймлайн инцидентов, подписчики — за $9/мес.",
+    },
+    whenThem: [
+      "Вам нужны только алерты по uptime, клиенты страницу не видят.",
+      "Вы уже на бесплатных 50 мониторах, и этого достаточно.",
+    ],
+    whenUs: [
+      "Хотите брендированную страницу, на которую клиенты реально зайдут.",
+      "Нужны обновления инцидентов с состояниями (у UptimeRobot нет таймлайна).",
+      "Хотите email-подписчиков на инциденты.",
+      "Цените MIT self-host для data-sovereignty.",
+    ],
+    faq: [
+      {
+        q: "У PingCast такой же щедрый бесплатный тариф?",
+        a: "PingCast Free — 5 мониторов с интервалом 1 минута. UptimeRobot Free — 50 мониторов с интервалом 5 минут. Выбирайте по тому, у вас 5 вещей мониторить или 50.",
+      },
+      {
+        q: "Можно оставить UptimeRobot и использовать PingCast только для статус-страницы?",
+        a: "Да. Запускайте оба; направьте публичную страницу на PingCast, UptimeRobot пусть продолжает алертить вас внутри. Мониторинг в PingCast тогда бесплатный.",
+      },
+    ],
+  },
+  "uptime-kuma": {
+    slug: "uptime-kuma",
+    name: "Uptime Kuma",
+    url: "https://uptime.kuma.pet",
+    tagline: "Популярная self-host OSS — без hosted-тарифа, статус-страница так себе.",
+    startingPrice: "Только self-host",
+    openSource: true,
+    selfHostable: true,
+    includesUptime: true,
+    atlassianImport: false,
+    russiaAvailable: true,
+    metaTitle: "Hosted-альтернатива Uptime Kuma — PingCast SaaS от $9/мес",
+    metaDescription:
+      "Любите self-host подход Uptime Kuma, но устали от поддержки? PingCast предлагает тот же open-source стек как managed SaaS от $9/мес, с гораздо более красивой страницей и импортёром Atlassian.",
+    hero: {
+      headline: "Hosted-версия Uptime Kuma, которую вы ждали",
+      sub: "Uptime Kuma отлично, пока ваш Docker-хост не упал вместе с самим uptime-монитором. PingCast — тот же стек как managed-сервис: $9/мес hosted или MIT self-host если хотите сами админить.",
+    },
+    whenThem: [
+      "Вам нравится админить свой Docker-хост и uptime-алерты к нему.",
+      "У вас уже есть внутренняя дашборд-панель в продукте.",
+    ],
+    whenUs: [
+      "Не хотите сами быть пейджером, когда uptime-монитор упал.",
+      "Нужна customer-facing брендированная страница, а не админ-дашборд.",
+      "Хотите обновления инцидентов, email-подписчиков и нормальное API.",
+    ],
+    faq: [
+      {
+        q: "Можно мигрировать с Uptime Kuma?",
+        a: "Автоматического импорта пока нет. Структура данных не маппится cleanly (модель инцидентов Kuma проще нашей). Пересоздайте десяток мониторов вручную или откройте issue на GitHub если их сотни.",
+      },
+    ],
+  },
+};
+
+const ALL: Record<Locale, Record<string, Alternative>> = { en: EN, ru: RU };
+
+export function getAlternative(slug: string, locale: Locale): Alternative | undefined {
+  return ALL[locale]?.[slug] ?? EN[slug];
 }
+
+export function listAlternativeSlugs(): string[] {
+  return Object.keys(EN);
+}
+
+// Backward-compat: existing imports of ALTERNATIVES default to EN.
+export const ALTERNATIVES = EN;

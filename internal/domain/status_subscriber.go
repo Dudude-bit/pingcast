@@ -14,6 +14,10 @@ type StatusSubscriber struct {
 	UnsubscribeToken string
 	ConfirmedAt      *time.Time
 	CreatedAt        time.Time
+	// Locale is the UI language the visitor used to subscribe. Drives
+	// the language of outbound incident notification emails. nil →
+	// default ("en") at the application layer.
+	Locale *string
 }
 
 func (s StatusSubscriber) IsConfirmed() bool {

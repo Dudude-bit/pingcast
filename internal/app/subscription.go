@@ -47,7 +47,11 @@ func (s *SubscriptionService) Subscribe(ctx context.Context, slug, email, locale
 		return err
 	}
 
-	sub, err := s.subs.Create(ctx, slug, email, confirmToken, unsubToken)
+	var localePtr *string
+	if locale != "" {
+		localePtr = &locale
+	}
+	sub, err := s.subs.Create(ctx, slug, email, confirmToken, unsubToken, localePtr)
 	if err != nil {
 		// Duplicate (slug, email) — treat as success to avoid leaking.
 		slog.Info("subscribe: possibly duplicate, treating as success",
@@ -98,12 +102,18 @@ func (s *SubscriptionService) NotifyIncident(
 		slog.Error("list subscribers failed", "slug", slug, "error", err)
 		return
 	}
-	subject := fmt.Sprintf("[%s] %s (status: %s)", slug, headline, state)
 	for _, sub := range subs {
+		// Per-subscriber locale → per-subscriber email language.
+		// nil/empty → default ("en").
+		var loc string
+		if sub.Locale != nil {
+			loc = *sub.Locale
+		}
 		unsubURL := fmt.Sprintf("%s/api/status/%s/unsubscribe?token=%s",
 			s.baseURL, slug, sub.UnsubscribeToken)
-		payload := fmt.Sprintf("%s\n\n%s\n\n---\nStatus page: %s/status/%s\nUnsubscribe: %s",
-			headline, body, s.baseURL, slug, unsubURL)
+		subject, payload := incidentNotifyEmail(
+			toEmailLocale(loc), slug, headline, state, body, s.baseURL, unsubURL,
+		)
 		if err := s.mailer.Send(ctx, sub.Email, subject, payload); err != nil {
 			slog.Error("subscriber email failed",
 				"slug", slug, "subscriber_id", sub.ID, "error", err)

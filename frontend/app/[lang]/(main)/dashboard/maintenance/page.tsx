@@ -16,11 +16,14 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import type { components } from "@/lib/openapi-types";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 type MaintenanceWindow = components["schemas"]["MaintenanceWindow"];
 type Monitor = components["schemas"]["MonitorWithUptime"];
 
 export default function MaintenanceDashboardPage() {
+  const { dict, locale } = useLocale();
+  const t = dict.dashboard_maintenance;
   const [windows, setWindows] = useState<MaintenanceWindow[] | null>(null);
   const [monitors, setMonitors] = useState<Monitor[] | null>(null);
   const [monitorId, setMonitorId] = useState("");
@@ -28,11 +31,10 @@ export default function MaintenanceDashboardPage() {
   const [endsAt, setEndsAt] = useState(defaultEndISO());
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
-
   const [reloadTick, setReloadTick] = useState(0);
+  const [now, setNow] = useState<number>(() => Date.now());
 
   useEffect(() => {
-    // Cancellation-guarded loader per React 19's set-state-in-effect rule.
     let cancelled = false;
     (async () => {
       const [wRes, mRes] = await Promise.all([
@@ -47,6 +49,11 @@ export default function MaintenanceDashboardPage() {
       cancelled = true;
     };
   }, [reloadTick]);
+
+  useEffect(() => {
+    const tm = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(tm);
+  }, []);
 
   const load = () => setReloadTick((n) => n + 1);
 
@@ -66,78 +73,65 @@ export default function MaintenanceDashboardPage() {
         credentials: "include",
       });
       if (res.status === 402) {
-        toast.error("Maintenance windows are a Pro feature.");
+        toast.error(t.pro_required);
         return;
       }
       if (!res.ok) {
         const body = await res.json().catch(() => null);
-        toast.error(body?.error?.message ?? `Schedule failed (HTTP ${res.status}).`);
+        toast.error(body?.error?.message ?? `${t.schedule_failed} (HTTP ${res.status}).`);
         return;
       }
       setReason("");
-      toast.success("Maintenance window scheduled.");
-      await load();
+      toast.success(t.scheduled);
+      load();
     } finally {
       setBusy(false);
     }
   }
 
   async function remove(id: number) {
+    if (!confirm(t.delete_confirm)) return;
     const res = await fetch(`/api/maintenance-windows/${id}`, {
       method: "DELETE",
       credentials: "include",
     });
     if (res.ok) {
-      toast.success("Window removed.");
-      await load();
+      toast.success(t.deleted);
+      load();
     } else {
-      toast.error(`Delete failed (HTTP ${res.status}).`);
+      toast.error(`${t.delete_failed} (HTTP ${res.status}).`);
     }
   }
 
-  // React 19 forbids Date.now() during render (non-deterministic).
-  // Keep `now` in state and tick it every 60s so the Active/Upcoming/
-  // Completed pills stay accurate on long-open tabs.
-  const [now, setNow] = useState<number>(() => Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 60_000);
-    return () => clearInterval(t);
-  }, []);
+  const dateLocale = locale === "ru" ? "ru-RU" : "en-US";
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-3xl">
       <Link
-        href="/dashboard"
+        href={`/${locale}/dashboard`}
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-6"
       >
-        <ArrowLeft className="h-3.5 w-3.5" /> Back to dashboard
+        <ArrowLeft className="h-3.5 w-3.5" /> {dict.common.back_to_dashboard}
       </Link>
 
       <div className="flex items-center gap-3">
         <div className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
           <Wrench className="h-5 w-5" />
         </div>
-        <h1 className="text-2xl font-bold tracking-tight">Maintenance windows</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{t.title}</h1>
       </div>
-      <p className="mt-3 text-sm text-muted-foreground max-w-xl">
-        Schedule a window during which failed checks on a monitor
-        won&apos;t open incidents or fire alerts. The status page shows
-        &ldquo;scheduled maintenance&rdquo; instead of &ldquo;down&rdquo;.
-        Pro feature.
-      </p>
+      <p className="mt-3 text-sm text-muted-foreground max-w-xl">{t.subtitle}</p>
 
       <form
         onSubmit={submit}
         className="mt-8 rounded-lg border border-border/60 bg-card p-5 space-y-4"
       >
+        <h2 className="text-sm font-semibold">{t.schedule_heading}</h2>
         <div className="space-y-2">
-          <Label htmlFor="monitor">Monitor</Label>
-          <Select
-            value={monitorId}
-            onValueChange={(v) => v && setMonitorId(v)}
-          >
+          <Label htmlFor="monitor">{t.monitor_label}</Label>
+          <Select value={monitorId} onValueChange={(v) => v && setMonitorId(v)}>
             <SelectTrigger id="monitor">
-              <SelectValue placeholder="Pick a monitor" />
+              <SelectValue placeholder={t.monitor_label} />
             </SelectTrigger>
             <SelectContent>
               {(monitors ?? []).map((m) =>
@@ -153,7 +147,7 @@ export default function MaintenanceDashboardPage() {
 
         <div className="grid sm:grid-cols-2 gap-3">
           <div className="space-y-2">
-            <Label htmlFor="starts">Starts at (local time)</Label>
+            <Label htmlFor="starts">{t.starts_label}</Label>
             <Input
               id="starts"
               type="datetime-local"
@@ -163,7 +157,7 @@ export default function MaintenanceDashboardPage() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="ends">Ends at</Label>
+            <Label htmlFor="ends">{t.ends_label}</Label>
             <Input
               id="ends"
               type="datetime-local"
@@ -175,10 +169,10 @@ export default function MaintenanceDashboardPage() {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="reason">Reason (shown on the status page)</Label>
+          <Label htmlFor="reason">{t.reason_label}</Label>
           <Textarea
             id="reason"
-            placeholder="Scheduled database migration"
+            placeholder={t.reason_placeholder}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             required
@@ -188,21 +182,18 @@ export default function MaintenanceDashboardPage() {
         </div>
 
         <Button type="submit" disabled={busy || !monitorId || !reason}>
-          {busy ? "Scheduling…" : "Schedule window"}
+          {busy ? t.scheduling : t.schedule}
         </Button>
       </form>
 
       <section className="mt-10">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-          Scheduled + past windows
+          {t.list_heading}
         </h2>
         {windows === null ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <p className="text-sm text-muted-foreground">{dict.common.loading}</p>
         ) : windows.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No windows scheduled yet. Schedule one above to suppress alerts
-            during planned maintenance.
-          </p>
+          <p className="text-sm text-muted-foreground">{t.list_empty}</p>
         ) : (
           <ul className="space-y-3">
             {windows.map((w) => {
@@ -221,27 +212,27 @@ export default function MaintenanceDashboardPage() {
                         <span className="font-medium truncate">{w.reason}</span>
                         {active ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 px-2 py-0.5 text-[11px] font-medium">
-                            Active now
+                            {dict.common.active}
                           </span>
                         ) : past ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-muted text-muted-foreground border px-2 py-0.5 text-[11px] font-medium">
-                            <CheckCircle2 className="h-3 w-3" /> Completed
+                            <CheckCircle2 className="h-3 w-3" />
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30 px-2 py-0.5 text-[11px] font-medium">
-                            Upcoming
+                            {dict.common.pending}
                           </span>
                         )}
                       </div>
                       <div className="text-xs text-muted-foreground mt-1">
-                        {new Date(w.starts_at).toLocaleString()} →{" "}
-                        {new Date(w.ends_at).toLocaleString()}
+                        {new Date(w.starts_at).toLocaleString(dateLocale)} →{" "}
+                        {new Date(w.ends_at).toLocaleString(dateLocale)}
                       </div>
                     </div>
                     <button
                       onClick={() => remove(w.id)}
                       className="text-muted-foreground hover:text-destructive shrink-0"
-                      aria-label="Delete window"
+                      aria-label={dict.common.delete}
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -257,8 +248,6 @@ export default function MaintenanceDashboardPage() {
 }
 
 function defaultStartISO() {
-  // datetime-local wants no timezone marker; build it from a near-future
-  // time so the form lands with sensible defaults.
   const d = new Date(Date.now() + 10 * 60 * 1000);
   return isoLocal(d);
 }

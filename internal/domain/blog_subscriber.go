@@ -15,6 +15,9 @@ type BlogSubscriber struct {
 	// Source tags where the subscriber signed up: "footer", "blog_sidebar",
 	// "post_cta:status-pages-reduce-support-tickets", etc. Nullable.
 	Source *string
+	// Locale is the UI language the visitor used to subscribe. nil →
+	// default ("en") at the application layer.
+	Locale *string
 }
 
 func (s BlogSubscriber) IsConfirmed() bool {

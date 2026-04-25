@@ -4,19 +4,23 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { POSTS, getPostBySlug } from "@/content/blog";
 import { BreadcrumbListJsonLd } from "@/components/seo/jsonld";
-import { getDictionary, hasLocale, SUPPORTED_LOCALES } from "@/lib/i18n";
-import PivotPost from "@/content/blog/pivoting-from-uptime-monitoring-to-status-pages.mdx";
-import MigratingPost from "@/content/blog/migrating-from-atlassian-statuspage.mdx";
-import SupportTicketsPost from "@/content/blog/status-pages-reduce-support-tickets.mdx";
+import { getDictionary, hasLocale, SUPPORTED_LOCALES, type Locale } from "@/lib/i18n";
+import PivotEN from "@/content/blog/pivoting-from-uptime-monitoring-to-status-pages.mdx";
+import PivotRU from "@/content/blog/pivoting-from-uptime-monitoring-to-status-pages.ru.mdx";
+import MigratingEN from "@/content/blog/migrating-from-atlassian-statuspage.mdx";
+import MigratingRU from "@/content/blog/migrating-from-atlassian-statuspage.ru.mdx";
+import SupportEN from "@/content/blog/status-pages-reduce-support-tickets.mdx";
+import SupportRU from "@/content/blog/status-pages-reduce-support-tickets.ru.mdx";
 
-// Map slug → MDX component. Adding a new post = one .mdx file under
-// content/blog/, one entry in content/blog/index.ts (metadata), one
-// entry here. Static imports keep the bundler honest; dynamic template-
-// literal imports don't work well with @next/mdx.
-const POST_BODIES: Record<string, React.ComponentType> = {
-  "pivoting-from-uptime-monitoring-to-status-pages": PivotPost,
-  "migrating-from-atlassian-statuspage": MigratingPost,
-  "status-pages-reduce-support-tickets": SupportTicketsPost,
+// Per-locale MDX bodies. Adding a new post = one .mdx file per locale
+// under content/blog/, one entry in content/blog/index.ts (metadata),
+// one entry in this map per locale. Static imports keep the bundler
+// honest; dynamic template-literal imports don't work well with
+// @next/mdx.
+const POST_BODIES: Record<string, Record<Locale, React.ComponentType>> = {
+  "pivoting-from-uptime-monitoring-to-status-pages": { en: PivotEN, ru: PivotRU },
+  "migrating-from-atlassian-statuspage": { en: MigratingEN, ru: MigratingRU },
+  "status-pages-reduce-support-tickets": { en: SupportEN, ru: SupportRU },
 };
 
 type Params = Promise<{ lang: string; slug: string }>;
@@ -33,15 +37,23 @@ export async function generateMetadata({
   params: Params;
 }): Promise<Metadata> {
   const { lang, slug } = await params;
+  if (!hasLocale(lang)) return {};
   const post = getPostBySlug(slug);
   if (!post) return {};
+  const title = post.title[lang] ?? post.title.en;
+  const description = post.description[lang] ?? post.description.en;
   return {
-    title: post.title,
-    description: post.description,
-    alternates: { canonical: `/${lang}/blog/${post.slug}` },
+    title,
+    description,
+    alternates: {
+      canonical: `/${lang}/blog/${post.slug}`,
+      languages: Object.fromEntries(
+        SUPPORTED_LOCALES.map((l) => [l, `/${l}/blog/${post.slug}`]),
+      ),
+    },
     openGraph: {
-      title: post.title,
-      description: post.description,
+      title,
+      description,
       type: "article",
       publishedTime: post.publishedAt,
       authors: [post.author],
@@ -55,26 +67,26 @@ export default async function BlogPostPage({ params }: { params: Params }) {
   if (!hasLocale(lang)) notFound();
   const dict = await getDictionary(lang);
   const post = getPostBySlug(slug);
-  const Body = POST_BODIES[slug];
-  if (!post || !Body) notFound();
-
-  // The MDX body is currently English only. RU readers see the
-  // English content with a localized header + back-link. Once a post
-  // gets a RU translation, swap the Body lookup by locale.
-  const englishOnlyNote =
-    lang === "ru" && !post.locales.includes("ru") ? (
-      <p className="mb-8 rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
-        Этот пост пока только на английском. Перевод в работе.
-      </p>
-    ) : null;
+  const bodies = POST_BODIES[slug];
+  if (!post || !bodies) notFound();
+  // Pick the locale-specific body when available; fall back to EN with
+  // a translation-in-progress banner if not.
+  const Body = bodies[lang] ?? bodies.en;
+  const title = post.title[lang] ?? post.title.en;
+  const description = post.description[lang] ?? post.description.en;
+  const englishOnlyNote = !post.locales.includes(lang) ? (
+    <p className="mb-8 rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+      {dict.blog.english_only_note}
+    </p>
+  ) : null;
 
   return (
     <article className="container mx-auto px-4 py-12 max-w-2xl">
       <BreadcrumbListJsonLd
         items={[
-          { name: lang === "ru" ? "Главная" : "Home", url: `/${lang}` },
+          { name: dict.alternatives_template.home, url: `/${lang}` },
           { name: dict.blog.title, url: `/${lang}/blog` },
-          { name: post.title, url: `/${lang}/blog/${post.slug}` },
+          { name: title, url: `/${lang}/blog/${post.slug}` },
         ]}
       />
       <Link
@@ -86,13 +98,14 @@ export default async function BlogPostPage({ params }: { params: Params }) {
       {englishOnlyNote}
       <header className="mb-10">
         <time className="text-xs uppercase tracking-wider text-muted-foreground">
-          {post.publishedAt} · {post.readingMinutes} {dict.blog.min_read} · {post.author}
+          {post.publishedAt} · {post.readingMinutes} {dict.blog.min_read} ·{" "}
+          {post.author}
         </time>
         <h1 className="mt-2 text-4xl md:text-5xl font-bold tracking-tight leading-tight">
-          {post.title}
+          {title}
         </h1>
         <p className="mt-4 text-lg text-muted-foreground leading-relaxed">
-          {post.description}
+          {description}
         </p>
       </header>
       <div className="prose-content space-y-5 text-foreground leading-relaxed [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:tracking-tight [&_h2]:mt-10 [&_h2]:mb-3 [&_h3]:text-xl [&_h3]:font-semibold [&_h3]:mt-6 [&_h3]:mb-2 [&_p]:text-muted-foreground [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:space-y-2 [&_ul]:text-muted-foreground [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_strong]:text-foreground [&_a]:underline [&_a]:underline-offset-4 [&_a]:text-foreground hover:[&_a]:text-primary">

@@ -6511,8 +6511,8 @@ func (_c *MockStatusSubscriberRepo_Confirm_Call) RunAndReturn(run func(ctx conte
 }
 
 // Create provides a mock function for the type MockStatusSubscriberRepo
-func (_mock *MockStatusSubscriberRepo) Create(ctx context.Context, slug string, email string, confirmToken string, unsubscribeToken string) (*domain.StatusSubscriber, error) {
-	ret := _mock.Called(ctx, slug, email, confirmToken, unsubscribeToken)
+func (_mock *MockStatusSubscriberRepo) Create(ctx context.Context, slug string, email string, confirmToken string, unsubscribeToken string, locale *string) (*domain.StatusSubscriber, error) {
+	ret := _mock.Called(ctx, slug, email, confirmToken, unsubscribeToken, locale)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Create")
@@ -6520,18 +6520,18 @@ func (_mock *MockStatusSubscriberRepo) Create(ctx context.Context, slug string, 
 
 	var r0 *domain.StatusSubscriber
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, string) (*domain.StatusSubscriber, error)); ok {
-		return returnFunc(ctx, slug, email, confirmToken, unsubscribeToken)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, string, *string) (*domain.StatusSubscriber, error)); ok {
+		return returnFunc(ctx, slug, email, confirmToken, unsubscribeToken, locale)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, string) *domain.StatusSubscriber); ok {
-		r0 = returnFunc(ctx, slug, email, confirmToken, unsubscribeToken)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, string, *string) *domain.StatusSubscriber); ok {
+		r0 = returnFunc(ctx, slug, email, confirmToken, unsubscribeToken, locale)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*domain.StatusSubscriber)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string, string) error); ok {
-		r1 = returnFunc(ctx, slug, email, confirmToken, unsubscribeToken)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string, string, *string) error); ok {
+		r1 = returnFunc(ctx, slug, email, confirmToken, unsubscribeToken, locale)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -6549,11 +6549,12 @@ type MockStatusSubscriberRepo_Create_Call struct {
 //   - email string
 //   - confirmToken string
 //   - unsubscribeToken string
-func (_e *MockStatusSubscriberRepo_Expecter) Create(ctx interface{}, slug interface{}, email interface{}, confirmToken interface{}, unsubscribeToken interface{}) *MockStatusSubscriberRepo_Create_Call {
-	return &MockStatusSubscriberRepo_Create_Call{Call: _e.mock.On("Create", ctx, slug, email, confirmToken, unsubscribeToken)}
+//   - locale *string
+func (_e *MockStatusSubscriberRepo_Expecter) Create(ctx interface{}, slug interface{}, email interface{}, confirmToken interface{}, unsubscribeToken interface{}, locale interface{}) *MockStatusSubscriberRepo_Create_Call {
+	return &MockStatusSubscriberRepo_Create_Call{Call: _e.mock.On("Create", ctx, slug, email, confirmToken, unsubscribeToken, locale)}
 }
 
-func (_c *MockStatusSubscriberRepo_Create_Call) Run(run func(ctx context.Context, slug string, email string, confirmToken string, unsubscribeToken string)) *MockStatusSubscriberRepo_Create_Call {
+func (_c *MockStatusSubscriberRepo_Create_Call) Run(run func(ctx context.Context, slug string, email string, confirmToken string, unsubscribeToken string, locale *string)) *MockStatusSubscriberRepo_Create_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -6575,12 +6576,17 @@ func (_c *MockStatusSubscriberRepo_Create_Call) Run(run func(ctx context.Context
 		if args[4] != nil {
 			arg4 = args[4].(string)
 		}
+		var arg5 *string
+		if args[5] != nil {
+			arg5 = args[5].(*string)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
 			arg3,
 			arg4,
+			arg5,
 		)
 	})
 	return _c
@@ -6591,7 +6597,7 @@ func (_c *MockStatusSubscriberRepo_Create_Call) Return(statusSubscriber *domain.
 	return _c
 }
 
-func (_c *MockStatusSubscriberRepo_Create_Call) RunAndReturn(run func(ctx context.Context, slug string, email string, confirmToken string, unsubscribeToken string) (*domain.StatusSubscriber, error)) *MockStatusSubscriberRepo_Create_Call {
+func (_c *MockStatusSubscriberRepo_Create_Call) RunAndReturn(run func(ctx context.Context, slug string, email string, confirmToken string, unsubscribeToken string, locale *string) (*domain.StatusSubscriber, error)) *MockStatusSubscriberRepo_Create_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -6888,8 +6894,8 @@ func (_c *MockBlogSubscriberRepo_CountConfirmed_Call) RunAndReturn(run func(ctx 
 }
 
 // Create provides a mock function for the type MockBlogSubscriberRepo
-func (_mock *MockBlogSubscriberRepo) Create(ctx context.Context, email string, confirmToken string, unsubscribeToken string, source *string) (*domain.BlogSubscriber, error) {
-	ret := _mock.Called(ctx, email, confirmToken, unsubscribeToken, source)
+func (_mock *MockBlogSubscriberRepo) Create(ctx context.Context, email string, confirmToken string, unsubscribeToken string, source *string, locale *string) (*domain.BlogSubscriber, error) {
+	ret := _mock.Called(ctx, email, confirmToken, unsubscribeToken, source, locale)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Create")
@@ -6897,18 +6903,18 @@ func (_mock *MockBlogSubscriberRepo) Create(ctx context.Context, email string, c
 
 	var r0 *domain.BlogSubscriber
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, *string) (*domain.BlogSubscriber, error)); ok {
-		return returnFunc(ctx, email, confirmToken, unsubscribeToken, source)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, *string, *string) (*domain.BlogSubscriber, error)); ok {
+		return returnFunc(ctx, email, confirmToken, unsubscribeToken, source, locale)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, *string) *domain.BlogSubscriber); ok {
-		r0 = returnFunc(ctx, email, confirmToken, unsubscribeToken, source)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, *string, *string) *domain.BlogSubscriber); ok {
+		r0 = returnFunc(ctx, email, confirmToken, unsubscribeToken, source, locale)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*domain.BlogSubscriber)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string, *string) error); ok {
-		r1 = returnFunc(ctx, email, confirmToken, unsubscribeToken, source)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string, *string, *string) error); ok {
+		r1 = returnFunc(ctx, email, confirmToken, unsubscribeToken, source, locale)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -6926,11 +6932,12 @@ type MockBlogSubscriberRepo_Create_Call struct {
 //   - confirmToken string
 //   - unsubscribeToken string
 //   - source *string
-func (_e *MockBlogSubscriberRepo_Expecter) Create(ctx interface{}, email interface{}, confirmToken interface{}, unsubscribeToken interface{}, source interface{}) *MockBlogSubscriberRepo_Create_Call {
-	return &MockBlogSubscriberRepo_Create_Call{Call: _e.mock.On("Create", ctx, email, confirmToken, unsubscribeToken, source)}
+//   - locale *string
+func (_e *MockBlogSubscriberRepo_Expecter) Create(ctx interface{}, email interface{}, confirmToken interface{}, unsubscribeToken interface{}, source interface{}, locale interface{}) *MockBlogSubscriberRepo_Create_Call {
+	return &MockBlogSubscriberRepo_Create_Call{Call: _e.mock.On("Create", ctx, email, confirmToken, unsubscribeToken, source, locale)}
 }
 
-func (_c *MockBlogSubscriberRepo_Create_Call) Run(run func(ctx context.Context, email string, confirmToken string, unsubscribeToken string, source *string)) *MockBlogSubscriberRepo_Create_Call {
+func (_c *MockBlogSubscriberRepo_Create_Call) Run(run func(ctx context.Context, email string, confirmToken string, unsubscribeToken string, source *string, locale *string)) *MockBlogSubscriberRepo_Create_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -6952,12 +6959,17 @@ func (_c *MockBlogSubscriberRepo_Create_Call) Run(run func(ctx context.Context, 
 		if args[4] != nil {
 			arg4 = args[4].(*string)
 		}
+		var arg5 *string
+		if args[5] != nil {
+			arg5 = args[5].(*string)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
 			arg3,
 			arg4,
+			arg5,
 		)
 	})
 	return _c
@@ -6968,7 +6980,7 @@ func (_c *MockBlogSubscriberRepo_Create_Call) Return(blogSubscriber *domain.Blog
 	return _c
 }
 
-func (_c *MockBlogSubscriberRepo_Create_Call) RunAndReturn(run func(ctx context.Context, email string, confirmToken string, unsubscribeToken string, source *string) (*domain.BlogSubscriber, error)) *MockBlogSubscriberRepo_Create_Call {
+func (_c *MockBlogSubscriberRepo_Create_Call) RunAndReturn(run func(ctx context.Context, email string, confirmToken string, unsubscribeToken string, source *string, locale *string) (*domain.BlogSubscriber, error)) *MockBlogSubscriberRepo_Create_Call {
 	_c.Call.Return(run)
 	return _c
 }

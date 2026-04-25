@@ -18,12 +18,13 @@ func NewStatusSubscriberRepo(q *gen.Queries) *StatusSubscriberRepo {
 	return &StatusSubscriberRepo{q: q}
 }
 
-func (r *StatusSubscriberRepo) Create(ctx context.Context, slug, email, confirmToken, unsubscribeToken string) (*domain.StatusSubscriber, error) {
+func (r *StatusSubscriberRepo) Create(ctx context.Context, slug, email, confirmToken, unsubscribeToken string, locale *string) (*domain.StatusSubscriber, error) {
 	row, err := r.q.CreateStatusSubscriber(ctx, gen.CreateStatusSubscriberParams{
 		Slug:             slug,
 		Email:            email,
 		ConfirmToken:     confirmToken,
 		UnsubscribeToken: unsubscribeToken,
+		Locale:           locale,
 	})
 	if err != nil {
 		return nil, err
@@ -68,5 +69,6 @@ func rowToSub(row gen.StatusSubscriber) *domain.StatusSubscriber {
 		UnsubscribeToken: row.UnsubscribeToken,
 		ConfirmedAt:      pgtypeTimestamptzToPtr(row.ConfirmedAt),
 		CreatedAt:        row.CreatedAt,
+		Locale:           row.Locale,
 	}
 }

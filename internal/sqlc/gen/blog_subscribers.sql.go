@@ -13,7 +13,7 @@ const confirmBlogSubscriber = `-- name: ConfirmBlogSubscriber :one
 UPDATE blog_subscribers
 SET confirmed_at = NOW()
 WHERE confirm_token = $1 AND confirmed_at IS NULL
-RETURNING id, email, confirm_token, unsubscribe_token, confirmed_at, created_at, source
+RETURNING id, email, confirm_token, unsubscribe_token, confirmed_at, created_at, source, locale
 `
 
 func (q *Queries) ConfirmBlogSubscriber(ctx context.Context, confirmToken string) (BlogSubscriber, error) {
@@ -27,6 +27,7 @@ func (q *Queries) ConfirmBlogSubscriber(ctx context.Context, confirmToken string
 		&i.ConfirmedAt,
 		&i.CreatedAt,
 		&i.Source,
+		&i.Locale,
 	)
 	return i, err
 }
@@ -43,9 +44,9 @@ func (q *Queries) CountConfirmedBlogSubscribers(ctx context.Context) (int64, err
 }
 
 const createBlogSubscriber = `-- name: CreateBlogSubscriber :one
-INSERT INTO blog_subscribers (email, confirm_token, unsubscribe_token, source)
-VALUES ($1, $2, $3, $4)
-RETURNING id, email, confirm_token, unsubscribe_token, confirmed_at, created_at, source
+INSERT INTO blog_subscribers (email, confirm_token, unsubscribe_token, source, locale)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, email, confirm_token, unsubscribe_token, confirmed_at, created_at, source, locale
 `
 
 type CreateBlogSubscriberParams struct {
@@ -53,6 +54,7 @@ type CreateBlogSubscriberParams struct {
 	ConfirmToken     string  `json:"confirm_token"`
 	UnsubscribeToken string  `json:"unsubscribe_token"`
 	Source           *string `json:"source"`
+	Locale           *string `json:"locale"`
 }
 
 func (q *Queries) CreateBlogSubscriber(ctx context.Context, arg CreateBlogSubscriberParams) (BlogSubscriber, error) {
@@ -61,6 +63,7 @@ func (q *Queries) CreateBlogSubscriber(ctx context.Context, arg CreateBlogSubscr
 		arg.ConfirmToken,
 		arg.UnsubscribeToken,
 		arg.Source,
+		arg.Locale,
 	)
 	var i BlogSubscriber
 	err := row.Scan(
@@ -71,12 +74,13 @@ func (q *Queries) CreateBlogSubscriber(ctx context.Context, arg CreateBlogSubscr
 		&i.ConfirmedAt,
 		&i.CreatedAt,
 		&i.Source,
+		&i.Locale,
 	)
 	return i, err
 }
 
 const listConfirmedBlogSubscribers = `-- name: ListConfirmedBlogSubscribers :many
-SELECT id, email, confirm_token, unsubscribe_token, confirmed_at, created_at, source
+SELECT id, email, confirm_token, unsubscribe_token, confirmed_at, created_at, source, locale
 FROM blog_subscribers
 WHERE confirmed_at IS NOT NULL
 ORDER BY created_at DESC
@@ -99,6 +103,7 @@ func (q *Queries) ListConfirmedBlogSubscribers(ctx context.Context) ([]BlogSubsc
 			&i.ConfirmedAt,
 			&i.CreatedAt,
 			&i.Source,
+			&i.Locale,
 		); err != nil {
 			return nil, err
 		}
@@ -113,7 +118,7 @@ func (q *Queries) ListConfirmedBlogSubscribers(ctx context.Context) ([]BlogSubsc
 const unsubscribeBlogSubscriber = `-- name: UnsubscribeBlogSubscriber :one
 DELETE FROM blog_subscribers
 WHERE unsubscribe_token = $1
-RETURNING id, email, confirm_token, unsubscribe_token, confirmed_at, created_at, source
+RETURNING id, email, confirm_token, unsubscribe_token, confirmed_at, created_at, source, locale
 `
 
 func (q *Queries) UnsubscribeBlogSubscriber(ctx context.Context, unsubscribeToken string) (BlogSubscriber, error) {
@@ -127,6 +132,7 @@ func (q *Queries) UnsubscribeBlogSubscriber(ctx context.Context, unsubscribeToke
 		&i.ConfirmedAt,
 		&i.CreatedAt,
 		&i.Source,
+		&i.Locale,
 	)
 	return i, err
 }

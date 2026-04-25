@@ -16,21 +16,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import type { components } from "@/lib/openapi-types";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 type CustomDomain = components["schemas"]["CustomDomain"];
 
 export default function CustomDomainPage() {
+  const { dict, locale } = useLocale();
+  const t = dict.dashboard_custom_domain;
   const [domains, setDomains] = useState<CustomDomain[] | null>(null);
   const [hostname, setHostname] = useState("");
   const [busy, setBusy] = useState(false);
-
   const [reloadTick, setReloadTick] = useState(0);
 
   useEffect(() => {
-    // Cancellation flag: if the component unmounts or the effect
-    // re-runs before the fetch resolves, we must not setState on a
-    // dead tree. React 19's set-state-in-effect rule requires this
-    // guard even for async work.
     let cancelled = false;
     const load = async () => {
       const res = await fetch("/api/custom-domains", { credentials: "include" });
@@ -39,18 +37,13 @@ export default function CustomDomainPage() {
       }
     };
     void load();
-    // Status flips pending → validated → active on the server-side
-    // worker's 60s cycle. Re-poll so the user sees progress without a
-    // manual refresh.
-    const t = setInterval(() => void load(), 15_000);
+    const tm = setInterval(() => void load(), 15_000);
     return () => {
       cancelled = true;
-      clearInterval(t);
+      clearInterval(tm);
     };
   }, [reloadTick]);
 
-  // Legacy callers still invoke load() after mutations. Route those
-  // through a reload-tick so we stay on a single effect-driven path.
   const load = () => setReloadTick((n) => n + 1);
 
   async function submit(e: React.FormEvent) {
@@ -64,91 +57,84 @@ export default function CustomDomainPage() {
         credentials: "include",
       });
       if (res.status === 402) {
-        toast.error("Custom domains are a Pro feature.");
+        toast.error(t.pro_required);
         return;
       }
       if (!res.ok) {
         const body = await res.json().catch(() => null);
-        toast.error(body?.error?.message ?? `Request failed (HTTP ${res.status}).`);
+        toast.error(body?.error?.message ?? `${t.add_failed} (HTTP ${res.status}).`);
         return;
       }
       setHostname("");
-      toast.success("Domain registered. Follow the CNAME instructions below.");
-      await load();
+      toast.success(t.added);
+      load();
     } finally {
       setBusy(false);
     }
   }
 
   async function remove(id: number) {
+    if (!confirm(t.remove_confirm)) return;
     const res = await fetch(`/api/custom-domains/${id}`, {
       method: "DELETE",
       credentials: "include",
     });
     if (res.ok) {
-      toast.success("Domain removed.");
-      await load();
+      toast.success(t.removed);
+      load();
     } else {
-      toast.error(`Delete failed (HTTP ${res.status}).`);
+      toast.error(`${t.remove_failed} (HTTP ${res.status}).`);
     }
   }
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-3xl">
       <Link
-        href="/dashboard"
+        href={`/${locale}/dashboard`}
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-6"
       >
-        <ArrowLeft className="h-3.5 w-3.5" /> Back to dashboard
+        <ArrowLeft className="h-3.5 w-3.5" /> {dict.common.back_to_dashboard}
       </Link>
 
       <div className="flex items-center gap-3">
         <div className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
           <Globe className="h-5 w-5" />
         </div>
-        <h1 className="text-2xl font-bold tracking-tight">Custom domain</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{t.title}</h1>
       </div>
-      <p className="mt-3 text-sm text-muted-foreground max-w-xl">
-        Point <code>status.yourcompany.com</code> at PingCast via a CNAME +
-        a one-time <code>.well-known</code> probe. We&apos;ll validate and
-        issue a TLS cert automatically. Pro feature.
-      </p>
+      <p className="mt-3 text-sm text-muted-foreground max-w-xl">{t.subtitle}</p>
 
       <form
         onSubmit={submit}
         className="mt-8 rounded-lg border border-border/60 bg-card p-5 space-y-4"
       >
+        <h2 className="text-sm font-semibold">{t.add_heading}</h2>
         <div className="space-y-2">
-          <Label htmlFor="hostname">Hostname</Label>
+          <Label htmlFor="hostname">{t.hostname_label}</Label>
           <Input
             id="hostname"
             type="text"
-            placeholder="status.yourcompany.com"
+            placeholder={t.hostname_placeholder}
             value={hostname}
             onChange={(e) => setHostname(e.target.value)}
             required
             disabled={busy}
           />
-          <p className="text-xs text-muted-foreground">
-            Lowercase, no path, no port. Subdomains are fine; apex claims
-            under our own domain are rejected.
-          </p>
+          <p className="text-xs text-muted-foreground">{t.hostname_help}</p>
         </div>
         <Button type="submit" disabled={busy || !hostname}>
-          {busy ? "Requesting…" : "Add domain"}
+          {busy ? t.adding : t.add_button}
         </Button>
       </form>
 
       <section className="mt-10">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-          Your domains
+          {t.list_heading}
         </h2>
         {domains === null ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <p className="text-sm text-muted-foreground">{dict.common.loading}</p>
         ) : domains.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No domains registered yet. Add one above.
-          </p>
+          <p className="text-sm text-muted-foreground">{t.list_empty}</p>
         ) : (
           <ul className="space-y-4">
             {domains.map((d) => (
@@ -157,23 +143,20 @@ export default function CustomDomainPage() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <code className="font-medium">{d.hostname}</code>
-                      <StatusPill status={d.status} />
+                      <StatusPill status={d.status} t={t} />
                     </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Registered {new Date(d.created_at).toLocaleString()}
-                    </p>
                   </div>
                   <button
                     onClick={() => remove(d.id)}
                     className="text-muted-foreground hover:text-destructive transition-colors"
-                    aria-label={`Remove ${d.hostname}`}
+                    aria-label={`${t.remove} ${d.hostname}`}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
 
                 {d.status === "pending" || d.status === "failed" ? (
-                  <Instructions domain={d} />
+                  <Instructions domain={d} t={t} />
                 ) : null}
 
                 {d.last_error ? (
@@ -191,25 +174,34 @@ export default function CustomDomainPage() {
   );
 }
 
-function StatusPill({ status }: { status: CustomDomain["status"] }) {
-  const cfg: Record<CustomDomain["status"], { label: string; cls: string; icon: React.ReactNode }> = {
+function StatusPill({
+  status,
+  t,
+}: {
+  status: CustomDomain["status"];
+  t: ReturnType<typeof useLocale>["dict"]["dashboard_custom_domain"];
+}) {
+  const cfg: Record<
+    CustomDomain["status"],
+    { label: string; cls: string; icon: React.ReactNode }
+  > = {
     pending: {
-      label: "Pending",
+      label: t.status_pending,
       cls: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
       icon: <Clock className="h-3 w-3" />,
     },
     validated: {
-      label: "Validated · issuing cert",
+      label: t.status_validated,
       cls: "bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30",
       icon: <Loader2 className="h-3 w-3 animate-spin" />,
     },
     active: {
-      label: "Active",
+      label: t.status_active,
       cls: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
       icon: <CheckCircle2 className="h-3 w-3" />,
     },
     failed: {
-      label: "Failed",
+      label: t.status_failed,
       cls: "bg-red-500/15 text-red-700 dark:text-red-300 border-red-500/30",
       icon: <AlertTriangle className="h-3 w-3" />,
     },
@@ -225,34 +217,32 @@ function StatusPill({ status }: { status: CustomDomain["status"] }) {
   );
 }
 
-function Instructions({ domain }: { domain: CustomDomain }) {
-  const edgeHost = "edge.pingcast.io"; // TODO: source from env once the edge is real
+function Instructions({
+  domain,
+  t,
+}: {
+  domain: CustomDomain;
+  t: ReturnType<typeof useLocale>["dict"]["dashboard_custom_domain"];
+}) {
   return (
     <div className="mt-4 rounded-md bg-muted/40 p-4 space-y-4 text-sm">
+      <p className="font-medium">{t.instructions_heading}</p>
+      <p className="text-xs text-muted-foreground">{t.instructions_intro}</p>
       <div>
-        <p className="font-medium">Step 1 — Set a CNAME at your DNS</p>
-        <pre className="mt-2 overflow-x-auto rounded border border-border/60 bg-background p-3 text-xs font-mono">
-          <code>{`CNAME  ${domain.hostname}  →  ${edgeHost}`}</code>
-        </pre>
+        <p className="font-medium">{t.instructions_cname_label}</p>
+        <p className="text-xs text-muted-foreground mt-1">{t.instructions_cname_value}</p>
       </div>
       <div>
-        <p className="font-medium">
-          Step 2 — Serve this token at{" "}
-          <code>/.well-known/pingcast/{domain.validation_token}</code>
-        </p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Token body (just this string, no headers other than Content-Type:
-          text/plain):
-        </p>
+        <p className="font-medium">{t.instructions_token_label}</p>
+        <p className="text-xs text-muted-foreground mt-1">{t.instructions_token_value}</p>
+        <pre className="mt-2 overflow-x-auto rounded border border-border/60 bg-background p-3 text-xs font-mono">
+          <code>{`/.well-known/pingcast/${domain.validation_token}`}</code>
+        </pre>
         <pre className="mt-2 overflow-x-auto rounded border border-border/60 bg-background p-3 text-xs font-mono">
           <code>{domain.validation_token}</code>
         </pre>
-        <p className="mt-2 text-xs text-muted-foreground">
-          Our validation worker probes this every 60 seconds. As soon as
-          it matches, status flips to <em>validated</em> and we request
-          a TLS cert.
-        </p>
       </div>
+      <p className="text-xs text-muted-foreground">{t.instructions_check}</p>
     </div>
   );
 }

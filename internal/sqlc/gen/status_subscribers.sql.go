@@ -13,7 +13,7 @@ const confirmStatusSubscriber = `-- name: ConfirmStatusSubscriber :one
 UPDATE status_subscribers
 SET confirmed_at = NOW()
 WHERE confirm_token = $1 AND confirmed_at IS NULL
-RETURNING id, slug, email, confirm_token, unsubscribe_token, confirmed_at, created_at
+RETURNING id, slug, email, confirm_token, unsubscribe_token, confirmed_at, created_at, locale
 `
 
 func (q *Queries) ConfirmStatusSubscriber(ctx context.Context, confirmToken string) (StatusSubscriber, error) {
@@ -27,21 +27,23 @@ func (q *Queries) ConfirmStatusSubscriber(ctx context.Context, confirmToken stri
 		&i.UnsubscribeToken,
 		&i.ConfirmedAt,
 		&i.CreatedAt,
+		&i.Locale,
 	)
 	return i, err
 }
 
 const createStatusSubscriber = `-- name: CreateStatusSubscriber :one
-INSERT INTO status_subscribers (slug, email, confirm_token, unsubscribe_token)
-VALUES ($1, $2, $3, $4)
-RETURNING id, slug, email, confirm_token, unsubscribe_token, confirmed_at, created_at
+INSERT INTO status_subscribers (slug, email, confirm_token, unsubscribe_token, locale)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, slug, email, confirm_token, unsubscribe_token, confirmed_at, created_at, locale
 `
 
 type CreateStatusSubscriberParams struct {
-	Slug             string `json:"slug"`
-	Email            string `json:"email"`
-	ConfirmToken     string `json:"confirm_token"`
-	UnsubscribeToken string `json:"unsubscribe_token"`
+	Slug             string  `json:"slug"`
+	Email            string  `json:"email"`
+	ConfirmToken     string  `json:"confirm_token"`
+	UnsubscribeToken string  `json:"unsubscribe_token"`
+	Locale           *string `json:"locale"`
 }
 
 func (q *Queries) CreateStatusSubscriber(ctx context.Context, arg CreateStatusSubscriberParams) (StatusSubscriber, error) {
@@ -50,6 +52,7 @@ func (q *Queries) CreateStatusSubscriber(ctx context.Context, arg CreateStatusSu
 		arg.Email,
 		arg.ConfirmToken,
 		arg.UnsubscribeToken,
+		arg.Locale,
 	)
 	var i StatusSubscriber
 	err := row.Scan(
@@ -60,12 +63,13 @@ func (q *Queries) CreateStatusSubscriber(ctx context.Context, arg CreateStatusSu
 		&i.UnsubscribeToken,
 		&i.ConfirmedAt,
 		&i.CreatedAt,
+		&i.Locale,
 	)
 	return i, err
 }
 
 const listConfirmedSubscribersBySlug = `-- name: ListConfirmedSubscribersBySlug :many
-SELECT id, slug, email, confirm_token, unsubscribe_token, confirmed_at, created_at
+SELECT id, slug, email, confirm_token, unsubscribe_token, confirmed_at, created_at, locale
 FROM status_subscribers
 WHERE slug = $1 AND confirmed_at IS NOT NULL
 ORDER BY created_at
@@ -88,6 +92,7 @@ func (q *Queries) ListConfirmedSubscribersBySlug(ctx context.Context, slug strin
 			&i.UnsubscribeToken,
 			&i.ConfirmedAt,
 			&i.CreatedAt,
+			&i.Locale,
 		); err != nil {
 			return nil, err
 		}
@@ -102,7 +107,7 @@ func (q *Queries) ListConfirmedSubscribersBySlug(ctx context.Context, slug strin
 const unsubscribeStatusSubscriber = `-- name: UnsubscribeStatusSubscriber :one
 DELETE FROM status_subscribers
 WHERE unsubscribe_token = $1
-RETURNING id, slug, email, confirm_token, unsubscribe_token, confirmed_at, created_at
+RETURNING id, slug, email, confirm_token, unsubscribe_token, confirmed_at, created_at, locale
 `
 
 func (q *Queries) UnsubscribeStatusSubscriber(ctx context.Context, unsubscribeToken string) (StatusSubscriber, error) {
@@ -116,6 +121,7 @@ func (q *Queries) UnsubscribeStatusSubscriber(ctx context.Context, unsubscribeTo
 		&i.UnsubscribeToken,
 		&i.ConfirmedAt,
 		&i.CreatedAt,
+		&i.Locale,
 	)
 	return i, err
 }

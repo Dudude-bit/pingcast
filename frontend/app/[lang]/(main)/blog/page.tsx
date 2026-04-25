@@ -37,7 +37,7 @@ export default async function BlogIndexPage({ params }: { params: Params }) {
     <div className="container mx-auto px-4 py-12 max-w-3xl">
       <BreadcrumbListJsonLd
         items={[
-          { name: lang === "ru" ? "Главная" : "Home", url: `/${lang}` },
+          { name: dict.alternatives_template.home, url: `/${lang}` },
           { name: b.title, url: `/${lang}/blog` },
         ]}
       />
@@ -55,11 +55,7 @@ export default async function BlogIndexPage({ params }: { params: Params }) {
       </div>
 
       {posts.length === 0 ? (
-        <p className="mt-12 text-muted-foreground">
-          {lang === "ru"
-            ? "Пока нет постов на русском. Загляните во вкладку English или подпишитесь на рассылку — пинганём как только переведём."
-            : "No posts in this language yet."}
-        </p>
+        <p className="mt-12 text-muted-foreground">{b.empty}</p>
       ) : (
         <ul className="mt-12 space-y-8">
           {posts.map((p) => (
@@ -72,10 +68,10 @@ export default async function BlogIndexPage({ params }: { params: Params }) {
                   {p.publishedAt} · {p.readingMinutes} {b.min_read} · {p.author}
                 </time>
                 <h2 className="mt-2 text-2xl font-semibold tracking-tight group-hover:text-primary transition-colors">
-                  {p.title}
+                  {p.title[lang] ?? p.title.en}
                 </h2>
                 <p className="mt-2 text-muted-foreground leading-relaxed">
-                  {p.description}
+                  {p.description[lang] ?? p.description.en}
                 </p>
                 <span className="mt-3 inline-block text-sm text-primary underline underline-offset-4">
                   {b.read_more}

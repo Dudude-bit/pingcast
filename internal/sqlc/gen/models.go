@@ -120,6 +120,7 @@ type BlogSubscriber struct {
 	ConfirmedAt      pgtype.Timestamptz `json:"confirmed_at"`
 	CreatedAt        time.Time          `json:"created_at"`
 	Source           *string            `json:"source"`
+	Locale           *string            `json:"locale"`
 }
 
 type CheckResult struct {
@@ -264,6 +265,7 @@ type StatusSubscriber struct {
 	UnsubscribeToken string             `json:"unsubscribe_token"`
 	ConfirmedAt      pgtype.Timestamptz `json:"confirmed_at"`
 	CreatedAt        time.Time          `json:"created_at"`
+	Locale           *string            `json:"locale"`
 }
 
 type User struct {

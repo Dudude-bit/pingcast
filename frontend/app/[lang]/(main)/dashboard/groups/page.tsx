@@ -15,10 +15,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import type { components } from "@/lib/openapi-types";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 type MonitorGroup = components["schemas"]["MonitorGroup"];
 
 export default function GroupsDashboardPage() {
+  const { dict, locale } = useLocale();
+  const t = dict.dashboard_groups;
   const [groups, setGroups] = useState<MonitorGroup[] | null>(null);
   const [name, setName] = useState("");
   const [ordering, setOrdering] = useState<number | "">(0);
@@ -26,11 +29,9 @@ export default function GroupsDashboardPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [editOrdering, setEditOrdering] = useState(0);
-
   const [reloadTick, setReloadTick] = useState(0);
 
   useEffect(() => {
-    // Cancellation-guarded fetch per React 19's set-state-in-effect rule.
     let cancelled = false;
     (async () => {
       const res = await fetch("/api/monitor-groups", { credentials: "include" });
@@ -43,8 +44,6 @@ export default function GroupsDashboardPage() {
     };
   }, [reloadTick]);
 
-  // Mutations still want to trigger a reload — bump the tick instead
-  // of calling the loader directly.
   const load = () => setReloadTick((n) => n + 1);
 
   async function create(e: React.FormEvent) {
@@ -58,17 +57,17 @@ export default function GroupsDashboardPage() {
         credentials: "include",
       });
       if (res.status === 402) {
-        toast.error("Monitor groups are a Pro feature.");
+        toast.error(dict.dashboard_branding.pro_required);
         return;
       }
       if (!res.ok) {
-        toast.error(`Create failed (HTTP ${res.status}).`);
+        toast.error(`${t.create_failed} (HTTP ${res.status}).`);
         return;
       }
       setName("");
       setOrdering(0);
-      toast.success("Group created.");
-      await load();
+      toast.success(t.created);
+      load();
     } finally {
       setBusy(false);
     }
@@ -82,58 +81,56 @@ export default function GroupsDashboardPage() {
       credentials: "include",
     });
     if (res.ok) {
-      toast.success("Saved.");
+      toast.success(dict.common.save);
       setEditingId(null);
-      await load();
+      load();
     } else {
-      toast.error(`Save failed (HTTP ${res.status}).`);
+      toast.error(`${dict.common.error_generic} (HTTP ${res.status}).`);
     }
   }
 
   async function remove(id: number) {
+    if (!confirm(t.delete_confirm)) return;
     const res = await fetch(`/api/monitor-groups/${id}`, {
       method: "DELETE",
       credentials: "include",
     });
     if (res.ok) {
-      toast.success("Group deleted.");
-      await load();
+      toast.success(t.deleted);
+      load();
     } else {
-      toast.error(`Delete failed (HTTP ${res.status}).`);
+      toast.error(`${t.delete_failed} (HTTP ${res.status}).`);
     }
   }
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-3xl">
       <Link
-        href="/dashboard"
+        href={`/${locale}/dashboard`}
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-6"
       >
-        <ArrowLeft className="h-3.5 w-3.5" /> Back to dashboard
+        <ArrowLeft className="h-3.5 w-3.5" /> {dict.common.back_to_dashboard}
       </Link>
 
       <div className="flex items-center gap-3">
         <div className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
           <FolderTree className="h-5 w-5" />
         </div>
-        <h1 className="text-2xl font-bold tracking-tight">Monitor groups</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{t.title}</h1>
       </div>
-      <p className="mt-3 text-sm text-muted-foreground max-w-xl">
-        Group monitors into collapsible sections on your public status
-        page. Pro feature. Deleting a group unparents its monitors (they
-        move to the ungrouped default section, not deleted).
-      </p>
+      <p className="mt-3 text-sm text-muted-foreground max-w-xl">{t.subtitle}</p>
 
       <form
         onSubmit={create}
         className="mt-8 rounded-lg border border-border/60 bg-card p-5 space-y-4"
       >
+        <h2 className="text-sm font-semibold">{t.add_heading}</h2>
         <div className="grid sm:grid-cols-[1fr_160px] gap-3">
           <div className="space-y-2">
-            <Label htmlFor="name">Name</Label>
+            <Label htmlFor="name">{t.name_label}</Label>
             <Input
               id="name"
-              placeholder="Public API"
+              placeholder={t.name_placeholder}
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
@@ -141,7 +138,7 @@ export default function GroupsDashboardPage() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="ordering">Order</Label>
+            <Label htmlFor="ordering">{t.ordering_label}</Label>
             <Input
               id="ordering"
               type="number"
@@ -153,23 +150,22 @@ export default function GroupsDashboardPage() {
               }
               disabled={busy}
             />
+            <p className="text-xs text-muted-foreground">{t.ordering_help}</p>
           </div>
         </div>
         <Button type="submit" disabled={busy || !name}>
-          {busy ? "Creating…" : "Create group"}
+          {busy ? t.creating : t.create}
         </Button>
       </form>
 
       <section className="mt-10">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-          Your groups
+          {t.list_heading}
         </h2>
         {groups === null ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <p className="text-sm text-muted-foreground">{dict.common.loading}</p>
         ) : groups.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No groups yet. Create one above to start organising monitors.
-          </p>
+          <p className="text-sm text-muted-foreground">{t.list_empty}</p>
         ) : (
           <ul className="space-y-3">
             {groups.map((g) => {
@@ -195,8 +191,7 @@ export default function GroupsDashboardPage() {
                     <div className="min-w-0">
                       <div className="font-medium">{g.name}</div>
                       <div className="text-xs text-muted-foreground mt-0.5">
-                        Order {g.ordering} · created{" "}
-                        {new Date(g.created_at).toLocaleDateString()}
+                        {t.ordering_label} {g.ordering}
                       </div>
                     </div>
                   )}
@@ -207,14 +202,14 @@ export default function GroupsDashboardPage() {
                         <button
                           onClick={() => save(g.id)}
                           className="text-primary hover:text-primary/80"
-                          aria-label="Save"
+                          aria-label={dict.common.save}
                         >
                           <Check className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => setEditingId(null)}
                           className="text-muted-foreground hover:text-foreground"
-                          aria-label="Cancel"
+                          aria-label={dict.common.cancel}
                         >
                           <X className="h-4 w-4" />
                         </button>
@@ -228,14 +223,14 @@ export default function GroupsDashboardPage() {
                             setEditOrdering(g.ordering);
                           }}
                           className="text-muted-foreground hover:text-foreground"
-                          aria-label={`Edit ${g.name}`}
+                          aria-label={`${dict.common.edit} ${g.name}`}
                         >
                           <Pencil className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => remove(g.id)}
                           className="text-muted-foreground hover:text-destructive"
-                          aria-label={`Delete ${g.name}`}
+                          aria-label={`${dict.common.delete} ${g.name}`}
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
