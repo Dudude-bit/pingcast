@@ -113,6 +113,13 @@ export async function proxy(req: NextRequest) {
     }
   }
 
+  // Pass the resolved pathname downstream as a request header so
+  // not-found.tsx and other Next special files (which don't receive
+  // route params) can read the URL via headers() and pick the right
+  // locale from a /<lang>/ prefix.
+  const downstreamHeaders = new Headers(req.headers);
+  downstreamHeaders.set("x-pathname", pathname);
+
   // --- Auth gate ---
   // Strip the leading /<lang> for the protected-prefix check so adding
   // a locale to the URL doesn't unexpectedly bypass auth.
@@ -133,10 +140,14 @@ export async function proxy(req: NextRequest) {
     (p) => bareForAuth === p || bareForAuth.startsWith(`${p}/`),
   );
 
-  if (!isProtected) return NextResponse.next();
+  if (!isProtected) {
+    return NextResponse.next({ request: { headers: downstreamHeaders } });
+  }
 
   const hasSession = req.cookies.has("session_id");
-  if (hasSession) return NextResponse.next();
+  if (hasSession) {
+    return NextResponse.next({ request: { headers: downstreamHeaders } });
+  }
 
   // Redirect to /<lang>/login preserving locale.
   const lang =
