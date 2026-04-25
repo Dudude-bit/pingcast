@@ -38,31 +38,7 @@ function GithubIcon({ className }: { className?: string }) {
 import { buttonVariants } from "@/components/ui/button";
 import { LandingDemo } from "@/components/site/landing-demo";
 import { FaqPageJsonLd } from "@/components/seo/jsonld";
-
-// Single source of truth for the FAQ — rendered visibly below and as
-// FAQPage JSON-LD so Google can surface rich snippets in SERP.
-const FAQS = [
-  {
-    q: "Is there a free tier?",
-    a: "Yes. 5 monitors, 1-minute checks, unlimited status pages, and Telegram + email + webhook notifications — all free, no credit card.",
-  },
-  {
-    q: "How quickly do alerts fire?",
-    a: "Checks run at your configured interval (down to 1 minute). A monitor is only marked down after the configured consecutive-failure threshold, so a single flaky check won't page you.",
-  },
-  {
-    q: "Can I embed my status page?",
-    a: "Every monitor you mark public appears on /status/your-slug. The page is SSR + ISR with a 30-second revalidate — share the URL anywhere, embed it in an iframe, or point your own subdomain at it.",
-  },
-  {
-    q: "What happens if PingCast itself goes down?",
-    a: "The checker is a separate service from the API and dashboard. Alerts keep firing even if the dashboard is unreachable. For full independence, self-host — the stack is a single docker-compose file.",
-  },
-  {
-    q: "Is the data portable?",
-    a: "Yes. Every field exposed in the dashboard is available over the REST API, and the database is standard Postgres. You can self-host the whole stack or export whenever you want.",
-  },
-];
+import { useLocale } from "@/components/i18n/locale-provider";
 
 const jsonLd = {
   "@context": "https://schema.org",
@@ -72,11 +48,7 @@ const jsonLd = {
   operatingSystem: "Web",
   description:
     "Branded status pages for SaaS plus uptime monitoring — custom domain, incident timeline, Atlassian Statuspage importer. Free tier; Pro from $9/mo (founder's price).",
-  offers: {
-    "@type": "Offer",
-    price: "9",
-    priceCurrency: "USD",
-  },
+  offers: { "@type": "Offer", price: "9", priceCurrency: "USD" },
   featureList: [
     "Branded public status pages",
     "Custom domain support",
@@ -89,6 +61,58 @@ const jsonLd = {
 };
 
 export default function LandingPage() {
+  const { dict, locale } = useLocale();
+  const l = dict.landing;
+  const FAQS = [
+    {
+      q: locale === "ru" ? "Есть бесплатный тариф?" : "Is there a free tier?",
+      a:
+        locale === "ru"
+          ? "Да. 5 мониторов, чек раз в минуту, безлимит публичных статус-страниц, уведомления в Telegram + email + webhook — всё бесплатно, без карты."
+          : "Yes. 5 monitors, 1-minute checks, unlimited status pages, and Telegram + email + webhook notifications — all free, no credit card.",
+    },
+    {
+      q:
+        locale === "ru"
+          ? "Как быстро приходят алерты?"
+          : "How quickly do alerts fire?",
+      a:
+        locale === "ru"
+          ? "Чеки идут с настроенным интервалом (минимум 1 минута). Монитор переходит в DOWN только после порога подряд провалов — один флаппи-чек не разбудит."
+          : "Checks run at your configured interval (down to 1 minute). A monitor is only marked down after the configured consecutive-failure threshold, so a single flaky check won't page you.",
+    },
+    {
+      q:
+        locale === "ru"
+          ? "Можно встроить статус-страницу в свой сайт?"
+          : "Can I embed my status page?",
+      a:
+        locale === "ru"
+          ? "Каждый монитор который вы пометили как public появляется на /status/your-slug. Страница на SSR + ISR с revalidate каждые 30 секунд — делитесь URL'ом, встраивайте в iframe или направляйте свой поддомен."
+          : "Every monitor you mark public appears on /status/your-slug. The page is SSR + ISR with a 30-second revalidate — share the URL anywhere, embed it in an iframe, or point your own subdomain at it.",
+    },
+    {
+      q:
+        locale === "ru"
+          ? "Что будет если PingCast сам упадёт?"
+          : "What happens if PingCast itself goes down?",
+      a:
+        locale === "ru"
+          ? "Чекер — отдельный сервис от API и дашборда. Алерты продолжают срабатывать даже когда дашборд недоступен. Для полной независимости — self-host: вся инфра в одном docker-compose."
+          : "The checker is a separate service from the API and dashboard. Alerts keep firing even if the dashboard is unreachable. For full independence, self-host — the stack is a single docker-compose file.",
+    },
+    {
+      q:
+        locale === "ru"
+          ? "Данные portable?"
+          : "Is the data portable?",
+      a:
+        locale === "ru"
+          ? "Да. Каждое поле из дашборда доступно через REST API, БД — стандартный Postgres. Можете self-host'нуть всё или экспортировать в любой момент."
+          : "Yes. Every field exposed in the dashboard is available over the REST API, and the database is standard Postgres. You can self-host the whole stack or export whenever you want.",
+    },
+  ];
+
   return (
     <div className="container mx-auto px-4">
       <script
@@ -103,7 +127,7 @@ export default function LandingPage() {
           className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-card px-3 py-1 text-xs text-muted-foreground"
         >
           <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          Live now · 5 monitors free
+          {l.hero_eyebrow}
         </motion.div>
 
         <motion.h1
@@ -112,10 +136,10 @@ export default function LandingPage() {
           transition={{ delay: 0.1, duration: 0.6, ease: "easeOut" }}
           className="mt-6 text-4xl md:text-6xl font-bold tracking-tight leading-[1.1]"
         >
-          Branded status pages for SaaS,
+          {l.hero_headline},
           <br />
           <span className="bg-gradient-to-r from-blue-600 via-cyan-500 to-teal-500 bg-clip-text text-transparent">
-            at a third of Atlassian&apos;s price.
+            {l.hero_sub_em}
           </span>
         </motion.h1>
 
@@ -125,9 +149,7 @@ export default function LandingPage() {
           transition={{ delay: 0.2, duration: 0.6, ease: "easeOut" }}
           className="mt-6 text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto"
         >
-          Custom-domain status page plus uptime monitoring in one SaaS. Open
-          source under the hood. From <span className="font-semibold">$9/mo</span>{" "}
-          founder&apos;s price.
+          {l.hero_sub}
         </motion.p>
 
         <motion.div
@@ -137,10 +159,10 @@ export default function LandingPage() {
           className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4"
         >
           <Link
-            href="/register?intent=pro"
+            href={`/${locale}/register?intent=pro`}
             className={buttonVariants({ size: "lg" })}
           >
-            Spin up a status page
+            {l.hero_cta_primary}
             <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
           <Link
@@ -150,135 +172,137 @@ export default function LandingPage() {
             className={buttonVariants({ variant: "outline", size: "lg" })}
           >
             <GithubIcon className="mr-2 h-4 w-4" />
-            Self-host for free
+            {l.hero_cta_secondary}
           </Link>
         </motion.div>
-        <p className="mt-4 text-xs text-muted-foreground">
-          No credit card · status.yourcompany.com · MIT-licensed stack
-        </p>
+        <p className="mt-4 text-xs text-muted-foreground">{l.hero_microcopy}</p>
       </section>
 
       <section className="pb-16">
         <LandingDemo />
       </section>
 
-      {/* Trust bar — anchors the claims above with concrete numbers. */}
       <section className="border-y border-border/60 bg-muted/30">
         <div className="container mx-auto max-w-5xl py-8 px-4 grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
-          <Stat label="Check frequency" value="30s" hint="minimum interval" />
-          <Stat label="Alert latency" value="< 10s" hint="p95 Telegram delivery" />
-          <Stat label="Open source" value="MIT" hint="self-host in one command" />
-          <Stat label="Stack" value="Go + Postgres" hint="no exotic dependencies" />
+          <Stat
+            label={locale === "ru" ? "Интервал чека" : "Check frequency"}
+            value="30s"
+            hint={locale === "ru" ? "минимум" : "minimum interval"}
+          />
+          <Stat
+            label={locale === "ru" ? "Латенси алерта" : "Alert latency"}
+            value="< 10s"
+            hint={locale === "ru" ? "p95 Telegram" : "p95 Telegram delivery"}
+          />
+          <Stat
+            label="Open source"
+            value="MIT"
+            hint={locale === "ru" ? "self-host одной командой" : "self-host in one command"}
+          />
+          <Stat
+            label={locale === "ru" ? "Стек" : "Stack"}
+            value="Go + Postgres"
+            hint={locale === "ru" ? "без экзотики" : "no exotic dependencies"}
+          />
         </div>
       </section>
 
-      {/* How it works — three-step arc from register → monitor → alert. */}
       <section className="py-20 max-w-5xl mx-auto">
         <h2 className="text-center text-2xl md:text-3xl font-bold tracking-tight">
-          From zero to page in 60 seconds
+          {locale === "ru" ? "От нуля до страницы за 60 секунд" : "From zero to page in 60 seconds"}
         </h2>
         <p className="mt-3 text-center text-muted-foreground max-w-xl mx-auto">
-          No install scripts, no agents, no YAML. Three clicks and you&apos;re
-          watching production.
+          {locale === "ru"
+            ? "Без install-скриптов, без агентов, без YAML. Три клика — и вы смотрите на прод."
+            : "No install scripts, no agents, no YAML. Three clicks and you're watching production."}
         </p>
         <div className="mt-12 grid gap-6 md:grid-cols-3">
           <StepCard
             n="01"
             icon={<Rocket className="h-5 w-5" />}
-            title="Register"
-            body="Pick an email, a password, and the slug for your public status page. Done in 20 seconds."
+            title={locale === "ru" ? "Регистрация" : "Register"}
+            body={
+              locale === "ru"
+                ? "Email, пароль и slug для публичной страницы. 20 секунд."
+                : "Pick an email, a password, and the slug for your public status page. Done in 20 seconds."
+            }
           />
           <StepCard
             n="02"
             icon={<Radio className="h-5 w-5" />}
-            title="Add a monitor"
-            body="Paste a URL. We start checking on the next tick — HTTP, status code, body keyword, TLS validity."
+            title={locale === "ru" ? "Добавьте монитор" : "Add a monitor"}
+            body={
+              locale === "ru"
+                ? "Вставьте URL. Чек на следующем тике — HTTP, статус-код, ключевое слово в теле, валидность TLS."
+                : "Paste a URL. We start checking on the next tick — HTTP, status code, body keyword, TLS validity."
+            }
           />
           <StepCard
             n="03"
             icon={<Plug className="h-5 w-5" />}
-            title="Connect a channel"
-            body="Telegram bot, SMTP, or webhook. A failed check fires after your threshold, with severity and runbook link."
+            title={locale === "ru" ? "Подключите канал" : "Connect a channel"}
+            body={
+              locale === "ru"
+                ? "Telegram-бот, SMTP или webhook. Алерт срабатывает после порога с severity и runbook-линком."
+                : "Telegram bot, SMTP, or webhook. A failed check fires after your threshold, with severity and runbook link."
+            }
           />
         </div>
       </section>
 
-      <section className="py-16 grid gap-6 md:grid-cols-3 max-w-5xl mx-auto">
+      <section
+        id="features"
+        className="py-16 grid gap-6 md:grid-cols-3 max-w-5xl mx-auto"
+      >
         <FeatureCard
           icon={<Globe className="h-6 w-6" />}
-          title="Custom domain + branding"
-          body="Point status.yourcompany.com at us via a CNAME. Upload your logo, pick your accent colour, ship a status page that looks like part of your product."
+          title={l.feature_status_page_title}
+          body={l.feature_status_page_body}
         />
         <FeatureCard
           icon={<LineChart className="h-6 w-6" />}
-          title="Incident updates with state timeline"
-          body="Investigating → identified → monitoring → resolved. Post narrative updates and your customers see the timeline render in real time."
+          title={l.feature_uptime_title}
+          body={l.feature_uptime_body}
         />
         <FeatureCard
           icon={<Plug className="h-6 w-6" />}
-          title="Migrate from Atlassian in one click"
-          body="Paste your Statuspage export, we re-create your components, incidents, and full update history. Under 60 seconds, zero downtime."
+          title={l.feature_atlassian_title}
+          body={l.feature_atlassian_body}
         />
         <FeatureCard
           icon={<Zap className="h-6 w-6" />}
-          title="30-second uptime monitoring"
-          body="HTTP, TCP, and DNS checks with keyword matching, status-code validation, and TLS 1.2+ verification — built-in, not a separate product."
-        />
-        <FeatureCard
-          icon={<Bell className="h-6 w-6" />}
-          title="Subscribers + badge + widget"
-          body="Your customers subscribe to status emails. Drop an SVG badge in your README or a JS widget on your site — every incident pushes a banner automatically."
+          title={l.feature_widget_title}
+          body={l.feature_widget_body}
         />
         <FeatureCard
           icon={<Server className="h-6 w-6" />}
-          title="Open source under MIT"
-          body="If you outgrow the hosted plan (or don't trust it), self-host in one docker-compose command. No feature gates between hosted and self-host."
+          title={l.feature_self_host_title}
+          body={l.feature_self_host_body}
+        />
+        <FeatureCard
+          icon={<GitBranch className="h-6 w-6" />}
+          title={l.feature_pro_title}
+          body={l.feature_pro_body}
         />
       </section>
 
-      {/* Use cases — maps PingCast to real developer personas so visitors
-          self-select instead of asking "is this for me?". */}
       <section className="py-20 max-w-5xl mx-auto">
         <h2 className="text-center text-2xl md:text-3xl font-bold tracking-tight">
-          Built for the three stacks we live in
-        </h2>
-        <div className="mt-12 grid gap-6 md:grid-cols-3">
-          <UseCaseCard
-            icon={<GitBranch className="h-5 w-5" />}
-            title="CI/CD sentinel"
-            body="Register a monitor from your deploy script via the REST API. If prod breaks after a release, you know before the next commit lands."
-          />
-          <UseCaseCard
-            icon={<Globe className="h-5 w-5" />}
-            title="Side-project lifeline"
-            body="One slug, one Telegram chat, one hour of setup. No agents to install, no pager duty rotations, no invoice creep."
-          />
-          <UseCaseCard
-            icon={<Server className="h-5 w-5" />}
-            title="SaaS status"
-            body="Show customers a public status page at your own subdomain. SSR for SEO, ISR for perf, auth-free for the pages you mark public."
-          />
-        </div>
-      </section>
-
-      {/* Why not Atlassian — direct positioning against the incumbent
-          we're actively poaching from. Numbers are the flooring on each
-          vendor's public pricing as of 2026-04. */}
-      <section className="py-20 max-w-5xl mx-auto">
-        <h2 className="text-center text-2xl md:text-3xl font-bold tracking-tight">
-          Why not Atlassian Statuspage or Instatus?
+          {locale === "ru"
+            ? "Почему не Atlassian Statuspage или Instatus?"
+            : "Why not Atlassian Statuspage or Instatus?"}
         </h2>
         <p className="mt-3 text-center text-muted-foreground max-w-2xl mx-auto">
-          Status pages used to cost $29-100/mo because they bundled with
-          PagerDuty-style incident tooling most indie SaaS don&apos;t need.
-          Here&apos;s how we stack up.
+          {locale === "ru"
+            ? "Статус-страницы стоят $29-100/мес потому что бундлятся с PagerDuty-style инструментами, которые инди-SaaS не нужны. Вот наш расклад."
+            : "Status pages used to cost $29-100/mo because they bundled with PagerDuty-style incident tooling most indie SaaS don't need. Here's how we stack up."}
         </p>
         <div className="mt-10 overflow-x-auto rounded-xl border border-border/60 bg-card">
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="text-left font-medium px-4 py-3 w-1/3">
-                  Feature
+                  {locale === "ru" ? "Фича" : "Feature"}
                 </th>
                 <th className="text-left font-medium px-4 py-3">PingCast</th>
                 <th className="text-left font-medium px-4 py-3">
@@ -290,31 +314,36 @@ export default function LandingPage() {
             </thead>
             <tbody className="divide-y divide-border/50">
               <CompareRow
-                label="Starting price"
-                values={["$9/mo (founder)", "$29/mo", "$20/mo", "$30/mo"]}
+                label={locale === "ru" ? "Стартовая цена" : "Starting price"}
+                values={[
+                  locale === "ru" ? "$9/мес (фаундер)" : "$9/mo (founder)",
+                  "$29/mo",
+                  "$20/mo",
+                  "$30/mo",
+                ]}
               />
               <CompareRow
-                label="Custom domain"
+                label={locale === "ru" ? "Кастомный домен" : "Custom domain"}
                 values={[true, true, true, true]}
               />
               <CompareRow
-                label="Branded page (logo + colour)"
+                label={locale === "ru" ? "Брендинг (лого + цвет)" : "Branded page (logo + colour)"}
                 values={[true, true, true, "limited"]}
               />
               <CompareRow
-                label="Uptime monitoring included"
+                label={locale === "ru" ? "Мониторинг включён" : "Uptime monitoring included"}
                 values={[true, false, false, true]}
               />
               <CompareRow
-                label="1-click Atlassian import"
+                label={locale === "ru" ? "Импорт из Atlassian в один клик" : "1-click Atlassian import"}
                 values={[true, "n/a", false, false]}
               />
               <CompareRow
-                label="Embeddable JS widget + SVG badge"
+                label={locale === "ru" ? "Виджет + SVG бейдж" : "Embeddable JS widget + SVG badge"}
                 values={[true, false, false, false]}
               />
               <CompareRow
-                label="Sells in Russia since 2022"
+                label={locale === "ru" ? "Доступен в РФ" : "Sells in Russia since 2022"}
                 values={[true, false, true, true]}
               />
               <CompareRow
@@ -329,9 +358,25 @@ export default function LandingPage() {
           </table>
         </div>
         <p className="mt-4 text-xs text-center text-muted-foreground">
-          Sources: vendor pricing pages as of 2026-04. Migration time: paste
-          your Atlassian JSON export into <Link href="/docs/atlassian-import" className="underline">our importer</Link>{" "}
-          and you&apos;re live in under a minute.
+          {locale === "ru" ? (
+            <>
+              Источники: цены на сайтах вендоров на 2026-04. Время миграции:
+              залейте JSON-экспорт Atlassian в{" "}
+              <Link href={`/${locale}/import/atlassian`} className="underline">
+                наш импортер
+              </Link>{" "}
+              — менее минуты.
+            </>
+          ) : (
+            <>
+              Sources: vendor pricing pages as of 2026-04. Migration time: paste
+              your Atlassian JSON export into{" "}
+              <Link href={`/${locale}/import/atlassian`} className="underline">
+                our importer
+              </Link>{" "}
+              and you&apos;re live in under a minute.
+            </>
+          )}
         </p>
       </section>
 
@@ -354,11 +399,15 @@ export default function LandingPage() {
           </div>
           <pre className="overflow-x-auto px-6 py-5 text-[13px] leading-relaxed font-mono">
             <code>
-              <span className="text-muted-foreground"># Create a monitor from CI after every deploy</span>
+              <span className="text-muted-foreground">
+                {locale === "ru"
+                  ? "# Создать монитор из CI после каждого деплоя"
+                  : "# Create a monitor from CI after every deploy"}
+              </span>
               {"\n"}
               <span className="text-emerald-600 dark:text-emerald-400">curl</span>{" "}
-              <span className="text-blue-600 dark:text-blue-400">-X</span> POST https://pingcast.io/api/monitors{" "}
-              {"\\\n  "}
+              <span className="text-blue-600 dark:text-blue-400">-X</span> POST
+              https://pingcast.io/api/monitors {"\\\n  "}
               <span className="text-blue-600 dark:text-blue-400">-H</span>{" "}
               <span className="text-amber-600 dark:text-amber-400">{`"Authorization: Bearer $PINGCAST_KEY"`}</span>{" "}
               {"\\\n  "}
@@ -375,16 +424,19 @@ export default function LandingPage() {
           </pre>
         </motion.div>
         <p className="mt-4 text-center text-sm text-muted-foreground">
-          Scoped API keys · Typed OpenAPI spec ·{" "}
-          <Link href="/docs/api" className="underline underline-offset-4 hover:text-foreground">
-            Full reference
+          {locale === "ru" ? "Scoped API ключи · Типизированный OpenAPI · " : "Scoped API keys · Typed OpenAPI spec · "}
+          <Link
+            href={`/${locale}/docs/api`}
+            className="underline underline-offset-4 hover:text-foreground"
+          >
+            {locale === "ru" ? "полная документация" : "Full reference"}
           </Link>
         </p>
       </section>
 
       <section className="py-16 max-w-3xl mx-auto">
         <h2 className="text-center text-2xl md:text-3xl font-bold tracking-tight mb-10">
-          Frequently asked
+          {locale === "ru" ? "Частые вопросы" : "Frequently asked"}
         </h2>
         <div className="space-y-3">
           {FAQS.map((faq) => (
@@ -394,9 +446,6 @@ export default function LandingPage() {
         <FaqPageJsonLd items={FAQS} />
       </section>
 
-      {/* Built in public — honest replacement for manufactured
-          testimonials. PingCast is early enough that fake logos would
-          be a tell; authenticity is the conversion lever here. */}
       <section className="py-16 max-w-4xl mx-auto">
         <div className="rounded-2xl border border-border/60 bg-gradient-to-br from-card via-card to-muted/30 p-8 md:p-10">
           <div className="flex items-start gap-4">
@@ -405,13 +454,10 @@ export default function LandingPage() {
             </div>
             <div>
               <h2 className="text-xl md:text-2xl font-bold tracking-tight">
-                Built in public. No logo wall, no &ldquo;trusted by&rdquo; fiction.
+                {l.social_proof_heading}
               </h2>
               <p className="mt-3 text-sm md:text-base text-muted-foreground leading-relaxed">
-                Every feature on this page is backed by open-source code
-                under MIT. Read the handlers, the failure modes, the test
-                suite — judge the product from the source, not the
-                marketing.
+                {l.social_proof_sub}
               </p>
               <div className="mt-6 flex flex-wrap items-center gap-3">
                 <Link
@@ -421,19 +467,19 @@ export default function LandingPage() {
                   className={`${buttonVariants({ variant: "outline" })}`}
                 >
                   <GithubIcon className="mr-2 h-4 w-4" />
-                  View on GitHub
+                  {locale === "ru" ? "Открыть на GitHub" : "View on GitHub"}
                 </Link>
                 <Link
-                  href="/docs/api"
+                  href={`/${locale}/docs/api`}
                   className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-4"
                 >
-                  Browse the API
+                  {locale === "ru" ? "Документация API" : "Browse the API"}
                 </Link>
                 <Link
-                  href="/pricing"
+                  href={`/${locale}/pricing`}
                   className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-4"
                 >
-                  See the plans
+                  {locale === "ru" ? "Тарифы" : "See the plans"}
                 </Link>
               </div>
             </div>
@@ -447,18 +493,16 @@ export default function LandingPage() {
             <Code2 className="h-5 w-5" />
           </div>
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight">
-            Built on a real API, not a marketing website.
+            {l.cta_heading}
           </h2>
           <p className="mt-3 text-sm md:text-base text-muted-foreground max-w-xl mx-auto">
-            Every feature you see in the dashboard is available via a stable
-            JSON API with scoped keys. Integrate pingcast into your tools,
-            CI/CD, and runbooks.
+            {l.cta_sub}
           </p>
           <Link
-            href="/register"
+            href={`/${locale}/register?intent=pro`}
             className={`${buttonVariants({ variant: "outline" })} mt-6`}
           >
-            Get your API key
+            {l.cta_button}
           </Link>
         </div>
       </section>
@@ -521,9 +565,7 @@ function Stat({
 }) {
   return (
     <div>
-      <div className="text-2xl md:text-3xl font-bold tracking-tight">
-        {value}
-      </div>
+      <div className="text-2xl md:text-3xl font-bold tracking-tight">{value}</div>
       <div className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">
         {label}
       </div>
@@ -558,9 +600,7 @@ function StepCard({
         {icon}
       </div>
       <h3 className="font-semibold">{title}</h3>
-      <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-        {body}
-      </p>
+      <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{body}</p>
     </motion.div>
   );
 }
@@ -592,33 +632,5 @@ function CompareRow({
         </td>
       ))}
     </tr>
-  );
-}
-
-function UseCaseCard({
-  icon,
-  title,
-  body,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  body: string;
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-50px" }}
-      transition={{ duration: 0.5, ease: "easeOut" }}
-      className="rounded-lg border border-border/60 bg-gradient-to-br from-card to-card/40 p-6"
-    >
-      <div className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary mb-4">
-        {icon}
-      </div>
-      <h3 className="font-semibold">{title}</h3>
-      <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-        {body}
-      </p>
-    </motion.div>
   );
 }

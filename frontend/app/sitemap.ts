@@ -1,59 +1,67 @@
 import type { MetadataRoute } from "next";
 import { listAlternativeSlugs } from "@/content/alternatives";
 import { POSTS } from "@/content/blog";
+import { SUPPORTED_LOCALES } from "@/lib/i18n-shared";
 
 /**
- * Sitemap for the public, crawlable surface. Authenticated routes live
- * behind a redirect to /login and are disallowed via robots.ts, so they
- * are intentionally omitted here. Public /status/[slug] pages are owned
+ * Sitemap for the public, crawlable surface. Every page is emitted
+ * once per supported locale. Authenticated routes live behind a
+ * redirect to /login and are disallowed via robots.ts, so they are
+ * intentionally omitted here. Public /status/[slug] pages are owned
  * by end-users and are not enumerable from the frontend, so those get
  * indexed by direct link, not by sitemap traversal.
+ *
+ * `alternates.languages` on each entry tells Google which other
+ * locale URLs to consider equivalent — drives hreflang in SERP.
  */
 export default function sitemap(): MetadataRoute.Sitemap {
   const base = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
   const now = new Date();
 
-  // Core product + auth pages.
-  const core: MetadataRoute.Sitemap = [
-    { url: `${base}/`,          lastModified: now, changeFrequency: "weekly",  priority: 1.0 },
-    { url: `${base}/pricing`,   lastModified: now, changeFrequency: "monthly", priority: 0.9 },
-    { url: `${base}/register`,  lastModified: now, changeFrequency: "monthly", priority: 0.7 },
-    { url: `${base}/login`,     lastModified: now, changeFrequency: "monthly", priority: 0.3 },
-    { url: `${base}/docs/api`,  lastModified: now, changeFrequency: "weekly",  priority: 0.6 },
-    { url: `${base}/blog`,      lastModified: now, changeFrequency: "weekly",  priority: 0.7 },
+  type LocalePath = { path: string; freq: MetadataRoute.Sitemap[number]["changeFrequency"]; priority: number; lastMod?: Date };
+
+  const corePaths: LocalePath[] = [
+    { path: "", freq: "weekly", priority: 1.0 },
+    { path: "/pricing", freq: "monthly", priority: 0.9 },
+    { path: "/register", freq: "monthly", priority: 0.7 },
+    { path: "/login", freq: "monthly", priority: 0.3 },
+    { path: "/docs/api", freq: "weekly", priority: 0.6 },
+    { path: "/blog", freq: "weekly", priority: 0.7 },
+    { path: "/status-page-software", freq: "monthly", priority: 0.8 },
+    { path: "/best-status-page-software-2026", freq: "monthly", priority: 0.8 },
+    { path: "/how-to-create-status-page", freq: "monthly", priority: 0.8 },
+    { path: "/atlassian-statuspage-pricing", freq: "monthly", priority: 0.8 },
+    { path: "/open-source-status-page", freq: "monthly", priority: 0.8 },
+    { path: "/saas-status-page", freq: "monthly", priority: 0.8 },
+    { path: "/status-page-template", freq: "monthly", priority: 0.8 },
   ];
 
-  // Category / SEO landing pages (sprint 4).
-  const seo: MetadataRoute.Sitemap = [
-    "status-page-software",
-    "best-status-page-software-2026",
-    "how-to-create-status-page",
-    "atlassian-statuspage-pricing",
-    "open-source-status-page",
-    "saas-status-page",
-    "status-page-template",
-  ].map((slug) => ({
-    url: `${base}/${slug}`,
-    lastModified: now,
-    changeFrequency: "monthly",
+  const altPaths: LocalePath[] = listAlternativeSlugs().map((slug) => ({
+    path: `/alternatives/${slug}`,
+    freq: "monthly",
     priority: 0.8,
   }));
 
-  // Alternatives (one page per competitor).
-  const alternatives: MetadataRoute.Sitemap = listAlternativeSlugs().map((slug) => ({
-    url: `${base}/alternatives/${slug}`,
-    lastModified: now,
-    changeFrequency: "monthly",
-    priority: 0.8,
-  }));
-
-  // Blog posts.
-  const blog: MetadataRoute.Sitemap = POSTS.map((p) => ({
-    url: `${base}/blog/${p.slug}`,
-    lastModified: new Date(p.publishedAt),
-    changeFrequency: "monthly",
+  const blogPaths: LocalePath[] = POSTS.map((p) => ({
+    path: `/blog/${p.slug}`,
+    freq: "monthly",
     priority: 0.6,
+    lastMod: new Date(p.publishedAt),
   }));
 
-  return [...core, ...seo, ...alternatives, ...blog];
+  const all = [...corePaths, ...altPaths, ...blogPaths];
+
+  return all.flatMap((entry) =>
+    SUPPORTED_LOCALES.map((lang) => ({
+      url: `${base}/${lang}${entry.path}`,
+      lastModified: entry.lastMod ?? now,
+      changeFrequency: entry.freq,
+      priority: entry.priority,
+      alternates: {
+        languages: Object.fromEntries(
+          SUPPORTED_LOCALES.map((l) => [l, `${base}/${l}${entry.path}`]),
+        ),
+      },
+    })),
+  );
 }

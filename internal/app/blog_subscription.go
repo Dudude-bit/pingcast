@@ -30,9 +30,10 @@ func NewBlogSubscriptionService(repo port.BlogSubscriberRepo, mailer port.Mailer
 // Subscribe creates a pending subscriber and fires the confirmation
 // email. Duplicate email is treated as success silently — same
 // rationale as status-page subscribe (don't leak who's subscribed).
-// `source` tags where on the site the signup happened (footer,
-// blog_sidebar, post_cta:slug). Optional.
-func (s *BlogSubscriptionService) Subscribe(ctx context.Context, email string, source *string) error {
+// `source` tags where on the site the signup happened. `locale`
+// selects the email language ("en" / "ru"); empty / unknown defaults
+// to English so old clients keep working.
+func (s *BlogSubscriptionService) Subscribe(ctx context.Context, email string, source *string, locale string) error {
 	email = strings.ToLower(strings.TrimSpace(email))
 	if !emailRegex.MatchString(email) {
 		return fmt.Errorf("invalid email")
@@ -57,14 +58,8 @@ func (s *BlogSubscriptionService) Subscribe(ctx context.Context, email string, s
 
 	confirmURL := fmt.Sprintf("%s/api/newsletter/confirm?token=%s",
 		s.baseURL, sub.ConfirmToken)
-	body := fmt.Sprintf(
-		"Someone (hopefully you) asked to subscribe this email to the PingCast newsletter.\n\n"+
-			"We send 1-2 emails a month: new blog posts, product updates, occasional indie-SaaS notes.\n\n"+
-			"Confirm your subscription:\n%s\n\n"+
-			"If this wasn't you, ignore this email — nothing will happen.",
-		confirmURL,
-	)
-	if mErr := s.mailer.Send(ctx, email, "Confirm your PingCast newsletter subscription", body); mErr != nil {
+	subject, body := blogConfirmEmail(toEmailLocale(locale), confirmURL)
+	if mErr := s.mailer.Send(ctx, email, subject, body); mErr != nil {
 		slog.Error("send blog confirmation email", "error", mErr)
 		// Don't fail the subscribe — row exists, user can retry.
 	}

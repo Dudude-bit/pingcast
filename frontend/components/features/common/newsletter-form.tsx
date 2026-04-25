@@ -1,22 +1,20 @@
 "use client";
 
 import { useState } from "react";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 // NewsletterForm posts to /api/newsletter/subscribe with the optional
 // `source` tag so we can tell which placement converts. Returns 202 on
 // any syntactically valid email (double-opt-in confirmation arrives via
-// email). The UI stays minimal — one input, one button, inline status.
+// email). UI strings come from the locale context — every placement
+// renders in the visitor's language without prop-drilling.
 type Props = {
   source: string;
-  placeholder?: string;
-  label?: string;
 };
 
-export function NewsletterForm({
-  source,
-  placeholder = "you@company.com",
-  label = "Subscribe",
-}: Props) {
+export function NewsletterForm({ source }: Props) {
+  const { dict, locale } = useLocale();
+  const f = dict.footer;
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "sending" | "ok" | "error">(
     "idle",
@@ -31,23 +29,20 @@ export function NewsletterForm({
       const res = await fetch("/api/newsletter/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, source }),
+        body: JSON.stringify({ email, source, locale }),
       });
       if (res.status === 202) {
         setStatus("ok");
-        setMessage("Check your inbox to confirm.");
+        setMessage(f.newsletter_ok);
         setEmail("");
       } else {
         const body = await res.json().catch(() => ({}));
         setStatus("error");
-        setMessage(
-          body?.error?.message ??
-            "Something went wrong. Try again in a moment.",
-        );
+        setMessage(body?.error?.message ?? dict.common.error_generic);
       }
     } catch {
       setStatus("error");
-      setMessage("Network error. Try again.");
+      setMessage(dict.common.network_error);
     }
   }
 
@@ -59,9 +54,9 @@ export function NewsletterForm({
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder={placeholder}
+          placeholder={f.newsletter_placeholder}
           disabled={status === "sending"}
-          aria-label="Email address for newsletter"
+          aria-label={f.newsletter_label}
           className="flex-1 rounded-md border border-border/60 bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-60"
         />
         <button
@@ -69,19 +64,15 @@ export function NewsletterForm({
           disabled={status === "sending" || !email}
           className="rounded-md bg-foreground text-background px-4 py-2 text-sm font-medium hover:bg-foreground/90 disabled:opacity-60"
         >
-          {status === "sending" ? "..." : label}
+          {status === "sending" ? "..." : f.newsletter_button}
         </button>
       </div>
-      {status === "ok" && (
-        <p className="text-xs text-emerald-600">{message}</p>
-      )}
+      {status === "ok" && <p className="text-xs text-emerald-600">{message}</p>}
       {status === "error" && (
         <p className="text-xs text-destructive">{message}</p>
       )}
       {status === "idle" && (
-        <p className="text-xs text-muted-foreground">
-          1-2 emails a month. Unsubscribe in one click.
-        </p>
+        <p className="text-xs text-muted-foreground">{f.newsletter_helper}</p>
       )}
     </form>
   );

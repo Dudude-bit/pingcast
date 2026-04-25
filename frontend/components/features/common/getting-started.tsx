@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Check, Circle } from "lucide-react";
 import { useMonitors, useChannels } from "@/lib/queries";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 /**
  * GettingStarted shows a 3-step onboarding checklist on the dashboard
@@ -15,6 +16,8 @@ import { useMonitors, useChannels } from "@/lib/queries";
  * somewhere — the checklist closes that gap in a non-blocking way.
  */
 export function GettingStarted() {
+  const { dict, locale } = useLocale();
+  const d = dict.dashboard;
   const monitors = useMonitors();
   const channels = useChannels();
 
@@ -35,18 +38,18 @@ export function GettingStarted() {
 
   const steps: { label: string; href: string; doneState: boolean }[] = [
     {
-      label: "Add your first monitor",
-      href: "/monitors/new",
+      label: d.getting_started_step_1,
+      href: `/${locale}/monitors/new`,
       doneState: hasMonitor,
     },
     {
-      label: "Add a notification channel (Telegram or webhook)",
-      href: "/channels",
+      label: d.getting_started_step_2,
+      href: `/${locale}/channels`,
       doneState: hasChannel,
     },
     {
-      label: "Bind the channel to your monitor so alerts reach you",
-      href: hasMonitor ? "/dashboard" : "/monitors/new",
+      label: d.getting_started_step_3,
+      href: hasMonitor ? `/${locale}/dashboard` : `/${locale}/monitors/new`,
       doneState: false,
     },
   ];
@@ -56,10 +59,9 @@ export function GettingStarted() {
       aria-label="Getting started"
       className="rounded-lg border border-border/60 bg-card p-5 mb-6"
     >
-      <h2 className="text-sm font-semibold">Getting started</h2>
+      <h2 className="text-sm font-semibold">{d.getting_started}</h2>
       <p className="mt-1 text-xs text-muted-foreground">
-        A few quick steps to wire up your first alert. This goes away
-        once you&apos;re fully set up.
+        {d.getting_started_sub}
       </p>
       <ol className="mt-4 space-y-2">
         {steps.map((s) => (

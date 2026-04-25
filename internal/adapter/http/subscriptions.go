@@ -42,7 +42,11 @@ func (s *Server) SubscribeToStatusPage(c *fiber.Ctx, slug string) error {
 	if err := c.BodyParser(&req); err != nil {
 		return httperr.WriteMalformedJSON(c)
 	}
-	if err := s.subscriptions.Subscribe(c.UserContext(), slug, string(req.Email)); err != nil {
+	locale := ""
+	if req.Locale != nil {
+		locale = *req.Locale
+	}
+	if err := s.subscriptions.Subscribe(c.UserContext(), slug, string(req.Email), locale); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(httperr.Envelope{
 			Error: httperr.Inner{Code: "INVALID_EMAIL", Message: err.Error()},
 		})

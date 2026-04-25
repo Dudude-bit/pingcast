@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { POSTS, getPostBySlug } from "@/content/blog";
 import { BreadcrumbListJsonLd } from "@/components/seo/jsonld";
+import { getDictionary, hasLocale, SUPPORTED_LOCALES } from "@/lib/i18n";
 import PivotPost from "@/content/blog/pivoting-from-uptime-monitoring-to-status-pages.mdx";
 import MigratingPost from "@/content/blog/migrating-from-atlassian-statuspage.mdx";
 import SupportTicketsPost from "@/content/blog/status-pages-reduce-support-tickets.mdx";
@@ -18,60 +19,74 @@ const POST_BODIES: Record<string, React.ComponentType> = {
   "status-pages-reduce-support-tickets": SupportTicketsPost,
 };
 
+type Params = Promise<{ lang: string; slug: string }>;
+
 export function generateStaticParams() {
-  return POSTS.map((p) => ({ slug: p.slug }));
+  return SUPPORTED_LOCALES.flatMap((lang) =>
+    POSTS.map((p) => ({ lang, slug: p.slug })),
+  );
 }
 
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ slug: string }>;
+  params: Params;
 }): Promise<Metadata> {
-  const { slug } = await params;
+  const { lang, slug } = await params;
   const post = getPostBySlug(slug);
   if (!post) return {};
   return {
     title: post.title,
     description: post.description,
-    alternates: { canonical: `/blog/${post.slug}` },
+    alternates: { canonical: `/${lang}/blog/${post.slug}` },
     openGraph: {
       title: post.title,
       description: post.description,
       type: "article",
       publishedTime: post.publishedAt,
       authors: [post.author],
+      locale: lang === "ru" ? "ru_RU" : "en_US",
     },
   };
 }
 
-export default async function BlogPostPage({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
-  const { slug } = await params;
+export default async function BlogPostPage({ params }: { params: Params }) {
+  const { lang, slug } = await params;
+  if (!hasLocale(lang)) notFound();
+  const dict = await getDictionary(lang);
   const post = getPostBySlug(slug);
   const Body = POST_BODIES[slug];
   if (!post || !Body) notFound();
+
+  // The MDX body is currently English only. RU readers see the
+  // English content with a localized header + back-link. Once a post
+  // gets a RU translation, swap the Body lookup by locale.
+  const englishOnlyNote =
+    lang === "ru" && !post.locales.includes("ru") ? (
+      <p className="mb-8 rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+        Этот пост пока только на английском. Перевод в работе.
+      </p>
+    ) : null;
 
   return (
     <article className="container mx-auto px-4 py-12 max-w-2xl">
       <BreadcrumbListJsonLd
         items={[
-          { name: "Home", url: "/" },
-          { name: "Blog", url: "/blog" },
-          { name: post.title, url: `/blog/${post.slug}` },
+          { name: lang === "ru" ? "Главная" : "Home", url: `/${lang}` },
+          { name: dict.blog.title, url: `/${lang}/blog` },
+          { name: post.title, url: `/${lang}/blog/${post.slug}` },
         ]}
       />
       <Link
-        href="/blog"
+        href={`/${lang}/blog`}
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-8"
       >
-        <ArrowLeft className="h-3.5 w-3.5" /> All posts
+        <ArrowLeft className="h-3.5 w-3.5" /> {dict.blog.all_posts}
       </Link>
+      {englishOnlyNote}
       <header className="mb-10">
         <time className="text-xs uppercase tracking-wider text-muted-foreground">
-          {post.publishedAt} · {post.readingMinutes} min read · {post.author}
+          {post.publishedAt} · {post.readingMinutes} {dict.blog.min_read} · {post.author}
         </time>
         <h1 className="mt-2 text-4xl md:text-5xl font-bold tracking-tight leading-tight">
           {post.title}

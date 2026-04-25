@@ -1,6 +1,8 @@
 // Blog content registry. Adding a post = one .mdx file under
 // content/blog/, one entry here (metadata), and one entry in
-// app/(main)/blog/[slug]/page.tsx (import + POST_BODIES map).
+// app/[lang]/(main)/blog/[slug]/page.tsx (import + POST_BODIES map).
+
+import type { Locale } from "@/lib/i18n-shared";
 
 export type BlogPost = {
   slug: string;
@@ -9,6 +11,11 @@ export type BlogPost = {
   publishedAt: string; // YYYY-MM-DD
   author: string;
   readingMinutes: number;
+  // Locales the post body actually exists in. Posts not yet translated
+  // for a locale are filtered out of that locale's /blog index. The
+  // first entry doubles as the default locale shown if a visitor opens
+  // the canonical URL.
+  locales: Locale[];
 };
 
 // Ordered newest-first so the /blog index lists freshest at the top.
@@ -21,6 +28,7 @@ export const POSTS: BlogPost[] = [
     publishedAt: "2026-04-24",
     author: "Kirill",
     readingMinutes: 6,
+    locales: ["en"],
   },
   {
     slug: "migrating-from-atlassian-statuspage",
@@ -30,6 +38,7 @@ export const POSTS: BlogPost[] = [
     publishedAt: "2026-04-23",
     author: "Kirill",
     readingMinutes: 5,
+    locales: ["en"],
   },
   {
     slug: "pivoting-from-uptime-monitoring-to-status-pages",
@@ -39,9 +48,14 @@ export const POSTS: BlogPost[] = [
     publishedAt: "2026-04-22",
     author: "Kirill",
     readingMinutes: 6,
+    locales: ["en"],
   },
 ];
 
 export function getPostBySlug(slug: string): BlogPost | undefined {
   return POSTS.find((p) => p.slug === slug);
+}
+
+export function postsForLocale(locale: Locale): BlogPost[] {
+  return POSTS.filter((p) => p.locales.includes(locale));
 }

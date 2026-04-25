@@ -1,18 +1,55 @@
 import { NextRequest, NextResponse } from "next/server";
+import { SUPPORTED_LOCALES, DEFAULT_LOCALE } from "@/lib/i18n-shared";
 
 /**
  * Next 16 edge middleware (file is `proxy.ts` in Next 16, was
- * `middleware.ts` in 14/15). Two responsibilities:
+ * `middleware.ts` in 14/15). Three responsibilities:
  *
- *   1. Fast-path auth gate — redirect unauthenticated users off
+ *   1. Locale routing — strip-or-redirect URLs to ensure every page
+ *      lives under /<lang>/. Visitors landing on / get redirected to
+ *      /en or /ru based on Accept-Language; bots are sent to /en for
+ *      a stable canonical.
+ *   2. Fast-path auth gate — redirect unauthenticated users off
  *      protected routes before they hit the page handler. The Go API
  *      still re-checks server-side; this only saves a round-trip when
  *      the cookie is absent.
- *   2. Custom-domain host routing — if the incoming Host header is a
+ *   3. Custom-domain host routing — if the incoming Host header is a
  *      registered Pro-tier custom domain (e.g. status.customer.com),
  *      rewrite the request to /status/<slug> so the public status
  *      page renders.
  */
+
+// Paths that bypass locale routing — backend, static assets, the
+// public status page (its slug already encodes the tenant), and the
+// .well-known validation probe.
+const LOCALE_BYPASS_PREFIXES = [
+  "/api/",
+  "/_next/",
+  "/.well-known/",
+  "/widget.js",
+  "/status/",
+  "/sitemap.xml",
+  "/robots.txt",
+  "/favicon.ico",
+  "/favicon.svg",
+  "/favicon.png",
+  "/opengraph-image",
+  "/twitter-image",
+];
+
+function pickLocale(req: NextRequest): string {
+  const accept = req.headers.get("accept-language") ?? "";
+  // Cheap header parse: "ru,en;q=0.9" → ["ru", "en"]. Good enough; we
+  // only need to detect "ru" vs everything else.
+  for (const part of accept.split(",")) {
+    const tag = part.trim().split(";")[0]!.toLowerCase();
+    const primary = tag.split("-")[0]!;
+    if ((SUPPORTED_LOCALES as readonly string[]).includes(primary)) {
+      return primary;
+    }
+  }
+  return DEFAULT_LOCALE;
+}
 
 // Hosts that are ours. Never do a custom-domain lookup for these, even
 // if a malicious client spoofs the Host header.
@@ -59,7 +96,33 @@ export async function proxy(req: NextRequest) {
     // A 404 from the real route beats a misleading redirect.
   }
 
+  // --- Locale routing ---
+  // If the URL doesn't already start with a supported locale and isn't
+  // bypassed, redirect to the user's preferred locale. The locale
+  // prefix is mandatory under the new app/[lang] tree.
+  const isBypassed = LOCALE_BYPASS_PREFIXES.some((p) => pathname.startsWith(p));
+  if (!isBypassed) {
+    const hasLocale = SUPPORTED_LOCALES.some(
+      (l) => pathname === `/${l}` || pathname.startsWith(`/${l}/`),
+    );
+    if (!hasLocale) {
+      const target = `/${pickLocale(req)}${pathname === "/" ? "" : pathname}`;
+      const url = req.nextUrl.clone();
+      url.pathname = target;
+      return NextResponse.redirect(url);
+    }
+  }
+
   // --- Auth gate ---
+  // Strip the leading /<lang> for the protected-prefix check so adding
+  // a locale to the URL doesn't unexpectedly bypass auth.
+  let bareForAuth = pathname;
+  for (const l of SUPPORTED_LOCALES) {
+    if (pathname === `/${l}` || pathname.startsWith(`/${l}/`)) {
+      bareForAuth = pathname.slice(`/${l}`.length) || "/";
+      break;
+    }
+  }
   const isProtected = [
     "/dashboard",
     "/monitors",
@@ -67,7 +130,7 @@ export async function proxy(req: NextRequest) {
     "/api-keys",
     "/settings",
   ].some(
-    (p) => pathname === p || pathname.startsWith(`${p}/`),
+    (p) => bareForAuth === p || bareForAuth.startsWith(`${p}/`),
   );
 
   if (!isProtected) return NextResponse.next();
@@ -75,8 +138,13 @@ export async function proxy(req: NextRequest) {
   const hasSession = req.cookies.has("session_id");
   if (hasSession) return NextResponse.next();
 
+  // Redirect to /<lang>/login preserving locale.
+  const lang =
+    SUPPORTED_LOCALES.find(
+      (l) => pathname === `/${l}` || pathname.startsWith(`/${l}/`),
+    ) ?? DEFAULT_LOCALE;
   const url = req.nextUrl.clone();
-  url.pathname = "/login";
+  url.pathname = `/${lang}/login`;
   return NextResponse.redirect(url);
 }
 

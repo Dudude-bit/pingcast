@@ -31,8 +31,9 @@ var emailRegex = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
 // Subscribe creates a pending subscriber and fires the double-opt-in
 // confirmation email. Duplicate email on the same slug returns ok
 // silently (idempotent — avoids leaking whether a given email is
-// already subscribed).
-func (s *SubscriptionService) Subscribe(ctx context.Context, slug, email string) error {
+// already subscribed). `locale` selects the email language;
+// empty / unknown → English.
+func (s *SubscriptionService) Subscribe(ctx context.Context, slug, email, locale string) error {
 	email = strings.ToLower(strings.TrimSpace(email))
 	if !emailRegex.MatchString(email) {
 		return fmt.Errorf("invalid email")
@@ -56,13 +57,8 @@ func (s *SubscriptionService) Subscribe(ctx context.Context, slug, email string)
 
 	confirmURL := fmt.Sprintf("%s/api/status/%s/confirm?token=%s",
 		s.baseURL, slug, sub.ConfirmToken)
-	body := fmt.Sprintf(
-		"Someone (hopefully you) asked to subscribe this email to status updates for %s.\n\n"+
-			"Confirm your subscription:\n%s\n\n"+
-			"If this wasn't you, ignore this email — nothing will happen.",
-		slug, confirmURL,
-	)
-	if mErr := s.mailer.Send(ctx, email, fmt.Sprintf("Confirm your subscription to %s status", slug), body); mErr != nil {
+	subject, body := statusSubscribeConfirmEmail(toEmailLocale(locale), slug, confirmURL)
+	if mErr := s.mailer.Send(ctx, email, subject, body); mErr != nil {
 		slog.Error("send confirmation email", "slug", slug, "error", mErr)
 		// Don't fail the subscribe — the row exists; user can retry
 		// later or an admin can resend the token.

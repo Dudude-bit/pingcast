@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import { register } from "@/app/actions/auth";
+import { login } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,18 +14,19 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { useLocale } from "@/components/i18n/locale-provider";
 
-export default function RegisterPage() {
-  const [state, formAction, pending] = useActionState(register, {});
+export default function LoginPage() {
+  const { dict, locale } = useLocale();
+  const a = dict.auth;
+  const [state, formAction, pending] = useActionState(login, {});
 
   return (
     <div className="container mx-auto px-4 py-16 max-w-md">
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl">Create your account</CardTitle>
-          <CardDescription>
-            5 monitors free. No credit card required.
-          </CardDescription>
+          <CardTitle className="text-2xl">{a.login_title}</CardTitle>
+          <CardDescription>{a.login_sub}</CardDescription>
         </CardHeader>
         <CardContent>
           {state.error ? (
@@ -36,7 +37,7 @@ export default function RegisterPage() {
 
           <form action={formAction} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">{a.login_email}</Label>
               <Input
                 id="email"
                 name="email"
@@ -48,43 +49,28 @@ export default function RegisterPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="slug">Status page slug</Label>
-              <Input
-                id="slug"
-                name="slug"
-                type="text"
-                required
-                pattern="[a-z0-9-]{3,30}"
-                placeholder="your-company"
-              />
-              <p className="text-xs text-muted-foreground">
-                Used in your public status page URL: /status/your-company
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{a.login_password}</Label>
               <Input
                 id="password"
                 name="password"
                 type="password"
                 required
                 minLength={8}
-                autoComplete="new-password"
-                placeholder="Min. 8 characters"
+                autoComplete="current-password"
               />
             </div>
             <Button type="submit" className="w-full" disabled={pending}>
-              {pending ? "Creating…" : "Create account"}
+              {pending ? `${dict.common.loading}` : a.login_submit}
             </Button>
           </form>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
-            Already have an account?{" "}
+            {a.login_no_account}{" "}
             <Link
-              href="/login"
+              href={`/${locale}/register`}
               className="underline underline-offset-4 hover:text-foreground"
             >
-              Sign in
+              {a.login_register_link}
             </Link>
           </p>
         </CardContent>

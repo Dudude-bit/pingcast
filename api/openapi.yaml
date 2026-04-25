@@ -824,6 +824,7 @@ paths:
               required: [email]
               properties:
                 email: { type: string, format: email }
+                locale: { type: string, description: "Optional UI locale (en|ru). Selects the language of confirmation/incident emails." }
       responses:
         "202": { description: Acknowledged — check your inbox to confirm. }
         "400": { description: Invalid email }
@@ -879,6 +880,7 @@ paths:
               properties:
                 email: { type: string, format: email }
                 source: { type: string, description: "Optional tag for where the signup happened: footer, blog_sidebar, post_cta:<slug>" }
+                locale: { type: string, description: "Optional UI locale (en|ru). Selects the language of the confirmation email; defaults to en when missing or unknown." }
       responses:
         "202": { description: Acknowledged — check your inbox to confirm. }
         "400": { description: Invalid email }

@@ -13,10 +13,22 @@ export default function robots(): MetadataRoute.Robots {
         userAgent: "*",
         allow: "/",
         disallow: [
+          // Authenticated app surface — locale-prefixed and not. Both
+          // need to be listed because Google considers /en/dashboard and
+          // /dashboard as separate URLs even though our proxy redirects
+          // one to the other.
           "/dashboard",
           "/monitors",
           "/channels",
           "/api-keys",
+          "/en/dashboard",
+          "/en/monitors",
+          "/en/channels",
+          "/en/api-keys",
+          "/ru/dashboard",
+          "/ru/monitors",
+          "/ru/channels",
+          "/ru/api-keys",
           "/api/",
         ],
       },

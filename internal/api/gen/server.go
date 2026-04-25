@@ -629,6 +629,9 @@ type ConfirmNewsletterSubscriptionParams struct {
 type SubscribeToNewsletterJSONBody struct {
 	Email openapi_types.Email `json:"email"`
 
+	// Locale Optional UI locale (en|ru). Selects the language of the confirmation email; defaults to en when missing or unknown.
+	Locale *string `json:"locale,omitempty"`
+
 	// Source Optional tag for where the signup happened: footer, blog_sidebar, post_cta:<slug>
 	Source *string `json:"source,omitempty"`
 }
@@ -651,6 +654,9 @@ type ConfirmStatusSubscriptionParams struct {
 // SubscribeToStatusPageJSONBody defines parameters for SubscribeToStatusPage.
 type SubscribeToStatusPageJSONBody struct {
 	Email openapi_types.Email `json:"email"`
+
+	// Locale Optional UI locale (en|ru). Selects the language of confirmation/incident emails.
+	Locale *string `json:"locale,omitempty"`
 }
 
 // UnsubscribeFromStatusPageParams defines parameters for UnsubscribeFromStatusPage.
