@@ -6,21 +6,21 @@ A public status page is the smallest piece of infrastructure that flips that rat
 
 ## What a ticket costs
 
-Average support ticket on a small SaaS: **12–18 minutes of human time** for a single-round-trip response. That's before context-switching cost, which [researchers peg](https://www.apa.org/topics/research/multitasking) at 15–40% productivity lost per interruption.
+A "is your service down?" ticket on a small SaaS is roughly **10–20 minutes of human time** end-to-end — read it, check infra, write a reply, follow up. That's before context-switching cost, which [researchers peg](https://www.apa.org/topics/research/multitasking) at 15–40% productivity lost per interruption.
 
-If an outage generates 15 duplicate "is it down" tickets, your team just burned 3–4 hours on a problem the infrastructure already fixed. Multiply across a year of incidents and it's measurable payroll.
+If an outage generates 15 duplicate "is it down" tickets, your team just burned several hours on a problem the infrastructure already fixed. Multiply across a year of incidents and it adds up to measurable payroll.
 
 A status page replaces those 15 tickets with zero tickets. Not fewer. Zero. People who can see the outage acknowledged publicly **don't file tickets about it.**
 
 ## What specifically cuts tickets
 
-Not every status page design actually works. We've watched customers ship three different patterns:
+Not every status page design actually works. There are three patterns you see in the wild, and they have very different effects on ticket volume:
 
-**Pattern 1: A flat dashboard of green/red dots.** This is what UptimeRobot's public page does. It answers "are you up?" but not "do you know?" Customers still file tickets because "green on your dashboard" doesn't feel like "a human saw it." Ticket reduction: maybe 40%.
+**Pattern 1: A flat dashboard of green/red dots.** This is what UptimeRobot's public page does. It answers "are you up?" but not "do you know?" Customers still file tickets because "green on your dashboard" doesn't feel like "a human saw it." Mild reduction at best.
 
-**Pattern 2: A status page with incident timeline but no subscribers.** The page says "we know, we're working on it, here's what we've tried." Customers find this via Google or a link from your site. Ticket reduction: 70%.
+**Pattern 2: A status page with an incident timeline but no subscribers.** The page says "we know, we're working on it, here's what we've tried." Customers find it via Google or a link from your site. Solid reduction in duplicate tickets — but only from people who remember to check.
 
-**Pattern 3: Status page + timeline + email subscribers + in-product widget.** Customers are notified _before_ they have time to file a ticket. The widget banner pops on your app when there's an active incident; they know it's an outage, not their wifi. Ticket reduction: 90%+.
+**Pattern 3: Status page + timeline + email subscribers + in-product widget.** Customers get notified _before_ they have time to file a ticket. The widget banner pops on your app when there's an active incident; they know it's an outage, not their wifi. This is the configuration that gets ticket volume close to zero.
 
 The delta between pattern 2 and pattern 3 is the delta between "people who remember to check the status page" and "people who get pushed." For customers who don't have a habit of checking (i.e. most of them), push wins.
 

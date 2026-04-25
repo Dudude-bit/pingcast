@@ -27,7 +27,7 @@ The entire import is one database transaction. If any single row fails, nothing 
 
 **Email subscribers.** Legal. CAN-SPAM / GDPR / 152-ФЗ all require a fresh double opt-in when the sender changes. We ship the subscribe form on your status page out of the box; the first time you post an incident on PingCast, your subscribers re-confirm. Painful for a week, then normal forever.
 
-**Audience carve-outs.** If you're on Atlassian Growth+ and send different updates to different customer tiers, we don't have a 1:1 replacement yet. On the roadmap; not in v1.
+**Audience segmentation.** If you're on Atlassian Growth+ and send different incident updates to different customer segments, we don't have a 1:1 replacement yet. On the roadmap; not in v1.
 
 **Your custom domain.** Easy to keep, takes one DNS change. After import, hit [/dashboard/custom-domain](/dashboard/custom-domain), enter `status.yourcompany.com`, follow the two-step instructions (set a CNAME, serve one token at `.well-known/pingcast/<token>`), and we handle the TLS cert. Takes ~10 minutes end-to-end once DNS propagates.
 
@@ -45,7 +45,7 @@ That's $240–$1,080/year you keep. For a solo-founder SaaS that's a non-trivial
 - Your Atlassian plan is part of a bundle you're already paying for other reasons (Jira Cloud, Confluence, etc.) and the marginal cost of Statuspage is effectively zero.
 - Everything's been stable for two years and nobody's asking for a migration. If it ain't broke, the ROI is marginal.
 
-For everyone else — indie SaaS, early-stage startups, bootstrapped founders — it's 15 minutes of work for a recurring save. Start at [/import/atlassian](/import/atlassian); if the import fails, the error message tells you exactly what's wrong with the JSON, and you can open a [GitHub issue](https://github.com/kirillinakin/pingcast/issues) with the file.
+For everyone else — indie SaaS, early-stage startups, bootstrapped founders — it's 15 minutes of work for recurring monthly savings. Start at [/import/atlassian](/import/atlassian); if the import fails, the error message tells you exactly what's wrong with the JSON, and you can open a [GitHub issue](https://github.com/kirillinakin/pingcast/issues) with the file.
 
 ## What to do after the import
 
