@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
-import { sessionCookie } from "@/lib/session";
+import { getSessionUser } from "@/lib/session";
 import { buttonVariants } from "@/components/ui/button";
 import { ThemeToggle } from "./theme-toggle";
 import { LogoutButton } from "./logout-button";
@@ -13,7 +13,11 @@ import { getDictionary, hasLocale, type Locale } from "@/lib/i18n";
 // client child here.
 export async function Navbar({ lang }: { lang: Locale }) {
   const dict = await getDictionary(lang);
-  const isLoggedIn = Boolean(await sessionCookie());
+  // Validate against /api/auth/me — cookie presence alone isn't enough
+  // (Redis TTL or manual revoke leaves a stale cookie that would
+  // otherwise show "Dashboard" + "Logout" to a signed-out visitor).
+  const user = await getSessionUser();
+  const isLoggedIn = user !== null;
 
   const compareLinks = [
     {

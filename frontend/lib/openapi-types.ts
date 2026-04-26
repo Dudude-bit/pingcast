@@ -52,6 +52,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Returns the authenticated user's id, email, slug, and plan.
+         *     Used by the SSR navbar to distinguish a stale session_id cookie
+         *     (returns 401, navbar shows logged-out and clears the cookie)
+         *     from a live session (200, navbar shows dashboard + logout). Cheap
+         *     — one Postgres roundtrip via the session cache.
+         */
+        get: operations["getMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/monitor-types": {
         parameters: {
             query?: never;
@@ -522,6 +545,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/newsletter/subscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Public. Signs a visitor up to the global PingCast newsletter (blog + product updates). Double-opt-in. */
+        post: operations["subscribeToNewsletter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/newsletter/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Public. Clicked from the confirmation email. Flips confirmed_at. */
+        get: operations["confirmNewsletterSubscription"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/newsletter/unsubscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Public. Clicked from any outbound email. Deletes the subscriber. */
+        get: operations["unsubscribeFromNewsletter"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/status/{slug}": {
         parameters: {
             query?: never;
@@ -614,6 +688,14 @@ export interface components {
             plan?: "free" | "pro";
             /** Format: date-time */
             created_at?: string;
+        };
+        MeResponse: {
+            /** Format: uuid */
+            id: string;
+            email: string;
+            slug: string;
+            /** @enum {string} */
+            plan: "free" | "pro";
         };
         MonitorTypeInfo: {
             type?: string;
@@ -995,6 +1077,33 @@ export interface operations {
         responses: {
             /** @description Logged out */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authenticated user */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeResponse"];
+                };
+            };
+            /** @description Session missing or invalid */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1985,6 +2094,8 @@ export interface operations {
                 "application/json": {
                     /** Format: email */
                     email: string;
+                    /** @description Optional UI locale (en|ru). Selects the language of confirmation/incident emails. */
+                    locale?: string;
                 };
             };
         };
@@ -2043,6 +2154,96 @@ export interface operations {
             path: {
                 slug: string;
             };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unsubscribed (text/html) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid token */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    subscribeToNewsletter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: email */
+                    email: string;
+                    /** @description Optional tag for where the signup happened: footer, blog_sidebar, post_cta:<slug> */
+                    source?: string;
+                    /** @description Optional UI locale (en|ru). Selects the language of the confirmation email; defaults to en when missing or unknown. */
+                    locale?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Acknowledged — check your inbox to confirm. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid email */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    confirmNewsletterSubscription: {
+        parameters: {
+            query: {
+                token: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Confirmation page (text/html) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid or expired token */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    unsubscribeFromNewsletter: {
+        parameters: {
+            query: {
+                token: string;
+            };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
