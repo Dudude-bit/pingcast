@@ -32,10 +32,15 @@ export function UpgradeButton({
 }) {
   const { dict, locale } = useLocale();
   const [status, setStatus] = useState<FounderStatus | null>(null);
-  const [bucket, setBucket] = useState<Bucket | null>(null);
+  // Lazy initializer — runs once on client, returns null on server. The
+  // `!status` gate below means we never render with a non-null bucket
+  // until after the founder-status fetch resolves (post-hydration), so
+  // there's no SSR/CSR mismatch in the rendered HTML.
+  const [bucket] = useState<Bucket | null>(() =>
+    typeof window === "undefined" ? null : getBucket(),
+  );
 
   useEffect(() => {
-    setBucket(getBucket());
     let cancelled = false;
     fetch("/api/billing/founder-status", { credentials: "include" })
       .then((r) => (r.ok ? r.json() : null))
