@@ -59,6 +59,31 @@ func (s *FakeSMTP) AssertSent(t *testing.T, to, subjectContains string) {
 	t.Fatalf("expected email to %q with subject containing %q; got: %v", to, subjectContains, s.sent)
 }
 
+// FindSent returns the first captured email matching `to`, or nil. Used
+// when a test needs to inspect subject/body content (e.g. asserting the
+// email rendered in the right locale).
+func (s *FakeSMTP) FindSent(to string) *SentEmail {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.sent {
+		if s.sent[i].To == to {
+			return &s.sent[i]
+		}
+	}
+	return nil
+}
+
+// AsMailer adapts FakeSMTP to port.Mailer so the harness can inject it
+// into bootstrap.AppDeps.Mailer for tests that assert email content
+// (e.g. per-locale subscription confirmations).
+func (s *FakeSMTP) AsMailer() port.Mailer { return mailerAdapter{s} }
+
+type mailerAdapter struct{ s *FakeSMTP }
+
+func (m mailerAdapter) Send(_ context.Context, to, subject, body string) error {
+	return m.s.Send(to, subject, body)
+}
+
 // ---- Telegram ------------------------------------------------------
 
 type TelegramCall struct {

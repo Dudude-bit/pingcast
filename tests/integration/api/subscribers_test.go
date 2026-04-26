@@ -4,6 +4,7 @@ package api
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/kirillinakin/pingcast/tests/integration/api/harness"
@@ -154,6 +155,63 @@ func TestUnsubscribe_ValidToken_DeletesRow(t *testing.T) {
 
 	if n := subscriptionRowCount(t, h, user.Slug, "bye@test.local"); n != 0 {
 		t.Errorf("row still present after unsubscribe: %d", n)
+	}
+}
+
+// TestSubscribe_LocaleRU_SendsRussianConfirmationEmail prevents the
+// regression where a Russian visitor subscribes from the public RU
+// status page and gets an English confirmation email — they don't
+// recognise it, don't click, and the subscription dies in pending.
+func TestSubscribe_LocaleRU_SendsRussianConfirmationEmail(t *testing.T) {
+	h := harness.New(t)
+	_, user := h.RegisterAndLoginUser(t)
+
+	resp := h.App.NewSession().POST(t,
+		"/api/status/"+user.Slug+"/subscribe",
+		map[string]any{"email": "ru-sub@test.local", "locale": "ru"},
+	)
+	harness.AssertStatus(t, resp, 202)
+
+	email := h.App.SMTP.FindSent("ru-sub@test.local")
+	if email == nil {
+		t.Fatalf("no email sent to ru-sub@test.local; sent=%+v", h.App.SMTP.Sent())
+	}
+	// "Подтвердите" is the unmistakable RU marker — appears in subject
+	// of statusSubscribeConfirmEmail under localeRU.
+	if !strings.Contains(email.Subject, "Подтвердите") {
+		t.Errorf("subject not in Russian: %q", email.Subject)
+	}
+	if !strings.Contains(email.Body, "Подтвердите подписку") {
+		t.Errorf("body not in Russian: %q", email.Body)
+	}
+}
+
+// TestSubscribe_LocaleMissing_FallsBackToEnglish — empty/missing
+// locale must default to English (the existing behaviour for every
+// subscriber in the table before migration 027 added the locale column).
+func TestSubscribe_LocaleMissing_FallsBackToEnglish(t *testing.T) {
+	h := harness.New(t)
+	_, user := h.RegisterAndLoginUser(t)
+
+	resp := h.App.NewSession().POST(t,
+		"/api/status/"+user.Slug+"/subscribe",
+		map[string]any{"email": "en-sub@test.local"},
+	)
+	harness.AssertStatus(t, resp, 202)
+
+	email := h.App.SMTP.FindSent("en-sub@test.local")
+	if email == nil {
+		t.Fatalf("no email sent to en-sub@test.local; sent=%+v", h.App.SMTP.Sent())
+	}
+	if !strings.Contains(email.Subject, "Confirm") {
+		t.Errorf("subject not in English: %q", email.Subject)
+	}
+	// Cyrillic in body would mean we silently picked RU.
+	for _, r := range email.Body {
+		if r >= 0x0400 && r <= 0x04FF {
+			t.Errorf("body contains Cyrillic — locale leaked into EN default: %q", email.Body)
+			break
+		}
 	}
 }
 

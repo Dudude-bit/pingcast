@@ -78,6 +78,11 @@ type AppDeps struct {
 	Clock  port.Clock
 	Random port.Random
 
+	// Mailer overrides the SMTP-backed mailer when non-nil. Tests inject
+	// a recording fake so they can assert subject/body content (per-locale
+	// emails, double-opt-in flow). Production wires nil → SMTP adapter.
+	Mailer port.Mailer
+
 	// RateLimits overrides per-scope bucket sizes and/or the window for
 	// all scopes (used by integration tests to run burst scenarios in
 	// seconds). Nil → production defaults from port.RateLimitDefaults.
@@ -197,7 +202,10 @@ func NewApp(deps AppDeps) (*App, error) {
 	atlassianImporter := app.NewAtlassianImporter(monitorRepo, incidentRepo, incidentUpdateRepo, txm, clock)
 	statusSubRepo := postgres.NewStatusSubscriberRepo(queries)
 	blogSubRepo := postgres.NewBlogSubscriberRepo(queries)
-	mailer := smtpadapter.NewMailer(deps.SMTPHost, deps.SMTPPort, deps.SMTPUser, deps.SMTPPass, deps.SMTPFrom)
+	var mailer port.Mailer = smtpadapter.NewMailer(deps.SMTPHost, deps.SMTPPort, deps.SMTPUser, deps.SMTPPass, deps.SMTPFrom)
+	if deps.Mailer != nil {
+		mailer = deps.Mailer
+	}
 	subscriptionsSvc := app.NewSubscriptionService(statusSubRepo, mailer, deps.BaseURL)
 	blogSubscriptionsSvc := app.NewBlogSubscriptionService(blogSubRepo, mailer, deps.BaseURL)
 

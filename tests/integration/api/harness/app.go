@@ -18,6 +18,12 @@ import (
 	"github.com/kirillinakin/pingcast/internal/port"
 )
 
+// TestFounderVariantID is the LemonSqueezy variant ID the harness
+// pretends is the $9 founder tier. Webhook tests send `variant_id`
+// matching this constant to assert founder-cap accounting; sending
+// any other ID asserts retail accounting.
+const TestFounderVariantID = "12345"
+
 // App is the test-scoped wrapper over bootstrap.App. It also holds
 // infrastructure handles so tests can inspect state and harness
 // helpers can reset between tests.
@@ -103,16 +109,19 @@ func NewApp(t *testing.T) *App {
 		ReadPerMin:      1000,
 	}
 
+	smtp := NewFakeSMTP()
 	bootApp, err := bootstrap.NewApp(bootstrap.AppDeps{
-		Pool:               pool,
-		Redis:              rdb,
-		NATS:               nc,
-		JS:                 js,
-		Cipher:             cipher,
-		LemonSqueezySecret: "test-ls-secret",
-		Clock:              clock,
-		Random:             rng,
-		RateLimits:         defaultRL,
+		Pool:                         pool,
+		Redis:                        rdb,
+		NATS:                         nc,
+		JS:                           js,
+		Cipher:                       cipher,
+		LemonSqueezySecret:           "test-ls-secret",
+		LemonSqueezyFounderVariantID: TestFounderVariantID,
+		Clock:                        clock,
+		Random:                       rng,
+		RateLimits:                   defaultRL,
+		Mailer:                       smtp.AsMailer(),
 	})
 	if err != nil {
 		pool.Close()
@@ -121,7 +130,6 @@ func NewApp(t *testing.T) *App {
 		t.Fatalf("compose app: %v", err)
 	}
 
-	smtp := NewFakeSMTP()
 	tg := NewFakeTelegram()
 	t.Cleanup(tg.Close)
 	sink := NewFakeWebhookSink()
