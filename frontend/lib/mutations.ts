@@ -1,6 +1,11 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQueryClient,
+  type QueryClient,
+  type UseMutationOptions,
+} from "@tanstack/react-query";
 import { apiFetch, ApiError } from "./api";
 import { toast } from "sonner";
 import type { components } from "./openapi-types";
@@ -44,15 +49,37 @@ function mutationErrorToast(verb: string): (e: Error) => void {
   };
 }
 
+/**
+ * onMutationSuccess builds the onSuccess callback every CRUD hook
+ * needed by hand: invalidate one or more query keys + (optional) toast.
+ * `success` may be a static string ("Monitor created") or a function of
+ * the mutation result (toggle pause flips between two messages). Pass
+ * `undefined` for hooks that suppress the toast (e.g. useCreateAPIKey
+ * — the parent UI shows the new secret instead).
+ */
+function onMutationSuccess<TResult, TArg>(
+  qc: QueryClient,
+  invalidate: readonly (readonly string[])[],
+  success?: string | ((result: TResult, arg: TArg) => string),
+): NonNullable<UseMutationOptions<TResult, Error, TArg>["onSuccess"]> {
+  return (result, arg) => {
+    for (const key of invalidate) {
+      qc.invalidateQueries({ queryKey: [...key] });
+    }
+    if (success === undefined) return;
+    const msg = typeof success === "function" ? success(result, arg) : success;
+    if (msg) toast.success(msg);
+  };
+}
+
+// --- Monitors ---
+
 export function useCreateMonitor() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: CreateReq) =>
       apiFetch<Monitor>("/monitors", { method: "POST", body }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["monitors"] });
-      toast.success("Monitor created");
-    },
+    onSuccess: onMutationSuccess(qc, [["monitors"]], "Monitor created"),
     onError: mutationErrorToast("Create"),
   });
 }
@@ -62,11 +89,7 @@ export function useUpdateMonitor(id: string) {
   return useMutation({
     mutationFn: (body: UpdateReq) =>
       apiFetch<Monitor>(`/monitors/${id}`, { method: "PUT", body }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["monitors"] });
-      qc.invalidateQueries({ queryKey: ["monitors", id] });
-      toast.success("Monitor updated");
-    },
+    onSuccess: onMutationSuccess(qc, [["monitors"], ["monitors", id]], "Monitor updated"),
     onError: mutationErrorToast("Update"),
   });
 }
@@ -76,10 +99,7 @@ export function useDeleteMonitor() {
   return useMutation({
     mutationFn: (id: string) =>
       apiFetch<void>(`/monitors/${id}`, { method: "DELETE" }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["monitors"] });
-      toast.success("Monitor deleted");
-    },
+    onSuccess: onMutationSuccess(qc, [["monitors"]], "Monitor deleted"),
     onError: mutationErrorToast("Delete"),
   });
 }
@@ -89,11 +109,11 @@ export function useTogglePause() {
   return useMutation({
     mutationFn: (id: string) =>
       apiFetch<Monitor>(`/monitors/${id}/pause`, { method: "POST" }),
-    onSuccess: (updated, id) => {
-      qc.invalidateQueries({ queryKey: ["monitors"] });
-      qc.invalidateQueries({ queryKey: ["monitors", id] });
-      toast.success(updated.is_paused ? "Monitor paused" : "Monitor resumed");
-    },
+    onSuccess: onMutationSuccess<Monitor, string>(
+      qc,
+      [["monitors"]],
+      (updated) => (updated.is_paused ? "Monitor paused" : "Monitor resumed"),
+    ),
     onError: mutationErrorToast("Toggle"),
   });
 }
@@ -108,10 +128,7 @@ export function useCreateChannel() {
   return useMutation({
     mutationFn: (body: CreateChannelReq) =>
       apiFetch<Channel>("/channels", { method: "POST", body }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["channels"] });
-      toast.success("Channel created");
-    },
+    onSuccess: onMutationSuccess(qc, [["channels"]], "Channel created"),
     onError: mutationErrorToast("Create"),
   });
 }
@@ -121,10 +138,7 @@ export function useUpdateChannel(id: string) {
   return useMutation({
     mutationFn: (body: UpdateChannelReq) =>
       apiFetch<Channel>(`/channels/${id}`, { method: "PUT", body }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["channels"] });
-      toast.success("Channel updated");
-    },
+    onSuccess: onMutationSuccess(qc, [["channels"]], "Channel updated"),
     onError: mutationErrorToast("Update"),
   });
 }
@@ -134,10 +148,7 @@ export function useDeleteChannel() {
   return useMutation({
     mutationFn: (id: string) =>
       apiFetch<void>(`/channels/${id}`, { method: "DELETE" }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["channels"] });
-      toast.success("Channel deleted");
-    },
+    onSuccess: onMutationSuccess(qc, [["channels"]], "Channel deleted"),
     onError: mutationErrorToast("Delete"),
   });
 }
@@ -151,9 +162,8 @@ export function useCreateAPIKey() {
   return useMutation({
     mutationFn: (body: CreateAPIKeyReq) =>
       apiFetch<APIKeyCreated>("/api-keys", { method: "POST", body }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["api-keys"] });
-    },
+    // Suppress success toast — the parent reveals the new secret instead.
+    onSuccess: onMutationSuccess(qc, [["api-keys"]]),
     onError: mutationErrorToast("Create"),
   });
 }
@@ -163,10 +173,7 @@ export function useRevokeAPIKey() {
   return useMutation({
     mutationFn: (id: string) =>
       apiFetch<void>(`/api-keys/${id}`, { method: "DELETE" }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["api-keys"] });
-      toast.success("API key revoked");
-    },
+    onSuccess: onMutationSuccess(qc, [["api-keys"]], "API key revoked"),
     onError: mutationErrorToast("Revoke"),
   });
 }
