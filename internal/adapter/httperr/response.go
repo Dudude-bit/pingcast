@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -90,6 +91,15 @@ func classify(err error) (int, string, string) {
 			msg = code
 		}
 		return status, code, msg
+	}
+
+	// oapi-codegen's query/path binders return errors like
+	// "Query argument hostname is required, but not found" when a
+	// required parameter is empty or missing. These are user-input
+	// problems (400), not server errors (500).
+	if strings.Contains(err.Error(), "Query argument") ||
+		strings.Contains(err.Error(), "Path argument") {
+		return 400, "MALFORMED_PARAM", err.Error()
 	}
 
 	switch {
