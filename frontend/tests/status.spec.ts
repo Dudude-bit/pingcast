@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { flushRedis } from "./helpers";
+import { flushRedis, mainEmail, locPrefix } from "./helpers";
 
 test.beforeEach(flushRedis);
 
@@ -16,8 +16,8 @@ test("valid slug renders status page with SEO metadata", async ({ page }) => {
   const email = `stat-${slug}@example.com`;
 
   // Register a user (their slug becomes the status page URL).
-  await page.goto("/register");
-  await page.getByLabel("Email").fill(email);
+  await page.goto(`${locPrefix}/register`);
+  await mainEmail(page).fill(email);
   await page.getByLabel("Status page slug").fill(slug);
   await page.getByLabel("Password").fill("password123");
   await page.getByRole("button", { name: /create account/i }).click();

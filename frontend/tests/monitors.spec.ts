@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { flushRedis, registerFreshUser } from "./helpers";
+import { flushRedis, registerFreshUser, locPrefix } from "./helpers";
 
 test.beforeEach(flushRedis);
 
@@ -29,7 +29,7 @@ test.describe("monitors CRUD", () => {
     await expect(page.getByRole("heading", { name: /example api/i })).toBeVisible();
 
     // Back to dashboard shows the row
-    await page.goto("/dashboard");
+    await page.goto(`${locPrefix}/dashboard`);
     await expect(page.getByText(/example api/i)).toBeVisible();
 
     // Edit
@@ -52,7 +52,7 @@ test.describe("monitors CRUD", () => {
   test("protected route redirects to /login without session", async ({ page }) => {
     // Fresh browser — no cookies.
     await page.context().clearCookies();
-    await page.goto("/dashboard");
+    await page.goto(`${locPrefix}/dashboard`);
     await expect(page).toHaveURL(/\/login/);
   });
 });

@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { flushRedis, registerFreshUser } from "./helpers";
+import { flushRedis, registerFreshUser, locPrefix } from "./helpers";
 
 test.beforeEach(flushRedis);
 
@@ -22,7 +22,7 @@ test.describe("dashboard polling", () => {
     await page.getByRole("button", { name: /create monitor/i }).click();
 
     // Back on dashboard, the row appears without a hard refresh.
-    await page.goto("/dashboard");
+    await page.goto(`${locPrefix}/dashboard`);
     await expect(page.getByText(/polled monitor/i)).toBeVisible();
 
     // Second check: wait through one refetchInterval (15s) to catch the

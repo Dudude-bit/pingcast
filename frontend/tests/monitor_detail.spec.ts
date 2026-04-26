@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { flushRedis, registerFreshUser } from "./helpers";
+import { flushRedis, registerFreshUser, locPrefix } from "./helpers";
 
 test.beforeEach(flushRedis);
 
@@ -10,7 +10,7 @@ test.describe("monitor detail page", () => {
     await registerFreshUser(page);
 
     // Create a monitor so we have a detail page to visit
-    await page.goto("/monitors/new");
+    await page.goto(`${locPrefix}/monitors/new`);
     await page.getByLabel("Name").fill("Detail Monitor");
     await page.getByLabel("Monitor type").click();
     await page.getByRole("option", { name: /^http$/i }).click();
@@ -34,7 +34,11 @@ test.describe("monitor detail page", () => {
     const chart = page.locator("svg").first();
     await expect(chart).toBeVisible();
 
-    // Incidents section heading (empty state OK)
-    await expect(page.getByText(/incidents/i)).toBeVisible();
+    // Incidents section heading (empty state OK). Strict-mode-safe:
+    // there's also a navbar / footer "Incidents" link, so scope to a
+    // heading.
+    await expect(
+      page.getByRole("heading", { name: /incidents/i }).first(),
+    ).toBeVisible();
   });
 });

@@ -1,12 +1,12 @@
 import { test, expect } from "@playwright/test";
-import { flushRedis, registerFreshUser } from "./helpers";
+import { flushRedis, registerFreshUser, locPrefix } from "./helpers";
 
 test.beforeEach(flushRedis);
 
 test.describe("channels CRUD", () => {
   test("empty channels page shows create CTA", async ({ page }) => {
     await registerFreshUser(page);
-    await page.goto("/channels");
+    await page.goto(`${locPrefix}/channels`);
     await expect(
       page.getByRole("heading", { name: /no channels yet/i }),
     ).toBeVisible();
@@ -14,13 +14,13 @@ test.describe("channels CRUD", () => {
 
   test("create telegram channel, edit, delete", async ({ page }) => {
     await registerFreshUser(page);
-    await page.goto("/channels");
+    await page.goto(`${locPrefix}/channels`);
 
-    await page.getByRole("link", { name: /new channel/i }).click();
+    await page.getByRole("link", { name: /add channel/i }).click();
     await expect(page).toHaveURL(/\/channels\/new/);
 
     await page.getByLabel("Name").fill("Ops Telegram");
-    await page.getByLabel("Channel type").click();
+    await page.getByLabel("Type").click();
     await page.getByRole("option", { name: /telegram/i }).click();
 
     // Telegram channel type exposes a chat_id field (from Go channel registry)

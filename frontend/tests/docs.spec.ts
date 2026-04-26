@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { locPrefix } from "./helpers";
 
 test.describe("API docs", () => {
   test("/openapi.yaml is served with the spec body", async ({ request }) => {
@@ -9,8 +10,8 @@ test.describe("API docs", () => {
     expect(body).toContain("PingCast API");
   });
 
-  test("/docs/api renders the Scalar reference", async ({ page }) => {
-    await page.goto("/docs/api");
+  test("/<lang>/docs/api renders the Scalar reference", async ({ page }) => {
+    await page.goto(`${locPrefix}/docs/api`);
     // Scalar renders operation sections that include tag/operation text
     // from the spec — look for a known endpoint label.
     await expect(
