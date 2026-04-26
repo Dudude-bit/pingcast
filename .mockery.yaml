@@ -18,6 +18,7 @@ packages:
       CheckResultRepo: {}
       CheckerRegistry: {}
       CustomDomainRepo: {}
+      CustomDomainCertRepo: {}
       DistributedMutex: {}
       FailedAlertRepo: {}
       HostLimiter: {}
