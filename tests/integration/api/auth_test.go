@@ -183,3 +183,52 @@ func TestLogout_Unauthenticated_Returns401(t *testing.T) {
 	resp := s.POST(t, "/api/auth/logout", nil)
 	harness.AssertError(t, resp, 401, "UNAUTHORIZED")
 }
+
+// TestGetMe_LiveSession_ReturnsUser is the contract the SSR navbar
+// depends on to distinguish a stale cookie from a live session.
+func TestGetMe_LiveSession_ReturnsUser(t *testing.T) {
+	h := harness.New(t)
+	s, user := h.RegisterAndLoginUser(t)
+
+	resp := s.GET(t, "/api/auth/me")
+	harness.AssertStatus(t, resp, 200)
+
+	var body struct {
+		ID    string `json:"id"`
+		Email string `json:"email"`
+		Slug  string `json:"slug"`
+		Plan  string `json:"plan"`
+	}
+	resp.JSON(t, &body)
+	if body.ID != user.ID.String() {
+		t.Errorf("id: got %q want %q", body.ID, user.ID)
+	}
+	if body.Email != user.Email {
+		t.Errorf("email: got %q want %q", body.Email, user.Email)
+	}
+	if body.Plan != "free" {
+		t.Errorf("plan: got %q want 'free'", body.Plan)
+	}
+}
+
+// TestGetMe_NoCookie_Returns401 — visitor with no session_id cookie
+// at all must get 401, not a half-authenticated response.
+func TestGetMe_NoCookie_Returns401(t *testing.T) {
+	h := harness.New(t)
+	s := h.App.NewSession()
+
+	resp := s.GET(t, "/api/auth/me")
+	harness.AssertError(t, resp, 401, "UNAUTHORIZED")
+}
+
+// TestGetMe_StaleCookie_Returns401 — the bug this endpoint exists to
+// fix: a session_id from a logged-out / TTL-expired session must
+// return 401 so the SSR navbar can stop showing logged-in chrome.
+func TestGetMe_StaleCookie_Returns401(t *testing.T) {
+	h := harness.New(t)
+	s := h.App.NewSession()
+	s.SetHeader("Cookie", "session_id=this-token-was-never-real")
+
+	resp := s.GET(t, "/api/auth/me")
+	harness.AssertError(t, resp, 401, "UNAUTHORIZED")
+}

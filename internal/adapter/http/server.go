@@ -183,6 +183,25 @@ func (s *Server) Logout(c *fiber.Ctx) error {
 	return c.SendStatus(204)
 }
 
+// GetMe is the cheapest possible session-validation probe. The SSR
+// navbar calls this to distinguish a stale session_id cookie (401 →
+// render logged-out + clear cookie) from a live session (200 + user).
+// Without it the navbar trusted the cookie's mere presence and showed
+// "Logout" / "Dashboard" links to visitors who'd silently been signed
+// out (Redis TTL expired, manual revoke, etc.).
+func (s *Server) GetMe(c *fiber.Ctx) error {
+	user := requireUser(c)
+	if user == nil {
+		return nil
+	}
+	return c.JSON(apigen.MeResponse{
+		Id:    user.ID,
+		Email: user.Email,
+		Slug:  user.Slug,
+		Plan:  apigen.MeResponsePlan(user.Plan),
+	})
+}
+
 func (s *Server) ListMonitors(c *fiber.Ctx) error {
 	user := requireUser(c)
 	if user == nil {

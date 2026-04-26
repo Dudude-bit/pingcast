@@ -114,6 +114,24 @@ func (e IncidentUpdateState) Valid() bool {
 	}
 }
 
+// Defines values for MeResponsePlan.
+const (
+	MeResponsePlanFree MeResponsePlan = "free"
+	MeResponsePlanPro  MeResponsePlan = "pro"
+)
+
+// Valid indicates whether the value is a known member of the MeResponsePlan enum.
+func (e MeResponsePlan) Valid() bool {
+	switch e {
+	case MeResponsePlanFree:
+		return true
+	case MeResponsePlanPro:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for MonitorCurrentStatus.
 const (
 	MonitorCurrentStatusDown    MonitorCurrentStatus = "down"
@@ -203,16 +221,16 @@ func (e UpdateIncidentStateRequestState) Valid() bool {
 
 // Defines values for UserPlan.
 const (
-	Free UserPlan = "free"
-	Pro  UserPlan = "pro"
+	UserPlanFree UserPlan = "free"
+	UserPlanPro  UserPlan = "pro"
 )
 
 // Valid indicates whether the value is a known member of the UserPlan enum.
 func (e UserPlan) Valid() bool {
 	switch e {
-	case Free:
+	case UserPlanFree:
 		return true
-	case Pro:
+	case UserPlanPro:
 		return true
 	default:
 		return false
@@ -418,6 +436,17 @@ type MaintenanceWindow struct {
 	Reason    string             `json:"reason"`
 	StartsAt  time.Time          `json:"starts_at"`
 }
+
+// MeResponse defines model for MeResponse.
+type MeResponse struct {
+	Email string             `json:"email"`
+	Id    openapi_types.UUID `json:"id"`
+	Plan  MeResponsePlan     `json:"plan"`
+	Slug  string             `json:"slug"`
+}
+
+// MeResponsePlan defines model for MeResponse.Plan.
+type MeResponsePlan string
 
 // Monitor defines model for Monitor.
 type Monitor struct {
@@ -739,6 +768,9 @@ type ServerInterface interface {
 	// (POST /api/auth/logout)
 	Logout(c *fiber.Ctx) error
 
+	// (GET /api/auth/me)
+	GetMe(c *fiber.Ctx) error
+
 	// (POST /api/auth/register)
 	Register(c *fiber.Ctx) error
 
@@ -934,6 +966,14 @@ func (siw *ServerInterfaceWrapper) Logout(c *fiber.Ctx) error {
 	c.Context().SetUserValue(SessionAuthScopes, []string{})
 
 	return siw.Handler.Logout(c)
+}
+
+// GetMe operation middleware
+func (siw *ServerInterfaceWrapper) GetMe(c *fiber.Ctx) error {
+
+	c.Context().SetUserValue(SessionAuthScopes, []string{})
+
+	return siw.Handler.GetMe(c)
 }
 
 // Register operation middleware
@@ -1664,6 +1704,8 @@ func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, option
 	router.Post(options.BaseURL+"/api/auth/login", wrapper.Login)
 
 	router.Post(options.BaseURL+"/api/auth/logout", wrapper.Logout)
+
+	router.Get(options.BaseURL+"/api/auth/me", wrapper.GetMe)
 
 	router.Post(options.BaseURL+"/api/auth/register", wrapper.Register)
 
