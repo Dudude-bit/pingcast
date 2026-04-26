@@ -117,25 +117,6 @@ func authenticateWithAPIKey(c *fiber.Ctx, auth *app.AuthService, apiKeyRepo port
 	return c.Next()
 }
 
-// PageMiddleware returns a Fiber handler that validates the session cookie
-// and stores *domain.User in Locals. Redirects to /login on failure.
-func PageMiddleware(auth *app.AuthService) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		sessionID := c.Cookies("session_id")
-		if sessionID == "" {
-			return c.Redirect("/login")
-		}
-
-		user, err := auth.ValidateSession(c.UserContext(), sessionID)
-		if err != nil {
-			c.ClearCookie("session_id")
-			return c.Redirect("/login")
-		}
-
-		c.Locals(userCtxKey, user)
-		return c.Next()
-	}
-}
 
 // UserFromCtx extracts the authenticated *domain.User from fiber.Locals.
 func UserFromCtx(c *fiber.Ctx) *domain.User {

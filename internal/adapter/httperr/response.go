@@ -38,18 +38,6 @@ func WriteMalformedJSON(c *fiber.Ctx) error {
 	})
 }
 
-// WriteMalformedParam is a shortcut for 400 MALFORMED_PARAM (typically
-// UUID parse failures on path params).
-func WriteMalformedParam(c *fiber.Ctx, paramName string) error {
-	msg := "malformed path or query parameter"
-	if paramName != "" {
-		msg = "malformed parameter: " + paramName
-	}
-	return c.Status(fiber.StatusBadRequest).JSON(Envelope{
-		Error: Inner{Code: "MALFORMED_PARAM", Message: msg},
-	})
-}
-
 // WriteUnauthorized is a shortcut for 401 UNAUTHORIZED.
 func WriteUnauthorized(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusUnauthorized).JSON(Envelope{
@@ -73,13 +61,6 @@ func WriteNotFound(c *fiber.Ctx, what string) error {
 	}
 	return c.Status(fiber.StatusNotFound).JSON(Envelope{
 		Error: Inner{Code: "NOT_FOUND", Message: msg},
-	})
-}
-
-// WriteConflict is a shortcut for 409 CONFLICT.
-func WriteConflict(c *fiber.Ctx, message string) error {
-	return c.Status(fiber.StatusConflict).JSON(Envelope{
-		Error: Inner{Code: "CONFLICT", Message: message},
 	})
 }
 

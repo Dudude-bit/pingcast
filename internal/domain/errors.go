@@ -49,19 +49,14 @@ func NewDeliveryError(reason string, statusCode int, err error) *DeliveryError {
 	return &DeliveryError{Reason: reason, StatusCode: statusCode, Err: err}
 }
 
-// Error constructors
-func NewNotFoundError(code, message string) *DomainError {
-	return &DomainError{Err: ErrNotFound, Code: code, Message: message}
-}
-
-func NewForbiddenError(code, message string) *DomainError {
-	return &DomainError{Err: ErrForbidden, Code: code, Message: message}
-}
-
+// NewValidationError builds the most common kind — auth.go uses it for
+// slug/password rejections. NewNotFoundError stays around because the
+// HTTP error-envelope handler test needs a way to materialise a
+// DomainError; production code reaches for the sentinels via errors.Is.
 func NewValidationError(code, message string) *DomainError {
 	return &DomainError{Err: ErrValidation, Code: code, Message: message}
 }
 
-func NewConflictError(code, message string) *DomainError {
-	return &DomainError{Err: ErrConflict, Code: code, Message: message}
+func NewNotFoundError(code, message string) *DomainError {
+	return &DomainError{Err: ErrNotFound, Code: code, Message: message}
 }
