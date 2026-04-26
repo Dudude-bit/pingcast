@@ -2,6 +2,11 @@
 // don't have to null-check or type-cast at each site. A no-op when the
 // pixel isn't loaded (dev, envs unset, ad-blocker) — safe to sprinkle
 // freely across conversion-critical click paths.
+//
+// Every event automatically picks up the visitor's pricing-A/B bucket
+// so funnel splits in Plausible work without per-call wiring.
+
+import { getBucket } from "./abtest";
 
 type PlausibleProps = Record<string, string | number | boolean>;
 
@@ -20,5 +25,6 @@ export function track(event: string, props?: PlausibleProps) {
   if (typeof window === "undefined") return;
   const fn = window.plausible;
   if (!fn) return;
-  fn(event, props ? { props } : undefined);
+  const merged: PlausibleProps = { bucket: getBucket(), ...(props ?? {}) };
+  fn(event, { props: merged });
 }
