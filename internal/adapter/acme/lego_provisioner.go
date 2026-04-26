@@ -17,10 +17,11 @@
 //     stays opt-in via env (`CERT_PROVIDER=lego`) and the default
 //     remains NoopCertProvisioner.
 //
-//  3. A renewal loop (CustomDomainService.scheduleRenewals — TODO)
-//     scans `custom_domain_certs` for `expires_at < now+30d` and
-//     re-runs Provision. Lego's cert lifetime is 90 days; we'd renew
-//     at day 60 so a single transient ACME outage doesn't expire prod.
+//  3. A renewal loop (CustomDomainService.RunRenewalsOnce, scheduled
+//     daily by the scheduler service) scans `custom_domain_certs` for
+//     `expires_at < now+30d` and re-runs Provision. Lego's cert lifetime
+//     is 90 days; we renew at day 60 so a single transient ACME outage
+//     doesn't expire prod.
 package acme
 
 import (

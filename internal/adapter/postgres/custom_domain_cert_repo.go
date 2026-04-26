@@ -48,6 +48,10 @@ func (r *CustomDomainCertRepo) ListExpiringBefore(ctx context.Context, before ti
 	return out, nil
 }
 
+func (r *CustomDomainCertRepo) ListExpiringHostnames(ctx context.Context, before time.Time) ([]string, error) {
+	return r.q.ListExpiringHostnames(ctx, before)
+}
+
 func rowToCert(domainID int64, certPEM, keyPEM, chainPEM string, expiresAt time.Time) *port.CustomDomainCert {
 	return &port.CustomDomainCert{
 		CustomDomainID: domainID,

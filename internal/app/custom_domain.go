@@ -39,9 +39,10 @@ func (NoopCertProvisioner) Provision(ctx context.Context, hostname string) error
 // live. Runs a background worker that advances rows through the state
 // machine.
 type CustomDomainService struct {
-	repo    port.CustomDomainRepo
-	acme    CertProvisioner
-	baseURL string
+	repo     port.CustomDomainRepo
+	certRepo port.CustomDomainCertRepo
+	acme     CertProvisioner
+	baseURL  string
 
 	// hostnameCache is populated from ListActiveHostnames and refreshed
 	// whenever a domain flips to active or gets deleted. Read path is
@@ -50,9 +51,13 @@ type CustomDomainService struct {
 	hostnameCache map[string]uuid.UUID
 }
 
-func NewCustomDomainService(repo port.CustomDomainRepo, acme CertProvisioner, baseURL string) *CustomDomainService {
+// NewCustomDomainService constructs the service. certRepo may be nil
+// in tests + dev where the renewal loop isn't exercised; production
+// must pass a real one or RunRenewalsOnce becomes a no-op.
+func NewCustomDomainService(repo port.CustomDomainRepo, certRepo port.CustomDomainCertRepo, acme CertProvisioner, baseURL string) *CustomDomainService {
 	return &CustomDomainService{
 		repo:          repo,
+		certRepo:      certRepo,
 		acme:          acme,
 		baseURL:       strings.TrimRight(baseURL, "/"),
 		hostnameCache: map[string]uuid.UUID{},
@@ -198,6 +203,37 @@ func (s *CustomDomainService) validateDNS(ctx context.Context, d domain.CustomDo
 	now := time.Now()
 	if err := s.repo.UpdateStatus(ctx, d.ID, domain.CustomDomainValidated, nil, &now, nil); err != nil {
 		slog.Error("mark custom-domain validated", "id", d.ID, "error", err)
+	}
+}
+
+// RunRenewalsOnce scans for certs expiring within the next 30 days and
+// re-runs Provision on each. Lego cert lifetime is 90 days; renewing at
+// day 60 leaves a 30-day buffer so a transient ACME outage doesn't run
+// us off a cliff. Idempotent — re-issuing a still-valid cert is fine.
+// No-op if certRepo wasn't wired (tests / dev).
+func (s *CustomDomainService) RunRenewalsOnce(ctx context.Context) {
+	if s.certRepo == nil {
+		return
+	}
+	threshold := time.Now().Add(30 * 24 * time.Hour)
+	hostnames, err := s.certRepo.ListExpiringHostnames(ctx, threshold)
+	if err != nil {
+		slog.Error("renewal: list expiring hostnames failed", "error", err)
+		return
+	}
+	if len(hostnames) == 0 {
+		return
+	}
+	slog.Info("renewal: starting batch", "count", len(hostnames), "threshold", threshold)
+	for _, hostname := range hostnames {
+		if err := s.acme.Provision(ctx, hostname); err != nil {
+			// One renewal failure shouldn't kill the batch — next domain
+			// may still succeed, and we'll retry the failure on the next
+			// tick.
+			slog.Error("renewal: provision failed", "hostname", hostname, "error", err)
+			continue
+		}
+		slog.Info("renewal: re-issued", "hostname", hostname)
 	}
 }
 

@@ -65,6 +65,37 @@ func (q *Queries) ListCustomDomainCertsExpiringBefore(ctx context.Context, expir
 	return items, nil
 }
 
+const listExpiringHostnames = `-- name: ListExpiringHostnames :many
+SELECT d.hostname
+FROM custom_domain_certs c
+JOIN custom_domains d ON d.id = c.custom_domain_id
+WHERE c.expires_at < $1
+  AND d.status = 'active'
+`
+
+// Renewal-loop helper: returns just the hostnames whose cert expires
+// before the given time AND whose custom_domain row is still active.
+// Inactive (deleted/failed) domains aren't worth renewing for.
+func (q *Queries) ListExpiringHostnames(ctx context.Context, expiresAt time.Time) ([]string, error) {
+	rows, err := q.db.Query(ctx, listExpiringHostnames, expiresAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var hostname string
+		if err := rows.Scan(&hostname); err != nil {
+			return nil, err
+		}
+		items = append(items, hostname)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertCustomDomainCert = `-- name: UpsertCustomDomainCert :exec
 INSERT INTO custom_domain_certs (custom_domain_id, cert_pem, key_pem, chain_pem, expires_at)
 VALUES ($1, $2, $3, $4, $5)

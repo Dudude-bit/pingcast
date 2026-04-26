@@ -55,6 +55,7 @@ type Scheduler struct {
 	cleanupFunc      func(context.Context)
 	sslScanFunc      func(context.Context)
 	customDomainFunc func(context.Context)
+	certRenewalFunc  func(context.Context)
 	cleanupCancel    context.CancelFunc
 	cleanupWg        sync.WaitGroup
 }
@@ -200,7 +201,8 @@ func NewScheduler(deps SchedulerDeps) (*Scheduler, error) {
 	// worker. ACME provisioning is stubbed (NoopCertProvisioner) today;
 	// flip to a real adapter when prod Traefik/ACME is wired.
 	customDomainRepo := postgres.NewCustomDomainRepo(queries)
-	customDomainSvc := app.NewCustomDomainService(customDomainRepo, app.NoopCertProvisioner{}, "")
+	customDomainCertRepo := postgres.NewCustomDomainCertRepo(queries)
+	customDomainSvc := app.NewCustomDomainService(customDomainRepo, customDomainCertRepo, app.NoopCertProvisioner{}, "")
 	cdMutex := rs.NewMutex("lock:custom-domain:validate", redsync.WithExpiry(2*time.Minute))
 	s.customDomainFunc = func(ctx context.Context) {
 		defer s.cleanupWg.Done()
@@ -221,6 +223,35 @@ func NewScheduler(deps SchedulerDeps) (*Scheduler, error) {
 				customDomainSvc.RunValidationOnce(ctx)
 				if _, err := cdMutex.Unlock(); err != nil {
 					slog.Warn("custom-domain unlock failed", "error", err)
+				}
+			}
+		}
+	}
+
+	// Cert-renewal loop — once a day, leader-elected. Lego certs live
+	// 90 days; we renew at day-60 (i.e. when expires_at < now+30d) so a
+	// transient ACME outage doesn't expire prod certs. The loop is
+	// idempotent — re-issuing a still-valid cert is fine.
+	renewalMutex := rs.NewMutex("lock:custom-domain:renew", redsync.WithExpiry(15*time.Minute))
+	s.certRenewalFunc = func(ctx context.Context) {
+		defer s.cleanupWg.Done()
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := renewalMutex.Lock(); err != nil {
+					if errors.Is(err, redsync.ErrFailed) {
+						continue
+					}
+					slog.Warn("cert-renewal lock failed", "error", err)
+					continue
+				}
+				customDomainSvc.RunRenewalsOnce(ctx)
+				if _, err := renewalMutex.Unlock(); err != nil {
+					slog.Warn("cert-renewal unlock failed", "error", err)
 				}
 			}
 		}
@@ -317,6 +348,11 @@ func (s *Scheduler) Start(ctx context.Context) {
 	if s.customDomainFunc != nil {
 		s.cleanupWg.Add(1)
 		go s.customDomainFunc(cleanupCtx)
+	}
+
+	if s.certRenewalFunc != nil {
+		s.cleanupWg.Add(1)
+		go s.certRenewalFunc(cleanupCtx)
 	}
 
 	go s.Leader.Run(ctx)

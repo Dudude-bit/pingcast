@@ -168,6 +168,10 @@ type CustomDomainCertRepo interface {
 	Upsert(ctx context.Context, cert CustomDomainCert) error
 	GetByDomainID(ctx context.Context, domainID int64) (*CustomDomainCert, error)
 	ListExpiringBefore(ctx context.Context, before time.Time) ([]CustomDomainCert, error)
+	// ListExpiringHostnames is the renewal-loop helper: hostnames whose
+	// cert expires before `before` AND whose domain row is still active.
+	// Inactive rows aren't worth re-issuing.
+	ListExpiringHostnames(ctx context.Context, before time.Time) ([]string, error)
 }
 
 type CustomDomainRepo interface {

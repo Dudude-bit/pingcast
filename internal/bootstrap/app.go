@@ -213,7 +213,7 @@ func NewApp(deps AppDeps) (*App, error) {
 			"provider", deps.CertProvider, "error", certErr)
 		certProvisioner = app.NoopCertProvisioner{}
 	}
-	customDomainsSvc := app.NewCustomDomainService(customDomainRepo, certProvisioner, deps.BaseURL)
+	customDomainsSvc := app.NewCustomDomainService(customDomainRepo, customDomainCertRepo, certProvisioner, deps.BaseURL)
 	// Warm the hostname→user lookup cache so the first custom-domain
 	// request doesn't pay a Postgres roundtrip. Bounded context so a
 	// slow DB at boot can't stall app startup.
