@@ -30,6 +30,7 @@ const LOCALE_BYPASS_PREFIXES = [
   "/status/",
   "/sitemap.xml",
   "/robots.txt",
+  "/openapi.yaml",
   "/favicon.ico",
   "/favicon.svg",
   "/favicon.png",

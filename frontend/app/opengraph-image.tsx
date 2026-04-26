@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const alt =
-  "PingCast — lightweight uptime monitoring with instant Telegram alerts and public status pages";
+  "PingCast — branded status pages for SaaS, at a third of Atlassian's price";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -69,8 +69,10 @@ export default async function Image() {
               flexDirection: "column",
             }}
           >
-            <span>Know when it breaks.</span>
-            <span style={{ color: "#60a5fa" }}>Before anyone tells you.</span>
+            <span>Branded status pages for SaaS,</span>
+            <span style={{ color: "#60a5fa" }}>
+              at a third of Atlassian&apos;s price.
+            </span>
           </div>
 
           <div
@@ -81,8 +83,7 @@ export default async function Image() {
               lineHeight: 1.4,
             }}
           >
-            Lightweight uptime monitoring · Instant Telegram alerts · Public
-            status pages
+            Custom domain · Incident timeline · Email subscribers · From $9/mo
           </div>
         </div>
       </div>
