@@ -18,6 +18,11 @@ type UserRepo interface {
 	UpdateLemonSqueezy(ctx context.Context, id uuid.UUID, customerID, subscriptionID string) error
 	SetSubscriptionVariant(ctx context.Context, id uuid.UUID, variant string) error
 	CountActiveFounderSubscriptions(ctx context.Context) (int64, error)
+	// AcquireFounderCapLock takes a transaction-scoped advisory lock so
+	// concurrent webhook handlers can't both pass a cap check at
+	// used=cap-1 and both write 'founder'. Must be called inside a
+	// txm.Do — releases at COMMIT/ROLLBACK.
+	AcquireFounderCapLock(ctx context.Context) error
 	GetBranding(ctx context.Context, id uuid.UUID) (Branding, error)
 	GetBrandingBySlug(ctx context.Context, slug string) (plan domain.Plan, b Branding, err error)
 	UpdateBranding(ctx context.Context, id uuid.UUID, b Branding) error

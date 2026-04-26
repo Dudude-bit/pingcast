@@ -46,3 +46,11 @@ FROM users
 WHERE plan = 'pro'
   AND subscription_variant = 'founder'
   AND deleted_at IS NULL;
+
+-- name: AcquireFounderCapLock :exec
+-- Transaction-scoped advisory lock that serializes founder-cap
+-- check-and-set across concurrent webhooks. The constant key
+-- (0x70_69_6E_67_63_61_73_74 = "pingcast" ASCII bytes packed) is
+-- unique per app to avoid clashing with other advisory locks.
+-- Auto-released at COMMIT/ROLLBACK.
+SELECT pg_advisory_xact_lock(8101010110994897);

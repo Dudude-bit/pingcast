@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kirillinakin/pingcast/internal/domain"
 	"github.com/kirillinakin/pingcast/internal/port"
@@ -13,11 +14,19 @@ import (
 var _ port.UserRepo = (*UserRepo)(nil)
 
 type UserRepo struct {
-	q *gen.Queries
+	pool *pgxpool.Pool
+	q    *gen.Queries
 }
 
-func NewUserRepo(q *gen.Queries) *UserRepo {
-	return &UserRepo{q: q}
+func NewUserRepo(pool *pgxpool.Pool, q *gen.Queries) *UserRepo {
+	return &UserRepo{pool: pool, q: q}
+}
+
+// queries returns sqlc Queries scoped to the active transaction (if any),
+// so AcquireFounderCapLock + CountActiveFounderSubscriptions + the
+// follow-up SetSubscriptionVariant all run in the same tx.
+func (r *UserRepo) queries(ctx context.Context) *gen.Queries {
+	return QueriesFromCtx(ctx, r.q, r.pool)
 }
 
 func (r *UserRepo) Create(ctx context.Context, email, slug, passwordHash string) (*domain.User, error) {
@@ -80,14 +89,18 @@ func (r *UserRepo) SetSubscriptionVariant(ctx context.Context, id uuid.UUID, var
 	if variant == "" {
 		v = nil
 	}
-	return r.q.SetSubscriptionVariant(ctx, gen.SetSubscriptionVariantParams{
+	return r.queries(ctx).SetSubscriptionVariant(ctx, gen.SetSubscriptionVariantParams{
 		ID:                  id,
 		SubscriptionVariant: v,
 	})
 }
 
 func (r *UserRepo) CountActiveFounderSubscriptions(ctx context.Context) (int64, error) {
-	return r.q.CountActiveFounderSubscriptions(ctx)
+	return r.queries(ctx).CountActiveFounderSubscriptions(ctx)
+}
+
+func (r *UserRepo) AcquireFounderCapLock(ctx context.Context) error {
+	return r.queries(ctx).AcquireFounderCapLock(ctx)
 }
 
 func (r *UserRepo) GetBranding(ctx context.Context, id uuid.UUID) (port.Branding, error) {

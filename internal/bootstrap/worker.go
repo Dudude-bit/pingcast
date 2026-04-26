@@ -40,7 +40,7 @@ type Worker struct {
 func NewWorker(deps WorkerDeps) (*Worker, error) {
 	queries := sqlcgen.New(deps.Pool)
 
-	userRepo := postgres.NewUserRepo(queries)
+	userRepo := postgres.NewUserRepo(deps.Pool, queries)
 	monitorRepo := postgres.NewMonitorRepo(deps.Pool, queries, deps.Cipher)
 	channelRepo := postgres.NewChannelRepo(deps.Pool, queries, deps.Cipher)
 	checkResultRepo := postgres.NewCheckResultRepo(queries)

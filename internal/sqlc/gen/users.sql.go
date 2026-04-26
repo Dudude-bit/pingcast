@@ -13,6 +13,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acquireFounderCapLock = `-- name: AcquireFounderCapLock :exec
+SELECT pg_advisory_xact_lock(8101010110994897)
+`
+
+// Transaction-scoped advisory lock that serializes founder-cap
+// check-and-set across concurrent webhooks. The constant key
+// (0x70_69_6E_67_63_61_73_74 = "pingcast" ASCII bytes packed) is
+// unique per app to avoid clashing with other advisory locks.
+// Auto-released at COMMIT/ROLLBACK.
+func (q *Queries) AcquireFounderCapLock(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, acquireFounderCapLock)
+	return err
+}
+
 const countActiveFounderSubscriptions = `-- name: CountActiveFounderSubscriptions :one
 SELECT COUNT(*)::bigint AS count
 FROM users

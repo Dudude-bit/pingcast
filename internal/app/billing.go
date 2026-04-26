@@ -15,11 +15,12 @@ import (
 // link to expose.
 type BillingService struct {
 	users      port.UserRepo
+	txm        port.TxManager
 	founderCap int
 }
 
-func NewBillingService(users port.UserRepo, founderCap int) *BillingService {
-	return &BillingService{users: users, founderCap: founderCap}
+func NewBillingService(users port.UserRepo, txm port.TxManager, founderCap int) *BillingService {
+	return &BillingService{users: users, txm: txm, founderCap: founderCap}
 }
 
 // FounderStatus is the shape returned from /api/billing/founder-status.
@@ -46,4 +47,32 @@ func (s *BillingService) FounderStatus(ctx context.Context) (FounderStatus, erro
 // LemonSqueezy webhook when subscription_created fires.
 func (s *BillingService) SetSubscriptionVariant(ctx context.Context, userID uuid.UUID, variant string) error {
 	return s.users.SetSubscriptionVariant(ctx, userID, variant)
+}
+
+// TagFromWebhook is the race-free version of SetSubscriptionVariant
+// used by the LemonSqueezy webhook. If the requested variant is
+// 'founder' it acquires a tx-scoped advisory lock, recounts active
+// founders, and downgrades the tag to 'retail' when the cap is full.
+// Without this, two webhooks arriving at used=cap-1 could both pass a
+// soft check and both write 'founder', overshooting the scarcity
+// promise. Returns the variant that was actually persisted so the
+// caller can log the resolution.
+func (s *BillingService) TagFromWebhook(ctx context.Context, userID uuid.UUID, requestedVariant string) (string, error) {
+	chosen := requestedVariant
+	err := s.txm.Do(ctx, func(ctx context.Context) error {
+		if requestedVariant == "founder" {
+			if err := s.users.AcquireFounderCapLock(ctx); err != nil {
+				return err
+			}
+			used, err := s.users.CountActiveFounderSubscriptions(ctx)
+			if err != nil {
+				return err
+			}
+			if used >= int64(s.founderCap) {
+				chosen = "retail"
+			}
+		}
+		return s.users.SetSubscriptionVariant(ctx, userID, chosen)
+	})
+	return chosen, err
 }
