@@ -89,9 +89,14 @@ export async function register(
 
   const res = await postAuth("/auth/register", { email, slug, password });
   if (!res.ok) {
-    return {
-      error: await errorFromResponse(res, "Registration failed."),
-    };
+    // Enumeration-safe: never echo the API's specific message
+    // ("email already registered" leaks which addresses are taken).
+    // Rate-limit is the only branch we surface specifically because
+    // it tells the user to slow down rather than retry.
+    if (res.status === 429) {
+      return { error: "Too many attempts. Try again in a minute." };
+    }
+    return { error: "Registration failed. Check the form and try again." };
   }
   await copySessionCookie(res);
   // ?registered=1 lets the dashboard fire the `register_completed`
