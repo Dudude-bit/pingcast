@@ -35,6 +35,12 @@ type SchedulerDeps struct {
 
 	RetentionDays int
 
+	// CertProvisionerConfig must mirror what the API got — without it
+	// the scheduler-driven validation + renewal loops would call the
+	// noop provisioner, marking domains "active" without an actual
+	// cert and leaving renewals as no-ops.
+	CertProvisionerConfig
+
 	// SSLScanEnabled enables the daily Pro-tier SSL-expiry probe. On by
 	// default; tests flip it off to avoid real TCP dials. The ticker
 	// cadence is fixed at 24h — misses only matter for certs already
@@ -115,53 +121,34 @@ func NewScheduler(deps SchedulerDeps) (*Scheduler, error) {
 	}
 
 	// Retention cleanup closure — launched by Start().
+	cleanupMutex := rs.NewMutex("lock:cleanup:retention", redsync.WithExpiry(1*time.Hour))
 	s.cleanupFunc = func(ctx context.Context) {
 		defer s.cleanupWg.Done()
-
-		cleanupMutex := rs.NewMutex("lock:cleanup:retention", redsync.WithExpiry(1*time.Hour))
-		ticker := time.NewTicker(24 * time.Hour)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				if err := cleanupMutex.Lock(); err != nil {
-					if errors.Is(err, redsync.ErrFailed) {
-						continue
-					}
-					slog.Warn("cleanup lock failed", "error", err)
-					continue
-				}
-				// Plan-aware retention (sprint 2 §6): Free users keep 30
-				// days; Pro users keep 365. RETENTION_DAYS is still the
-				// Free baseline so ops can tune it without a code change.
-				freeCutoff := time.Now().Add(-time.Duration(deps.RetentionDays) * 24 * time.Hour)
-				proCutoff := time.Now().AddDate(-1, 0, 0)
-				deleted, err := checkResultRepo.DeleteByPlan(ctx, freeCutoff, proCutoff)
-				if err != nil {
-					slog.Error("retention cleanup failed", "error", err)
-				} else if deleted > 0 {
-					slog.Info("retention cleanup",
-						"deleted_rows", deleted,
-						"free_cutoff", freeCutoff, "pro_cutoff", proCutoff)
-				}
-				rangeStart := time.Date(time.Now().Year(), time.Now().Month()+1, 1, 0, 0, 0, 0, time.UTC)
-				rangeEnd := rangeStart.AddDate(0, 1, 0)
-				safeName := pgx.Identifier{fmt.Sprintf("check_results_%d_%02d", rangeStart.Year(), rangeStart.Month())}.Sanitize()
-				ddl := fmt.Sprintf(
-					"CREATE TABLE IF NOT EXISTS %s PARTITION OF check_results FOR VALUES FROM ('%s') TO ('%s')",
-					safeName, rangeStart.Format("2006-01-02"), rangeEnd.Format("2006-01-02"),
-				)
-				if _, err := deps.Pool.Exec(ctx, ddl); err != nil {
-					slog.Error("partition creation failed", "error", err)
-				}
-				if _, err := cleanupMutex.Unlock(); err != nil {
-					slog.Warn("cleanup unlock failed", "error", err)
-				}
+		runLockedLoop(ctx, cleanupMutex, 24*time.Hour, "cleanup", func(ctx context.Context) {
+			// Plan-aware retention (sprint 2 §6): Free users keep 30
+			// days; Pro users keep 365. RETENTION_DAYS is still the
+			// Free baseline so ops can tune it without a code change.
+			freeCutoff := time.Now().Add(-time.Duration(deps.RetentionDays) * 24 * time.Hour)
+			proCutoff := time.Now().AddDate(-1, 0, 0)
+			deleted, err := checkResultRepo.DeleteByPlan(ctx, freeCutoff, proCutoff)
+			if err != nil {
+				slog.Error("retention cleanup failed", "error", err)
+			} else if deleted > 0 {
+				slog.Info("retention cleanup",
+					"deleted_rows", deleted,
+					"free_cutoff", freeCutoff, "pro_cutoff", proCutoff)
 			}
-		}
+			rangeStart := time.Date(time.Now().Year(), time.Now().Month()+1, 1, 0, 0, 0, 0, time.UTC)
+			rangeEnd := rangeStart.AddDate(0, 1, 0)
+			safeName := pgx.Identifier{fmt.Sprintf("check_results_%d_%02d", rangeStart.Year(), rangeStart.Month())}.Sanitize()
+			ddl := fmt.Sprintf(
+				"CREATE TABLE IF NOT EXISTS %s PARTITION OF check_results FOR VALUES FROM ('%s') TO ('%s')",
+				safeName, rangeStart.Format("2006-01-02"), rangeEnd.Format("2006-01-02"),
+			)
+			if _, err := deps.Pool.Exec(ctx, ddl); err != nil {
+				slog.Error("partition creation failed", "error", err)
+			}
+		})
 	}
 
 	// Daily SSL-expiry scan closure — Pro-only. Sprint 2 S2T2: probes
@@ -172,26 +159,9 @@ func NewScheduler(deps SchedulerDeps) (*Scheduler, error) {
 		sslMutex := rs.NewMutex("lock:cleanup:ssl-scan", redsync.WithExpiry(1*time.Hour))
 		s.sslScanFunc = func(ctx context.Context) {
 			defer s.cleanupWg.Done()
-			ticker := time.NewTicker(24 * time.Hour)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-ticker.C:
-					if err := sslMutex.Lock(); err != nil {
-						if errors.Is(err, redsync.ErrFailed) {
-							continue
-						}
-						slog.Warn("ssl-scan lock failed", "error", err)
-						continue
-					}
-					runSSLScan(ctx, monitorRepo, alertPub)
-					if _, err := sslMutex.Unlock(); err != nil {
-						slog.Warn("ssl-scan unlock failed", "error", err)
-					}
-				}
-			}
+			runLockedLoop(ctx, sslMutex, 24*time.Hour, "ssl-scan", func(ctx context.Context) {
+				runSSLScan(ctx, monitorRepo, alertPub)
+			})
 		}
 	}
 
@@ -202,30 +172,22 @@ func NewScheduler(deps SchedulerDeps) (*Scheduler, error) {
 	// flip to a real adapter when prod Traefik/ACME is wired.
 	customDomainRepo := postgres.NewCustomDomainRepo(queries)
 	customDomainCertRepo := postgres.NewCustomDomainCertRepo(queries)
-	customDomainSvc := app.NewCustomDomainService(customDomainRepo, customDomainCertRepo, app.NoopCertProvisioner{}, "")
+	certProvisioner, certErr := buildCertProvisioner(deps.CertProvisionerConfig, customDomainCertRepo, customDomainRepo)
+	if certErr != nil {
+		// Same fallback policy as API bootstrap: log loud, run with
+		// noop. Otherwise a misconfigured ACME account would crash
+		// the whole scheduler instead of letting validation continue.
+		slog.Error("acme provisioner setup failed — falling back to noop",
+			"provider", deps.CertProvider, "error", certErr)
+		certProvisioner = app.NoopCertProvisioner{}
+	}
+	customDomainSvc := app.NewCustomDomainService(customDomainRepo, customDomainCertRepo, certProvisioner, "")
 	cdMutex := rs.NewMutex("lock:custom-domain:validate", redsync.WithExpiry(2*time.Minute))
 	s.customDomainFunc = func(ctx context.Context) {
 		defer s.cleanupWg.Done()
-		ticker := time.NewTicker(60 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				if err := cdMutex.Lock(); err != nil {
-					if errors.Is(err, redsync.ErrFailed) {
-						continue
-					}
-					slog.Warn("custom-domain lock failed", "error", err)
-					continue
-				}
-				customDomainSvc.RunValidationOnce(ctx)
-				if _, err := cdMutex.Unlock(); err != nil {
-					slog.Warn("custom-domain unlock failed", "error", err)
-				}
-			}
-		}
+		runLockedLoop(ctx, cdMutex, 60*time.Second, "custom-domain", func(ctx context.Context) {
+			customDomainSvc.RunValidationOnce(ctx)
+		})
 	}
 
 	// Cert-renewal loop — once a day, leader-elected. Lego certs live
@@ -235,29 +197,50 @@ func NewScheduler(deps SchedulerDeps) (*Scheduler, error) {
 	renewalMutex := rs.NewMutex("lock:custom-domain:renew", redsync.WithExpiry(15*time.Minute))
 	s.certRenewalFunc = func(ctx context.Context) {
 		defer s.cleanupWg.Done()
-		ticker := time.NewTicker(24 * time.Hour)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				if err := renewalMutex.Lock(); err != nil {
-					if errors.Is(err, redsync.ErrFailed) {
-						continue
-					}
-					slog.Warn("cert-renewal lock failed", "error", err)
-					continue
-				}
-				customDomainSvc.RunRenewalsOnce(ctx)
-				if _, err := renewalMutex.Unlock(); err != nil {
-					slog.Warn("cert-renewal unlock failed", "error", err)
-				}
-			}
-		}
+		runLockedLoop(ctx, renewalMutex, 24*time.Hour, "cert-renewal", func(ctx context.Context) {
+			customDomainSvc.RunRenewalsOnce(ctx)
+		})
 	}
 
 	return s, nil
+}
+
+// runLockedLoop is the shared shape behind every scheduler tick:
+// acquire a redsync mutex (skip-if-held), run the work, release. All
+// four periodic jobs (retention cleanup, SSL scan, custom-domain
+// validation, cert renewal) used to inline this dance, with subtle
+// log-message variations and one-off bugs introducing drift. One
+// helper keeps them honest.
+//
+// Caller is responsible for the surrounding sync.WaitGroup bookkeeping
+// (Add before goroutine launch, Done via defer in the goroutine).
+func runLockedLoop(
+	ctx context.Context,
+	mutex *redsync.Mutex,
+	interval time.Duration,
+	name string,
+	work func(context.Context),
+) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := mutex.Lock(); err != nil {
+				if errors.Is(err, redsync.ErrFailed) {
+					continue
+				}
+				slog.Warn(name+" lock failed", "error", err)
+				continue
+			}
+			work(ctx)
+			if _, err := mutex.Unlock(); err != nil {
+				slog.Warn(name+" unlock failed", "error", err)
+			}
+		}
+	}
 }
 
 // runSSLScan probes every Pro-tier HTTP monitor's cert and publishes a

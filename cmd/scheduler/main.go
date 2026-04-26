@@ -81,6 +81,12 @@ func main() {
 		Cipher:         cipher,
 		RetentionDays:  cfg.RetentionDays,
 		SSLScanEnabled: true,
+		CertProvisionerConfig: bootstrap.CertProvisionerConfig{
+			CertProvider:     cfg.CertProvider,
+			CertACMEEmail:    cfg.CertACMEEmail,
+			CertACMEDirURL:   cfg.CertACMEDirURL,
+			CertACMEHTTPPort: cfg.CertACMEHTTPPort,
+		},
 	})
 	if err != nil {
 		slog.Error("compose scheduler", "error", err)

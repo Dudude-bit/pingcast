@@ -59,6 +59,14 @@ type CheckerConfig struct {
 	HostConcurrency    int    `env:"HOST_CONCURRENCY"        envDefault:"3"`
 	RetentionDays      int    `env:"RETENTION_DAYS"          envDefault:"90"`
 	DefaultTimeoutSecs int    `env:"DEFAULT_TIMEOUT_SECS"    envDefault:"10"`
+	// Cert config — must mirror APIConfig so the scheduler-driven
+	// validation + renewal loops use the same provisioner the API
+	// would. Otherwise scheduler issues a noop "cert" while API would
+	// have called real ACME, leaving prod customers without TLS.
+	CertProvider     string `env:"CERT_PROVIDER"        envDefault:"noop"`
+	CertACMEEmail    string `env:"CERT_ACME_EMAIL"`
+	CertACMEDirURL   string `env:"CERT_ACME_DIR_URL"`
+	CertACMEHTTPPort string `env:"CERT_ACME_HTTP_PORT"  envDefault:"5002"`
 	EncryptionConfig
 }
 
