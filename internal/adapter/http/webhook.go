@@ -3,6 +3,7 @@ package httpadapter
 import (
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -25,6 +26,12 @@ type WebhookHandler struct {
 	// 'founder' so CountActiveFounderSubscriptions reflects the new
 	// seat. Unset → every subscription records as 'retail'.
 	founderVariantID string
+	// telegramBotToken is the secret Telegram puts in the webhook URL
+	// path. We compare incoming :token against this — without the
+	// check, anyone can call /webhook/telegram/<anything> and inject
+	// notification channels into other users' accounts. Empty string
+	// disables the Telegram webhook entirely (returns 401).
+	telegramBotToken string
 }
 
 func NewWebhookHandler(
@@ -33,6 +40,7 @@ func NewWebhookHandler(
 	billing *app.BillingService,
 	lemonSqueezySecret string,
 	founderVariantID string,
+	telegramBotToken string,
 ) *WebhookHandler {
 	return &WebhookHandler{
 		auth:               auth,
@@ -40,6 +48,7 @@ func NewWebhookHandler(
 		billing:            billing,
 		lemonSqueezySecret: lemonSqueezySecret,
 		founderVariantID:   founderVariantID,
+		telegramBotToken:   telegramBotToken,
 	}
 }
 
@@ -93,32 +102,40 @@ func (h *WebhookHandler) HandleLemonSqueezy(c *fiber.Ctx) error {
 		if webhook.Data.Attributes.Status == "active" {
 			customerID := fmt.Sprintf("%d", webhook.Data.Attributes.CustomerID)
 			if err := h.auth.UpgradeToPro(c.UserContext(), user.ID, customerID, webhook.Data.ID); err != nil {
+				// Return 5xx so LemonSqueezy retries. Swallowing the
+				// error and returning 200 would leave the customer
+				// stuck on Free after paying — LS treats 200 as final.
 				slog.Error("failed to upgrade user", "user_id", user.ID, "error", err)
-			} else {
-				slog.Info("user upgraded to pro", "user_id", user.ID)
+				return c.SendStatus(fiber.StatusInternalServerError)
 			}
-			// Mark variant so CountActiveFounderSubscriptions reflects
-			// the new seat. 'founder' vs 'retail' decision is based on
-			// the variant ID LemonSqueezy sent us against the env we
-			// stashed at boot. Errors are logged but don't fail the
-			// webhook — the upgrade itself is what the user cares
-			// about; variant is just for cap accounting.
-			variant := "retail"
+			slog.Info("user upgraded to pro", "user_id", user.ID)
+			// Variant tagging is atomic + cap-aware: TagFromWebhook
+			// downgrades 'founder' to 'retail' if the cap is full
+			// (uses a tx-scoped advisory lock to serialize concurrent
+			// webhooks). Errors are logged but don't fail the webhook
+			// — the user's plan is already 'pro'; tag is for accounting.
+			requested := "retail"
 			if h.founderVariantID != "" &&
 				fmt.Sprintf("%d", webhook.Data.Attributes.VariantID) == h.founderVariantID {
-				variant = "founder"
+				requested = "founder"
 			}
-			if err := h.billing.SetSubscriptionVariant(c.UserContext(), user.ID, variant); err != nil {
-				slog.Error("failed to set subscription variant",
-					"user_id", user.ID, "variant", variant, "error", err)
+			actual, err := h.billing.TagFromWebhook(c.UserContext(), user.ID, requested)
+			if err != nil {
+				slog.Error("failed to tag subscription variant",
+					"user_id", user.ID, "requested", requested, "error", err)
+			} else if actual != requested {
+				slog.Info("variant downgraded to retail (founder cap reached)",
+					"user_id", user.ID)
 			}
 		}
 	case "subscription_cancelled":
 		if err := h.auth.DowngradeToFree(c.UserContext(), user.ID); err != nil {
+			// Same reasoning — let LS retry rather than silently leave
+			// a cancelled subscriber on Pro.
 			slog.Error("failed to downgrade user", "user_id", user.ID, "error", err)
-		} else {
-			slog.Info("user downgraded to free", "user_id", user.ID)
+			return c.SendStatus(fiber.StatusInternalServerError)
 		}
+		slog.Info("user downgraded to free", "user_id", user.ID)
 	case "subscription_payment_failed":
 		slog.Warn("payment failed", "user_id", user.ID)
 	}
@@ -134,6 +151,17 @@ func (h *WebhookHandler) verifySignature(payload []byte, signature string) bool 
 }
 
 func (h *WebhookHandler) HandleTelegramWebhook(c *fiber.Ctx) error {
+	// IDOR guard: only Telegram knows the bot token. Reject any URL
+	// whose :token doesn't match. Constant-time compare so we don't
+	// leak token bytes via response timing.
+	if h.telegramBotToken == "" {
+		return c.SendStatus(fiber.StatusUnauthorized)
+	}
+	pathToken := c.Params("token")
+	if subtle.ConstantTimeCompare([]byte(pathToken), []byte(h.telegramBotToken)) != 1 {
+		return c.SendStatus(fiber.StatusUnauthorized)
+	}
+
 	var update struct {
 		Message struct {
 			Chat struct {
@@ -150,8 +178,7 @@ func (h *WebhookHandler) HandleTelegramWebhook(c *fiber.Ctx) error {
 	text := update.Message.Text
 	chatID := update.Message.Chat.ID
 
-	if strings.HasPrefix(text, "/start ") {
-		userIDStr := strings.TrimPrefix(text, "/start ")
+	if userIDStr, ok := strings.CutPrefix(text, "/start "); ok {
 		userID, err := uuid.Parse(userIDStr)
 		if err != nil {
 			return c.SendStatus(fiber.StatusOK)

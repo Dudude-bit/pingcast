@@ -31,18 +31,29 @@ import (
 	sqlcgen "github.com/kirillinakin/pingcast/internal/sqlc/gen"
 )
 
+// CertProvisionerConfig captures everything buildCertProvisioner needs.
+// Both AppDeps and SchedulerDeps embed it so the API and the scheduler
+// can construct equivalent provisioners without copy-paste — and, more
+// importantly, can't drift to different cert backends silently.
+type CertProvisionerConfig struct {
+	CertProvider     string
+	CertACMEEmail    string
+	CertACMEDirURL   string
+	CertACMEHTTPPort string
+}
+
 // buildCertProvisioner picks the CertProvisioner implementation based
-// on AppDeps.CertProvider. "lego" wires the real ACME adapter; anything
+// on cfg.CertProvider. "lego" wires the real ACME adapter; anything
 // else (including the empty default) returns the noop. Errors are
 // returned to the caller so it can decide whether to fall back or
 // abort startup.
-func buildCertProvisioner(deps AppDeps, store port.CustomDomainCertRepo, repo port.CustomDomainRepo) (app.CertProvisioner, error) {
-	switch strings.ToLower(strings.TrimSpace(deps.CertProvider)) {
+func buildCertProvisioner(cfg CertProvisionerConfig, store port.CustomDomainCertRepo, repo port.CustomDomainRepo) (app.CertProvisioner, error) {
+	switch strings.ToLower(strings.TrimSpace(cfg.CertProvider)) {
 	case "lego":
 		return acmeadapter.New(acmeadapter.Config{
-			Email:      deps.CertACMEEmail,
-			CADirURL:   deps.CertACMEDirURL,
-			HTTP01Port: deps.CertACMEHTTPPort,
+			Email:      cfg.CertACMEEmail,
+			CADirURL:   cfg.CertACMEDirURL,
+			HTTP01Port: cfg.CertACMEHTTPPort,
 		}, store, repo)
 	default:
 		return app.NoopCertProvisioner{}, nil
@@ -59,10 +70,18 @@ type AppDeps struct {
 	JS     jetstream.JetStream
 	Cipher port.Cipher
 
-	LemonSqueezySecret        string
+	LemonSqueezySecret           string
 	LemonSqueezyFounderVariantID string
 	LemonSqueezyRetailVariantID  string
-	FounderCap                int
+	FounderCap                   int
+
+	// TelegramBotToken is the secret token Telegram uses as the path
+	// segment of the webhook URL. The handler validates the incoming
+	// :token route param against this — without that check, anyone who
+	// can hit /webhook/telegram/* (which is unauthenticated) could
+	// inject a notification channel into any user account by guessing
+	// the URL and posting a forged /start <victim-uuid> body.
+	TelegramBotToken string
 
 	// SMTP_* mirrors the notifier. Empty SMTPHost → logging noop.
 	SMTPHost, SMTPUser, SMTPPass, SMTPFrom string
@@ -88,14 +107,10 @@ type AppDeps struct {
 	// seconds). Nil → production defaults from port.RateLimitDefaults.
 	RateLimits *port.RateLimitConfig
 
-	// CertProvider selects the CertProvisioner adapter for custom
-	// domains. Empty / "noop" / "" → NoopCertProvisioner (logs only).
-	// "lego" → real ACME via go-acme/lego (requires the infra plumbing
-	// described in adapter/acme/lego_provisioner.go).
-	CertProvider     string
-	CertACMEEmail    string // required when CertProvider="lego"
-	CertACMEDirURL   string // optional override (defaults to LE prod)
-	CertACMEHTTPPort string // optional override (defaults to "5002")
+	// CertProvisionerConfig selects the CertProvisioner adapter for
+	// custom domains (CertProvider: "noop" → logs-only, "lego" → real
+	// ACME). Embedded so SchedulerDeps can do the same wiring.
+	CertProvisionerConfig
 
 	// Optional overrides. If nil, defaults are used.
 	Metrics *observability.Metrics
@@ -154,7 +169,7 @@ func NewApp(deps AppDeps) (*App, error) {
 	}
 
 	// Repos
-	userRepo := postgres.NewUserRepo(queries)
+	userRepo := postgres.NewUserRepo(deps.Pool, queries)
 	sessionRepo := redisadapter.NewSessionRepo(deps.Redis)
 	monitorRepo := postgres.NewMonitorRepo(deps.Pool, queries, deps.Cipher)
 	channelRepo := postgres.NewChannelRepo(deps.Pool, queries, deps.Cipher)
@@ -198,7 +213,7 @@ func NewApp(deps AppDeps) (*App, error) {
 	if founderCap <= 0 {
 		founderCap = 100 // matches .env.example default and spec §5
 	}
-	billingSvc := app.NewBillingService(userRepo, founderCap)
+	billingSvc := app.NewBillingService(userRepo, txm, founderCap)
 	atlassianImporter := app.NewAtlassianImporter(monitorRepo, incidentRepo, incidentUpdateRepo, txm, clock)
 	statusSubRepo := postgres.NewStatusSubscriberRepo(queries)
 	blogSubRepo := postgres.NewBlogSubscriberRepo(queries)
@@ -212,7 +227,7 @@ func NewApp(deps AppDeps) (*App, error) {
 	customDomainRepo := postgres.NewCustomDomainRepo(queries)
 	customDomainCertRepo := postgres.NewCustomDomainCertRepo(queries)
 
-	certProvisioner, certErr := buildCertProvisioner(deps, customDomainCertRepo, customDomainRepo)
+	certProvisioner, certErr := buildCertProvisioner(deps.CertProvisionerConfig, customDomainCertRepo, customDomainRepo)
 	if certErr != nil {
 		// Fall back to noop on registration errors so a misconfigured
 		// ACME account doesn't take down the whole API. The error is
@@ -238,7 +253,7 @@ func NewApp(deps AppDeps) (*App, error) {
 	server := httpadapter.NewServer(authSvc, monitoringSvc, alertSvc, billingSvc, atlassianImporter, subscriptionsSvc, blogSubscriptionsSvc, customDomainsSvc, rls, apiKeyRepo, statsRepo)
 	webhookHandler := httpadapter.NewWebhookHandler(
 		authSvc, alertSvc, billingSvc, deps.LemonSqueezySecret,
-		deps.LemonSqueezyFounderVariantID,
+		deps.LemonSqueezyFounderVariantID, deps.TelegramBotToken,
 	)
 	healthChecker := httpadapter.NewHealthChecker(deps.Pool, deps.Redis, deps.NATS)
 

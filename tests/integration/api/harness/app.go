@@ -18,6 +18,17 @@ import (
 	"github.com/kirillinakin/pingcast/internal/port"
 )
 
+// TestFounderCap is a small cap so race-condition / atomic-tagging
+// tests can saturate the founder pool with just a couple of webhooks.
+// 2 is enough: lock semantics are identical at any cap size.
+const TestFounderCap = 2
+
+// TestTelegramBotToken is the path-segment "secret" the harness boots
+// with for /webhook/telegram/:token. Tests verify that requests with a
+// different token are rejected (the IDOR fix) and requests with this
+// token are accepted.
+const TestTelegramBotToken = "test-telegram-bot-token-abc123"
+
 // TestFounderVariantID is the LemonSqueezy variant ID the harness
 // pretends is the $9 founder tier. Webhook tests send `variant_id`
 // matching this constant to assert founder-cap accounting; sending
@@ -118,6 +129,8 @@ func NewApp(t *testing.T) *App {
 		Cipher:                       cipher,
 		LemonSqueezySecret:           "test-ls-secret",
 		LemonSqueezyFounderVariantID: TestFounderVariantID,
+		TelegramBotToken:             TestTelegramBotToken,
+		FounderCap:                   TestFounderCap,
 		Clock:                        clock,
 		Random:                       rng,
 		RateLimits:                   defaultRL,

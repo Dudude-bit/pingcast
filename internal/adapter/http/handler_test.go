@@ -76,7 +76,7 @@ func setupTestApp(t *testing.T) *testEnv {
 	alertService := app.NewAlertService(channelRepo, monitorRepo, channelRegistry, failedAlertRepo, metrics)
 
 	statsRepo := mocks.NewMockStatsRepo(t)
-	billingService := app.NewBillingService(userRepo, 100)
+	billingService := app.NewBillingService(userRepo, txManager, 100)
 	atlassianImporter := app.NewAtlassianImporter(monitorRepo, incidentRepo, incidentUpdateRepo, txManager, sysclock.New())
 	statusSubRepo := mocks.NewMockStatusSubscriberRepo(t)
 	blogSubRepo := mocks.NewMockBlogSubscriberRepo(t)
@@ -86,7 +86,7 @@ func setupTestApp(t *testing.T) *testEnv {
 	customDomainRepo := mocks.NewMockCustomDomainRepo(t)
 	customDomainsService := app.NewCustomDomainService(customDomainRepo, nil, app.NoopCertProvisioner{}, "http://test")
 	server := NewServer(authService, monitoringService, alertService, billingService, atlassianImporter, subscriptionsService, blogSubscriptionsService, customDomainsService, rls, apiKeyRepo, statsRepo)
-	webhookHandler := NewWebhookHandler(authService, alertService, billingService, "test-secret", "")
+	webhookHandler := NewWebhookHandler(authService, alertService, billingService, "test-secret", "", "")
 
 	healthChecker := &HealthChecker{}
 	fiberApp := SetupApp(authService, server, webhookHandler, apiKeyRepo, healthChecker, rls)
